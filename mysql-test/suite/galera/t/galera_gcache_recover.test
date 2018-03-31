@@ -5,6 +5,15 @@
 --source include/galera_cluster.inc
 --source include/big_test.inc
 
+# Workaround a problem to be fixed in
+# https://jira.mariadb.org/browse/MDEV-15740
+# InnoDB does not flush redo log when it should
+--connection node_2
+--disable_query_log
+SET GLOBAL innodb_flush_log_at_trx_commit=2;
+--enable_query_log
+
+--connection node_1
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1);
 SET SESSION wsrep_sync_wait = 0;
@@ -19,6 +28,13 @@ SET SESSION wsrep_sync_wait = 0;
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
 --source include/wait_condition.inc
+
+# Workaround a problem to be fixed in
+# https://jira.mariadb.org/browse/MDEV-15740
+# InnoDB does not flush redo log when it should
+--disable_query_log
+SET GLOBAL innodb_flush_log_at_trx_commit=2;
+--enable_query_log
 
 INSERT INTO t1 VALUES (2);
 
