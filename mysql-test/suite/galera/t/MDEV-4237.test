@@ -1,0 +1,44 @@
+#
+# MDEV-4237 Malformed packet if SP is getting retried.
+#
+# Adapted from test in https://jira.mariadb.org/browse/MDEV-4237
+# comments.
+#
+# This test is not deterministic and may have be run several times
+# in order to reproduce the bug.
+#
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+CREATE TABLE t1 (pk INT PRIMARY KEY) ENGINE=InnoDB;
+CREATE OR REPLACE VIEW v1 AS SELECT pk FROM t1;
+CREATE FUNCTION func1() RETURNS INTEGER RETURN 4;
+CREATE FUNCTION func2() RETURNS INTEGER RETURN 4;
+CREATE PROCEDURE proc1() SELECT func1() FROM v1;
+
+--connect (con1,localhost,root,,test)
+--connect (con2,localhost,root,,test)
+
+--let $run = 1000
+
+--disable_query_log
+--disable_result_log
+while ($run)
+{
+  --connection con1
+  --send CREATE OR REPLACE ALGORITHM = TEMPTABLE VIEW v1 AS SELECT func2() AS pk FROM t1;
+  --connection con2
+  --error 0,ER_QUERY_INTERRUPTED,ER_LOCK_DEADLOCK
+  CALL proc1();
+  --connection con1
+  --reap
+  --dec $run
+}
+--enable_result_log
+--enable_query_log
+
+DROP FUNCTION func1;
+DROP FUNCTION func2;
+DROP PROCEDURE proc1;
+DROP VIEW v1;
+DROP TABLE t1;
