@@ -2683,6 +2683,29 @@ mysql_execute_command(THD *thd)
                  "WSREP has not yet prepared node for application use", MYF(0));
       goto error;
     }
+    /*
+      Check if the command is safe for retrying. If the command does not
+      fall into category of retry-safe commands, we set wsrep_retry_counter
+      to wsrep_retry_autocommit value, which will prevent any retry
+      attempts (see wsrep_mysql_parse()). The commands which do not
+      send result set to client are considered retry-safe.
+
+      Note that stored procedures are considered safe to retry as long
+      as they execute only commands which are safe for retrying.
+    */
+    if (thd->variables.wsrep_retry_autocommit &&
+        !(lex->sql_command == SQLCOM_CALL ||
+          lex->sql_command == SQLCOM_INSERT ||
+          lex->sql_command == SQLCOM_INSERT_SELECT ||
+          lex->sql_command == SQLCOM_UPDATE ||
+          lex->sql_command == SQLCOM_UPDATE_MULTI ||
+          lex->sql_command == SQLCOM_DELETE ||
+          lex->sql_command == SQLCOM_DELETE_MULTI ||
+          lex->sql_command == SQLCOM_REPLACE ||
+          lex->sql_command == SQLCOM_REPLACE_SELECT))
+    {
+      thd->wsrep_retry_counter= thd->variables.wsrep_retry_autocommit;
+    }
   }
 #endif /* WITH_WSREP */
   status_var_increment(thd->status_var.com_stat[lex->sql_command]);
