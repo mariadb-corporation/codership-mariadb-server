@@ -32,6 +32,7 @@
 
 use strict;
 use warnings;
+use sigtrap qw(PIPE);
 
 BEGIN {
   # Check that mysql-test-run.pl is started from mysql-test/
