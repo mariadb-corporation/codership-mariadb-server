@@ -2437,10 +2437,6 @@ row_upd_sec_index_entry(
 		row_ins_sec_index_entry() below */
 		if (!rec_get_deleted_flag(
 			    rec, dict_table_is_comp(index->table))) {
-#ifdef WITH_WSREP
-			const upd_node_t* parent =
-				static_cast<const upd_node_t*>(node->common.parent);
-#endif /* WITH_WSREP */
 			err = btr_cur_del_mark_set_sec_rec(
 				flags, btr_cur, TRUE, thr, &mtr);
 			if (err != DB_SUCCESS) {
