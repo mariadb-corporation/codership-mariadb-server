@@ -142,8 +142,6 @@ extern const char* wsrep_provider_vendor;
 extern char*       wsrep_provider_capabilities;
 extern char*       wsrep_cluster_capabilities;
 
-//int  wsrep_show_status(THD *thd, SHOW_VAR *var, char *buff,
-//                       enum enum_var_type scope);
 int  wsrep_show_status(THD *thd, SHOW_VAR *var, char *buff);
 int  wsrep_show_ready(THD *thd, SHOW_VAR *var, char *buff);
 void wsrep_free_status(THD *thd);
@@ -277,34 +275,8 @@ extern wsrep_seqno_t wsrep_locked_seqno;
 extern my_bool wsrep_ready_get();
 extern void wsrep_ready_wait();
 
-#ifdef OUT
-enum wsrep_trx_status {
-    WSREP_TRX_OK,
-    WSREP_TRX_CERT_FAIL,      /* certification failure, must abort */
-    WSREP_TRX_SIZE_EXCEEDED,  /* trx size exceeded */
-    WSREP_TRX_ERROR,          /* native mysql error */
-};
-#endif
-static inline
-wsrep_status_t wsrep_trx_status_to_wsrep_status(wsrep_trx_status status)
-{
-  switch (status)
-  {
-  case WSREP_TRX_OK:
-    return WSREP_OK;
-  case WSREP_TRX_CERT_FAIL:
-  case WSREP_TRX_ERROR:
-    return WSREP_TRX_FAIL;
-  case WSREP_TRX_SIZE_EXCEEDED:
-    return WSREP_SIZE_EXCEEDED;
-  }
-  return WSREP_NOT_IMPLEMENTED;
-}
-
 class Ha_trx_info;
 struct THD_TRANS;
-
-//extern "C" bool wsrep_consistency_check(void *thd_ptr);
 
 extern mysql_mutex_t LOCK_wsrep_ready;
 extern mysql_cond_t  COND_wsrep_ready;
