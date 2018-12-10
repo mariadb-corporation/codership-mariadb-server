@@ -10,11 +10,6 @@ binlog-format=row
 
 [mysqld.1]
 wsrep-on=1
-
-log-bin=master-bin
-log-bin-index=master-bin
-log-slave-updates
-
 innodb-autoinc-lock-mode=2
 default-storage-engine=innodb
 wsrep-provider=@ENV.WSREP_PROVIDER
@@ -34,11 +29,6 @@ innodb_lock_schedule_algorithm=FCFS
 
 [mysqld.2]
 wsrep-on=1
-
-log-bin=master-bin
-log-bin-index=master-bin
-log-slave-updates
-
 innodb-autoinc-lock-mode=2
 default-storage-engine=innodb
 wsrep-provider=@ENV.WSREP_PROVIDER
@@ -57,13 +47,10 @@ server-id=2
 innodb_lock_schedule_algorithm=FCFS
 
 [mysqld.3]
-log-bin=master-bin
-log-bin-index=master-bin
 server-id=3
 # lock schedule alg appears to be VATS by default, and it is not
 # yet compatible with galera
 innodb_lock_schedule_algorithm=FCFS
-
 
 [ENV]
 NODE_MYPORT_1= @mysqld.1.port
