@@ -196,11 +196,6 @@ my @mysqld_rules=
  { 'pid-file' => \&fix_pidfile },
  { '#host' => \&fix_host },
  { 'port' => \&fix_port },
-  # galera base_port and port used during SST
- { '#galera_port' => \&fix_port },
- # Galera uses base_port + 1 for IST, so we do not use it for things such as SST
- { '#ist_port' => \&fix_port },
- { '#sst_port' => \&fix_port },
  { 'socket' => \&fix_socket },
  { 'log-error' => \&fix_log_error },
  { 'general-log' => 1 },
@@ -211,11 +206,7 @@ my @mysqld_rules=
  { '#user' => sub { return shift->{ARGS}->{user} || ""; } },
  { '#password' => sub { return shift->{ARGS}->{password} || ""; } },
  { 'server-id' => \&fix_server_id, },
-   #
-   # bind-address is commented out here, because this would bind bind
-   # only 127.0.0.1 for mysqld, and in galera mtr testing we will need
-   # also 127.0.0.2 for sst address
-# { 'bind-address' => \&fix_bind_address },
+ { 'bind-address' => \&fix_bind_address },
   );
 
 #

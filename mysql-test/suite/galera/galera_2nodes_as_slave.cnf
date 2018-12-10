@@ -9,6 +9,9 @@
 binlog-format=row
 
 [mysqld.1]
+#galera_port=@OPT.port
+#ist_port=@OPT.port
+#sst_port=@OPT.port
 wsrep-on=1
 innodb-autoinc-lock-mode=2
 default-storage-engine=innodb
@@ -28,6 +31,9 @@ server-id=1
 innodb_lock_schedule_algorithm=FCFS
 
 [mysqld.2]
+#galera_port=@OPT.port
+#ist_port=@OPT.port
+#sst_port=@OPT.port
 wsrep-on=1
 innodb-autoinc-lock-mode=2
 default-storage-engine=innodb
