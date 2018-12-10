@@ -2,8 +2,8 @@
 
 [mysqld]
 #gtid-mode=ON
-log-bin=master-bin
-log-bin-index=master-bin
+log-bin=mysqld-bin
+log-bin-index=mysqld-bin-index
 log-slave-updates
 #enforce-gtid-consistency
 binlog-format=ROW

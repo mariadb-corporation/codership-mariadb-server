@@ -2,6 +2,7 @@
 
 [mysqld]
 log-bin=mysqld-bin
+log-bin-index=mysqld-bin-index
 log-slave-updates
 binlog-format=ROW
 wsrep_sst_method=rsync
