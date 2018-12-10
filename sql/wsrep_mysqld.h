@@ -20,6 +20,8 @@
 
 #ifdef WITH_WSREP
 
+#error test PR only, do not merge
+
 #include <mysql/plugin.h>
 #include "mysql/service_wsrep.h"
 
