@@ -268,12 +268,18 @@ EOF
             OLD_PWD="$(pwd)"
             cd $BINLOG_DIRNAME
 
-            if ! [ -z $WSREP_SST_OPT_BINLOG_INDEX ]
+            if [ -z $WSREP_SST_OPT_BINLOG_INDEX ]
             then
                binlog_files_full=$(tail -n $BINLOG_N_FILES ${BINLOG_FILENAME}.index)
             else
                cd $BINLOG_INDEX_DIRNAME
-               binlog_files_full=$(tail -n $BINLOG_N_FILES ${BINLOG_INDEX_FILENAME}.index)
+
+                if [[ $BINLOG_INDEX_FILENAME =~ .*\.index ]]
+                then
+                      binlog_files_full=$(tail -n $BINLOG_N_FILES ${BINLOG_INDEX_FILENAME})
+                else
+                      binlog_files_full=$(tail -n $BINLOG_N_FILES ${BINLOG_INDEX_FILENAME}.index)
+                fi
             fi
 
             cd $BINLOG_DIRNAME
@@ -505,16 +511,24 @@ EOF
             # Clean up old binlog files first
             rm -f ${BINLOG_FILENAME}.*
             wsrep_log_info "Extracting binlog files:"
-            tar -xvf $BINLOG_TAR_FILE >&2
-            for ii in $(ls -1 ${BINLOG_FILENAME}.*)
-            do
-                if ! [ -z $WSREP_SST_OPT_BINLOG_INDEX ]
+            tar -xvf $BINLOG_TAR_FILE >> _tmp_files
+
+            while read bin_file; do
+                if [ -z $WSREP_SST_OPT_BINLOG_INDEX ]
                 then
-                    echo ${BINLOG_DIRNAME}/${ii} >> ${BINLOG_FILENAME}.index
+                    echo ${BINLOG_DIRNAME}/${bin_file} >> ${BINLOG_FILENAME}.index
                 else
-                    echo ${BINLOG_DIRNAME}/${ii} >> ${BINLOG_INDEX_DIRNAME}/${BINLOG_INDEX_FILENAME}.index
+                    if [[ $BINLOG_INDEX_FILENAME =~ .*\.index ]]
+                    then
+                        echo ${BINLOG_DIRNAME}/${bin_file} >> ${BINLOG_INDEX_DIRNAME}/${BINLOG_INDEX_FILENAME}
+                    else
+                        echo ${BINLOG_DIRNAME}/${bin_file} >> ${BINLOG_INDEX_DIRNAME}/${BINLOG_INDEX_FILENAME}.index
+                    fi
                 fi
-            done
+            done < _tmp_files
+
+            rm -f _tmp_files
+         
         fi
         cd "$OLD_PWD"
 
