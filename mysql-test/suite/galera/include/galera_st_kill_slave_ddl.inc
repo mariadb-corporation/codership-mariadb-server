@@ -35,6 +35,10 @@ SET wsrep_sync_wait = 0;
 --source include/wait_condition.inc
 
 --source include/kill_galera.inc
+if ($galera_st_force_sst)
+{
+  --remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
+}
 
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'

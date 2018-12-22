@@ -44,6 +44,8 @@ DELIMITER ;|
 --connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2
 --connection node_2a
 --source include/kill_galera.inc
+# Remove grastate.dat to force SST
+--remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
 
 --sleep 10
 --source include/start_mysqld.inc

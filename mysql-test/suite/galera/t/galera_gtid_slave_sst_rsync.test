@@ -81,6 +81,8 @@ COMMIT;
 --connection node_2
 --echo Shutting down server ...
 --source include/shutdown_mysqld.inc
+# Remove grastate.dat to force SST
+--remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
 --echo #Connection 1
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'

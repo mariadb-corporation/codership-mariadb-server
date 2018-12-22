@@ -22,6 +22,10 @@ INSERT INTO t1 VALUES ('node2_committed_before');
 COMMIT;
 
 --source include/kill_galera.inc
+if ($galera_st_force_sst)
+{
+  --remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
+}
 
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'
