@@ -637,7 +637,6 @@ int wsrep_init_server()
                                   incoming_address,
                                   node_address,
                                   working_dir,
-                                  initial_position,
                                   wsrep_max_protocol_version);
   }
   catch (const wsrep::runtime_error& e)
@@ -680,7 +679,9 @@ int wsrep_init()
   {
     // enable normal operation in case no provider is specified
     global_system_variables.wsrep_on= 0;
-    int err= Wsrep_server_state::instance().load_provider(wsrep_provider, wsrep_provider_options ? wsrep_provider_options : "");
+    int err= Wsrep_server_state::instance().load_provider(
+        wsrep_provider, wsrep_provider_options ? wsrep_provider_options : "",
+        wsrep_server_initial_position());
     if (err)
     {
       DBUG_PRINT("wsrep",("wsrep::init() failed: %d", err));
@@ -707,7 +708,8 @@ int wsrep_init()
     wsrep_data_home_dir= mysql_real_data_home;
 
   if (Wsrep_server_state::instance().load_provider(wsrep_provider,
-                                                   wsrep_provider_options))
+                                                   wsrep_provider_options,
+                                                   wsrep_server_initial_position()))
   {
     WSREP_ERROR("Failed to load provider");
     return 1;

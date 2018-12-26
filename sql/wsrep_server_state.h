@@ -32,7 +32,6 @@ public:
                         const std::string& incoming_address,
                         const std::string& address,
                         const std::string& working_dir,
-                        const wsrep::gtid& initial_position,
                         int max_protocol_version);
   static void destroy();
   static Wsrep_server_state& instance()
@@ -54,7 +53,6 @@ private:
                      const std::string& incoming_address,
                      const std::string& address,
                      const std::string& working_dir,
-                     const wsrep::gtid& initial_position,
                      int max_protocol_version);
   Wsrep_mutex m_mutex;
   Wsrep_condition_variable m_cond;
