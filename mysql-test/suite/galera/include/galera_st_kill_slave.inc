@@ -22,10 +22,6 @@ INSERT INTO t1 VALUES ('node2_committed_before');
 COMMIT;
 
 --source include/kill_galera.inc
-if ($galera_st_force_sst)
-{
-  --remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
-}
 
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'
@@ -57,8 +53,15 @@ INSERT INTO t1 VALUES ('node1_to_be_rollbacked_after');
 INSERT INTO t1 VALUES ('node1_to_be_rollbacked_after');
 
 --connection node_2
---let $galera_wsrep_recover_server_id=2
---source suite/galera/include/galera_wsrep_recover.inc
+if ($galera_st_force_sst)
+{
+  --source include/galera_clear_start_position.inc
+}
+if (!$galera_st_force_sst)
+{
+  --let $galera_wsrep_recover_server_id=2
+  --source suite/galera/include/galera_wsrep_recover.inc
+}
 
 --echo Starting server ...
 --source include/start_mysqld.inc

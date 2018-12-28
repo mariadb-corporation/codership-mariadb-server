@@ -20,4 +20,13 @@
 # Restore original auto_increment_offset values.
 --source include/auto_increment_offset_restore.inc
 
+# The test should result in five SSTs, one for initial cluster startup
+# and four for test cases
+--let $assert_text = Donating SST with method mariabackup
+--let $assert_file = $MYSQLTEST_VARDIR/log/mysqld.1.err
+--let $assert_select = Donating SST with method mariabackup
+--let $assert_count = 5
+--let $assert_only_after = CURRENT_TEST
+--source include/assert_grep.inc
+
 --source include/galera_end.inc
