@@ -158,6 +158,8 @@ int  wsrep_show_status(THD *thd, SHOW_VAR *var, char *buff);
 int  wsrep_show_ready(THD *thd, SHOW_VAR *var, char *buff);
 void wsrep_free_status(THD *thd);
 void wsrep_update_cluster_state_uuid(const char* str);
+void wsrep_save_position();
+void wsrep_clear_saved_position();
 
 /* Filters out --wsrep-new-cluster oprtion from argv[]
  * should be called in the very beginning of main() */

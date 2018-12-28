@@ -1292,6 +1292,8 @@ static int sst_donate_other (const char*        method,
   int const cmd_len= 4096;
   wsp::string  cmd_str(cmd_len);
 
+  WSREP_INFO("%s SST with method %s", (bypass ? "Bypassing" : "Donating"),
+             method);
   if (!cmd_str())
   {
     WSREP_ERROR("sst_donate_other(): "

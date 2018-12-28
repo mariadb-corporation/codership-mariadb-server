@@ -220,6 +220,15 @@ static char provider_version[256]= { 0, };
 static char provider_vendor[256]= { 0, };
 
 /*
+  This string is used to save position after provider has been
+  unloaded. If wsrep_start_position variable is set, this saved_position
+  is cleared (see wsrep_set_local_position()).
+  Otherwise it is used as start position when the provider
+  is loaded next time (see wsrep_server_initial_position()).
+*/
+static std::string saved_position;
+
+/*
  * Wsrep status variables. LOCK_status must be locked When modifying
  * these variables,
  */
@@ -435,8 +444,18 @@ void wsrep_update_cluster_state_uuid(const char* uuid)
   strncpy(cluster_uuid_str, uuid, sizeof(cluster_uuid_str) - 1);
 }
 
-static void wsrep_init_position()
+void wsrep_save_position()
 {
+  saved_position.clear();
+  std::ostringstream oss;
+  oss << wsrep_get_SE_checkpoint();
+  saved_position= oss.str();
+  WSREP_INFO("Saved position: %s", saved_position.c_str());
+}
+
+void wsrep_clear_saved_position()
+{
+  saved_position.clear();
 }
 
 /****************************************************************************
@@ -593,10 +612,25 @@ static std::string wsrep_server_working_dir()
 static wsrep::gtid wsrep_server_initial_position()
 {
   wsrep::gtid ret;
-  WSREP_INFO("Server initial position: %s", wsrep_start_position);
-  std::istringstream is(wsrep_start_position);
-  is >> ret;
-  return ret;
+  WSREP_DEBUG("wsrep_server_initial_position: saved_position: %s "
+              "wsrep_start_position: %s",
+              saved_position.c_str(), wsrep_start_position);
+  const std::string position_str=
+    !saved_position.empty() ? saved_position.c_str() :
+    wsrep_start_position;
+  std::istringstream iss(position_str);
+  iss >> ret;
+  if (!iss.fail())
+  {
+    return ret;
+  }
+  else
+  {
+    /* We should not end up here if input validation works */
+    WSREP_WARN("Malformed wsrep_start_position: %s", position_str.c_str());
+    DBUG_ASSERT(0);
+    return wsrep::gtid::undefined();
+  }
 }
 
 /*
@@ -631,7 +665,6 @@ int wsrep_init_server()
     node_address= wsrep_server_node_address();
     incoming_address= wsrep_server_incoming_address();
     working_dir= wsrep_server_working_dir();
-    initial_position= wsrep_server_initial_position();
 
     Wsrep_server_state::init_once(server_name,
                                   incoming_address,
@@ -671,7 +704,12 @@ int wsrep_init()
 {
   assert(wsrep_provider);
 
-  wsrep_init_position();
+  if (strcmp(wsrep_start_position, WSREP_START_POSITION_ZERO) &&
+      wsrep_start_position_init(wsrep_start_position))
+  {
+    return 1;
+  }
+
   wsrep_sst_auth_init();
 
   if (strlen(wsrep_provider)== 0 ||

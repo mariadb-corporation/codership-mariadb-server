@@ -203,6 +203,7 @@ bool wsrep_start_position_update (sys_var *self, THD* thd, enum_var_type type)
 {
   // Print a confirmation that wsrep_start_position has been updated.
   WSREP_INFO ("wsrep_start_position set to '%s'", wsrep_start_position);
+  wsrep_clear_saved_position();
   return false;
 }
 
@@ -357,9 +358,9 @@ bool wsrep_provider_update (sys_var *self, THD* thd, enum_var_type type)
   wsrep_provider_options_init(NULL);
   if (!rcode)
     refresh_provider_options();
+  wsrep_save_position();
 
   mysql_mutex_lock(&LOCK_global_system_variables);
-
   return rcode;
 }
 
