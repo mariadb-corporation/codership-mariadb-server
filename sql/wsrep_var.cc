@@ -346,6 +346,8 @@ bool wsrep_provider_update (sys_var *self, THD* thd, enum_var_type type)
   char* tmp= strdup(wsrep_provider); // wsrep_init() rewrites provider
                                      //when fails
 
+  wsrep_save_position();
+
   if (wsrep_init())
   {
     my_error(ER_CANT_OPEN_LIBRARY, MYF(0), tmp, my_error, "wsrep_init failed");
@@ -358,7 +360,6 @@ bool wsrep_provider_update (sys_var *self, THD* thd, enum_var_type type)
   wsrep_provider_options_init(NULL);
   if (!rcode)
     refresh_provider_options();
-  wsrep_save_position();
 
   mysql_mutex_lock(&LOCK_global_system_variables);
   return rcode;
