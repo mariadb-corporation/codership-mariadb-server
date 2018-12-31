@@ -15,11 +15,14 @@
 
 --source include/auto_increment_offset_restore.inc
 
-# The test should result in two SSTs, the one for cluster startup
-# and one for the galera_st_kill_slave_ddl.
---let $assert_text = Donating SST with method rsync
+# The test should result in three ISTs. Kill slave DDL case should not
+# produce IST since the node is killed in unsafe state. However
+# only two of the ISTs produce 'Bypassing SST with method rsync'
+# log line since in the Disconnect Slave case the joiner does not
+# prepare SST request.
+--let $assert_text = Bypassing SST with method mariabackup
 --let $assert_file = $MYSQLTEST_VARDIR/log/mysqld.1.err
---let $assert_select = Donating SST with method rsync
+--let $assert_select = Bypassing SST with method mariabackup
 --let $assert_count = 2
 --let $assert_only_after = CURRENT_TEST
 --source include/assert_grep.inc
