@@ -2209,16 +2209,15 @@ void wsrep_end_nbo_lock(THD* thd, const TABLE_LIST *table_list)
   @retval FALSE  Lock request cannot be granted
 */
 
-bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
+void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                                MDL_ticket *ticket,
                                const MDL_key *key)
 {
   /* Fallback to the non-wsrep behaviour */
-  if (!WSREP_ON) return FALSE;
+  if (!WSREP_ON) return;
 
   THD *request_thd= requestor_ctx->get_thd();
   THD *granted_thd= ticket->get_ctx()->get_thd();
-  bool ret= false;
 
   const char* schema= key->db_name();
   int schema_len= key->db_name_length();
@@ -2243,7 +2242,6 @@ bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
                       schema, schema_len, request_thd, granted_thd);
         mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
         wsrep_abort_thd((void*)request_thd, (void*)granted_thd, 1);
-        ret= FALSE;
       }
       else
       {
@@ -2251,7 +2249,7 @@ bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
                       request_thd, granted_thd);
         ticket->wsrep_report(true);
         mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
-        ret= TRUE;
+	unireg_abort(1);
       }
     }
     else if (granted_thd->lex->sql_command == SQLCOM_FLUSH ||
@@ -2260,7 +2258,6 @@ bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
       WSREP_DEBUG("BF thread waiting for FLUSH");
       ticket->wsrep_report(wsrep_debug);
       mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
-      ret= FALSE;
     }
     else if (request_thd->lex->sql_command == SQLCOM_DROP_TABLE)
     {
@@ -2269,7 +2266,6 @@ bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
       ticket->wsrep_report(wsrep_debug);
       mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
       wsrep_abort_thd((void*)request_thd, (void*)granted_thd, 1);
-      ret= FALSE;
     }
     else
     {
@@ -2280,7 +2276,6 @@ bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
       {
         mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
         wsrep_abort_thd(request_thd, granted_thd, 1);
-        ret= FALSE;
       }
       else
       {
@@ -2292,12 +2287,13 @@ bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
         if (wsrep_thd_is_BF(request_thd, FALSE))
         {
           ha_abort_transaction(request_thd, granted_thd, TRUE);
-          ret= FALSE;
         }
         else
         {
-          DBUG_ASSERT(0);
-          ret= TRUE;
+	  WSREP_MDL_LOG(INFO, "MDL unknown BF-BF conflict", schema, schema_len,
+                      request_thd, granted_thd);
+	  ticket->wsrep_report(true);
+	  unireg_abort(1);
         }
       }
     }
@@ -2306,7 +2302,6 @@ bool wsrep_grant_mdl_exception(MDL_context *requestor_ctx,
   {
     mysql_mutex_unlock(&request_thd->LOCK_thd_data);
   }
-  return ret;
 }
 
 /**/
