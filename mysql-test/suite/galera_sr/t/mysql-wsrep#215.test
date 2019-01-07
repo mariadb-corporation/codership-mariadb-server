@@ -16,7 +16,7 @@
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY AUTO_INCREMENT) ENGINE=InnoDB;
 SET SESSION wsrep_trx_fragment_size = 2;
 SET SESSION wsrep_trx_fragment_unit = 'statements';
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 SET AUTOCOMMIT=OFF;
 START TRANSACTION;
@@ -49,11 +49,11 @@ INSERT INTO t1 VALUES (2);
 
 COMMIT;
 
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 --connection node_2
 SELECT COUNT(*) = 1 FROM t1;
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 #
 # Similar test with BYTES unit
@@ -63,7 +63,7 @@ TRUNCATE TABLE t1;
 
 SET SESSION wsrep_trx_fragment_size = 10;
 SET SESSION wsrep_trx_fragment_unit = 'bytes';
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 SET AUTOCOMMIT=OFF;
 START TRANSACTION;
@@ -99,11 +99,11 @@ SET GLOBAL debug = '';
 INSERT INTO t1 VALUES (2);
 COMMIT;
 
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 --connection node_2
 SELECT COUNT(*) = 2 FROM t1;
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 
 #
@@ -119,7 +119,7 @@ TRUNCATE TABLE t1;
 
 SET SESSION wsrep_trx_fragment_size = 200;
 SET SESSION wsrep_trx_fragment_unit = 'bytes';
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 SET AUTOCOMMIT=OFF;
 START TRANSACTION;
@@ -151,11 +151,11 @@ SET GLOBAL debug = '';
 --reap
 COMMIT;
 
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 --connection node_2
 SELECT COUNT(*) = 1 FROM t1;
-SELECT COUNT(*) = 0 FROM wsrep_schema.SR;
+SELECT COUNT(*) = 0 FROM mysql.wsrep_streaming_log;
 
 --connection node_1
 DROP TABLE t1;
