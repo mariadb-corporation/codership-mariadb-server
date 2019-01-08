@@ -1,0 +1,49 @@
+#
+# Verify that the wsrep XID gets updated in InnoDB rollback segment
+# properly and can be recovered with --wsrep-recover
+#
+
+--source include/have_wsrep.inc
+--source include/have_innodb.inc
+--source include/have_wsrep_provider.inc
+
+CREATE TABLE t1 (f1 INT PRIMARY KEY) ENGINE=InnoDB;
+INSERT INTO t1 VALUES (1);
+
+--source include/kill_mysqld.inc
+
+--exec $MYSQLD --defaults-group-suffix=.1 --defaults-file=$MYSQLTEST_VARDIR/my.cnf --log-error=$MYSQL_TMP_DIR/galera_wsrep_recover.log --innodb --wsrep-recover --core-file > $MYSQL_TMP_DIR/galera_wsrep_recover.log 2>&1
+
+--perl
+	use strict;
+	my $wsrep_start_position = `grep 'WSREP: Recovered position:' $ENV{MYSQL_TMP_DIR}/galera_wsrep_recover.log | sed 's/.*WSREP\:\ Recovered\ position://' | sed 's/^[ \t]*//'`;
+	chomp($wsrep_start_position);
+        die if $wsrep_start_position eq '';
+	open(FILE, ">", "$ENV{MYSQL_TMP_DIR}/galera_wsrep_start_position.inc") or die;
+	my ($uuid, $seqno) = split /:/, $wsrep_start_position;
+	print FILE "--let \$galera_wsrep_start_position_uuid = $uuid\n";
+	print FILE "--let \$galera_wsrep_start_position_seqno = $seqno\n";
+	close FILE;
+EOF
+
+--source $MYSQL_TMP_DIR/galera_wsrep_start_position.inc
+
+if ($galera_wsrep_start_position_uuid == '') {
+   --die "Could not obtain wsrep_start_position_uuid."
+}
+
+if ($galera_wsrep_start_position_seqno == '') {
+   --die "Could not obtain wsrep_start_position_seqno."
+}
+
+--remove_file $MYSQL_TMP_DIR/galera_wsrep_start_position.inc
+
+--echo Expect seqno 3
+--echo $galera_wsrep_start_position_seqno
+
+--source include/start_mysqld.inc
+--source include/wait_wsrep_ready.inc
+
+SELECT COUNT(*) `expect 1` FROM t1;
+
+DROP TABLE t1;
