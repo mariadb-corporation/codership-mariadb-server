@@ -108,6 +108,7 @@ static bool wsrep_load_data_split(THD *thd, const TABLE *table,
 {
   DBUG_ENTER("wsrep_load_data_split");
 
+#if 0
   if (!wsrep_load_data_splitting || !WSREP(thd)
       || !info.records || (info.records % 10000)
       || !thd->transaction.stmt.ha_list
@@ -115,11 +116,15 @@ static bool wsrep_load_data_split(THD *thd, const TABLE *table,
       || !thd->transaction.stmt.ha_list->next()
       || thd->transaction.stmt.ha_list->next()->next())
     DBUG_RETURN(false);
-
-  if (handlerton* hton= thd->transaction.stmt.ha_list->next()->ht())
+#endif
+  const bool is_innodb_load= thd->transaction.stmt.ha_list &&
+      ((thd->transaction.stmt.ha_list->ht() == binlog_hton &&
+        thd->transaction.stmt.ha_list->next()) ||
+       (thd->transaction.stmt.ha_list->ht() != binlog_hton));
+  const bool is_split= wsrep_load_data_splitting &&
+      WSREP(thd) && info.records && (info.records % 10000) == 0;
+  if (is_split && is_innodb_load)
   {
-    if (hton->db_type != DB_TYPE_INNODB)
-      DBUG_RETURN(false);
     WSREP_DEBUG("intermediate transaction commit in LOAD DATA");
     wsrep_tc_log_commit(thd);
     table->file->extra(HA_EXTRA_FAKE_START_STMT);

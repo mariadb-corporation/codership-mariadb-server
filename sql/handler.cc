@@ -1538,7 +1538,11 @@ int ha_commit_trans(THD *thd, bool all)
                             wsrep_has_changes(thd, all));
     if (run_wsrep_commit)
       error= wsrep_before_commit(thd, all);
-    if (error) goto done;
+    if (error)
+    {
+      ha_rollback_trans(thd, FALSE);
+      goto wsrep_err;
+    }
 #endif /* WITH_WSREP */
     error= ha_commit_one_phase(thd, all);
 #ifdef WITH_WSREP

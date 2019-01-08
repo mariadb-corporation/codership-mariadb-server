@@ -5677,7 +5677,13 @@ THD::binlog_start_trans_and_stmt()
     this->binlog_set_stmt_begin();
     bool mstmt_mode= in_multi_stmt_transaction_mode();
 #ifdef WITH_WSREP
-      /* Write Gtid
+    /* In wsrep binlog emulation mode nothing will not get written into
+       binlog, so we skip writing the GTID and binlog_hton registration. */
+    if (wsrep_emulate_bin_log)
+    {
+      DBUG_VOID_RETURN;
+    }
+    /* Write Gtid
          Get domain id only when gtid mode is set
          If this event is replicate through a master then ,
          we will forward the same gtid another nodes
