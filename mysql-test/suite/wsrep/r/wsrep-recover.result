@@ -6,4 +6,7 @@ Expect seqno 3
 SELECT COUNT(*) `expect 1` FROM t1;
 expect 1
 1
+SELECT VARIABLE_VALUE `expect 4` FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_last_committed';
+expect 4
+4
 DROP TABLE t1;
