@@ -155,7 +155,6 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
                      thd->wsrep_trx().ws_meta().gtid());
     }
   }
-  DBUG_ASSERT(ret == 0 || thd->wsrep_cs().current_error());
   DBUG_RETURN(ret);
 }
 
