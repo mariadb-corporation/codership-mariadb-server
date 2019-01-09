@@ -4711,6 +4711,15 @@ innobase_rollback(
 
 	dberr_t		error;
 
+#ifdef WITH_WSREP
+	/* If trx was assigned wsrep XID in prepare phase and the
+	trx is being rolled back due to BF abort, clear XID in order
+	to avoid writing it to rollback segment out of order. The XID
+	will be reassigned when the transaction is replayed. */
+	if (wsrep_is_wsrep_xid(trx->xid)) {
+		trx->xid->null();
+	}
+#endif /* WITH_WSREP */
 	if (rollback_trx
 	    || !thd_test_options(thd, OPTION_NOT_AUTOCOMMIT | OPTION_BEGIN)) {
 
