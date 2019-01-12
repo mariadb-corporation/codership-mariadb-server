@@ -29,7 +29,6 @@ Wsrep_server_state::Wsrep_server_state(const std::string& name,
                                        const std::string& incoming_address,
                                        const std::string& address,
                                        const std::string& working_dir,
-                                       const wsrep::gtid& initial_position,
                                        int max_protocol_version)
   : wsrep::server_state(m_mutex,
                         m_cond,
@@ -38,7 +37,6 @@ Wsrep_server_state::Wsrep_server_state(const std::string& name,
                         incoming_address,
                         address,
                         working_dir,
-                        initial_position,
                         max_protocol_version,
                         wsrep::server_state::rm_sync)
   , m_mutex(LOCK_wsrep_server_state)
@@ -52,7 +50,6 @@ void Wsrep_server_state::init_once(const std::string& name,
                                    const std::string& incoming_address,
                                    const std::string& address,
                                    const std::string& working_dir,
-                                   const wsrep::gtid& initial_position,
                                    int max_protocol_version)
 {
   if (m_instance == 0)
@@ -64,7 +61,6 @@ void Wsrep_server_state::init_once(const std::string& name,
                                         incoming_address,
                                         address,
                                         working_dir,
-                                        initial_position,
                                         max_protocol_version);
   }
 }

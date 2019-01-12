@@ -1,6 +1,6 @@
---- r/galera_ist_rsync.result	2018-09-11 12:38:42.027479411 +0300
-+++ r/galera_ist_rsync.reject	2018-09-17 10:50:16.527307668 +0300
-@@ -259,3 +259,111 @@
+--- suite/galera/r/galera_ist_rsync.result	2018-12-31 12:52:58.788041207 +0200
++++ suite/galera/r/galera_ist_rsync.reject	2018-12-31 15:05:27.812484990 +0200
+@@ -292,4 +292,112 @@
  DROP TABLE t1;
  COMMIT;
  SET AUTOCOMMIT=ON;
@@ -112,3 +112,4 @@
 +COMMIT;
 +SET AUTOCOMMIT=ON;
 +SET GLOBAL debug_dbug = $debug_orig;
+ include/assert_grep.inc [Bypassing SST with method rsync]

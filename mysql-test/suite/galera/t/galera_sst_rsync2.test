@@ -1,5 +1,8 @@
 --source include/galera_cluster.inc
 
+# Tell galera_st macros to force SST
+--let $galera_st_force_sst=1
+
 --let $node_1=node_1
 --let $node_2=node_2
 --source include/auto_increment_offset_save.inc

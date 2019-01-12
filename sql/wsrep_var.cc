@@ -203,6 +203,7 @@ bool wsrep_start_position_update (sys_var *self, THD* thd, enum_var_type type)
 {
   // Print a confirmation that wsrep_start_position has been updated.
   WSREP_INFO ("wsrep_start_position set to '%s'", wsrep_start_position);
+  wsrep_clear_saved_position();
   return false;
 }
 
@@ -345,6 +346,8 @@ bool wsrep_provider_update (sys_var *self, THD* thd, enum_var_type type)
   char* tmp= strdup(wsrep_provider); // wsrep_init() rewrites provider
                                      //when fails
 
+  wsrep_save_position();
+
   if (wsrep_init())
   {
     my_error(ER_CANT_OPEN_LIBRARY, MYF(0), tmp, my_error, "wsrep_init failed");
@@ -359,7 +362,6 @@ bool wsrep_provider_update (sys_var *self, THD* thd, enum_var_type type)
     refresh_provider_options();
 
   mysql_mutex_lock(&LOCK_global_system_variables);
-
   return rcode;
 }
 

@@ -1,6 +1,6 @@
---- galera_ist_mariabackup.result	2018-12-11 13:33:56.728535840 +0100
-+++ galera_ist_mariabackup.reject	2018-12-11 13:37:40.572535840 +0100
-@@ -290,3 +290,111 @@
+--- suite/galera/r/galera_ist_mariabackup.result	2018-12-31 12:51:32.615715012 +0200
++++ suite/galera/r/galera_ist_mariabackup.reject	2018-12-31 17:19:57.686534764 +0200
+@@ -292,4 +292,112 @@
  DROP TABLE t1;
  COMMIT;
  SET AUTOCOMMIT=ON;
@@ -112,3 +112,4 @@
 +COMMIT;
 +SET AUTOCOMMIT=ON;
 +SET GLOBAL debug_dbug = $debug_orig;
+ include/assert_grep.inc [Bypassing SST with method mariabackup]

@@ -55,6 +55,16 @@ INSERT INTO t1 VALUES ('node1_to_be_rollbacked_after');
 
 --connection node_2
 --echo Starting server ...
+
+if ($galera_st_force_sst)
+{
+  --source include/galera_clear_start_position.inc
+}
+if (!$galera_st_force_sst)
+{
+  --let $galera_wsrep_recover_server_id = 2
+  --source include/galera_wsrep_recover.inc
+}
 --source include/start_mysqld.inc
 
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'

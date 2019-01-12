@@ -53,8 +53,15 @@ INSERT INTO t1 VALUES ('node1_to_be_rollbacked_after');
 INSERT INTO t1 VALUES ('node1_to_be_rollbacked_after');
 
 --connection node_2
---let $galera_wsrep_recover_server_id=2
---source suite/galera/include/galera_wsrep_recover.inc
+if ($galera_st_force_sst)
+{
+  --source include/galera_clear_start_position.inc
+}
+if (!$galera_st_force_sst)
+{
+  --let $galera_wsrep_recover_server_id=2
+  --source suite/galera/include/galera_wsrep_recover.inc
+}
 
 --echo Starting server ...
 --source include/start_mysqld.inc

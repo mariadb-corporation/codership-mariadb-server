@@ -1,6 +1,9 @@
 --source include/big_test.inc
 --source include/galera_cluster.inc
 
+# Tell galera_st macros to force SST
+--let $galera_st_force_sst=1
+
 --let $node_1=node_1
 --let $node_2=node_2
 --source include/auto_increment_offset_save.inc
@@ -11,3 +14,19 @@
 --source suite/galera/include/galera_st_kill_slave.inc
 --source suite/galera/include/galera_st_kill_slave_ddl.inc
 --source include/auto_increment_offset_restore.inc
+
+# The test should result in five SSTs in debug mode, one for initial
+# cluster startup and four for test cases. In release mode
+# Kill Slave DDL case is not executed.
+--let $assert_text = Donating SST with method rsync
+--let $assert_file = $MYSQLTEST_VARDIR/log/mysqld.1.err
+--let $assert_select = Donating SST with method rsync
+if (!$have_debug)
+{
+  --let $assert_count = 4
+}
+if ($have_debug) {
+  --let $assert_count = 5
+}
+--let $assert_only_after = CURRENT_TEST
+--source include/assert_grep.inc

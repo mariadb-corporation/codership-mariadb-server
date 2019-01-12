@@ -1,6 +1,6 @@
---- galera_sst_rsync.result	2018-12-11 13:47:33.600535840 +0100
-+++ galera_sst_rsync.reject	2018-12-11 13:52:05.780535840 +0100
-@@ -288,3 +288,111 @@
+--- suite/galera/r/galera_sst_rsync.result	2018-12-31 13:11:57.140460991 +0200
++++ suite/galera/r/galera_sst_rsync.reject	2018-12-31 16:37:29.216663775 +0200
+@@ -288,4 +288,111 @@
  DROP TABLE t1;
  COMMIT;
  SET AUTOCOMMIT=ON;
@@ -53,7 +53,6 @@
 +INSERT INTO t1 (f1) VALUES ('node1_to_be_rollbacked_after');
 +INSERT INTO t1 (f1) VALUES ('node1_to_be_rollbacked_after');
 +connection node_2;
-+Performing --wsrep-recover ...
 +connection node_2;
 +Starting server ...
 +Using --wsrep-start-position when starting mysqld ...
@@ -112,3 +111,4 @@
 +COMMIT;
 +SET AUTOCOMMIT=ON;
 +SET GLOBAL debug_dbug = $debug_orig;
+ include/assert_grep.inc [Donating SST with method rsync]

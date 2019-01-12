@@ -7,6 +7,9 @@
 --source include/have_innodb.inc
 --source include/have_ssl_communication.inc
 
+# Tell galera_st macros to force SST
+--let $galera_st_force_sst=1
+
 --source suite/galera/include/galera_sst_set_mysqldump.inc
 --let $node_1=node_1
 --let $node_2=node_2
