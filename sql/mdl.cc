@@ -1737,7 +1737,9 @@ MDL_lock::can_grant_lock(enum_mdl_type type_arg,
       Ticket_iterator it(m_granted);
       MDL_ticket *ticket;
 #ifdef WITH_WSREP
-      can_grant = TRUE;
+      if (WSREP(requestor_ctx->get_thd()) ||
+          requestor_ctx->get_thd()->wsrep_cs().mode() == wsrep::client_state::m_rsu)
+        can_grant = TRUE;
 #endif /* WITH_WSREP */
 
       /* Check that the incompatible lock belongs to some other context. */
@@ -1775,7 +1777,7 @@ MDL_lock::can_grant_lock(enum_mdl_type type_arg,
             }
             can_grant= FALSE;
           }
-	}
+        }
 #else
           break;
 #endif /* WITH_WSREP */
