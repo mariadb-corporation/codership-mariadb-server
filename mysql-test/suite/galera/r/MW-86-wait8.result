@@ -41,9 +41,9 @@ SHOW GLOBAL VARIABLES LIKE 'foo_bar';
 SHOW WARNINGS;
 SET GLOBAL debug_dbug = @orig_debug;
 SET DEBUG_SYNC = "now SIGNAL signal.wsrep_apply_cb";
-SET debug_sync='RESET';
 SET SESSION wsrep_sync_wait = default;
 DROP TABLE t_wait8;
+SET debug_sync='RESET';
 SELECT @@debug_sync;
 @@debug_sync
 ON - current signal: ''

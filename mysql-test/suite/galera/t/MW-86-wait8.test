@@ -117,13 +117,16 @@ SHOW WARNINGS;
 SET GLOBAL debug_dbug = @orig_debug;
 
 SET DEBUG_SYNC = "now SIGNAL signal.wsrep_apply_cb";
-SET debug_sync='RESET';
 
 SET SESSION wsrep_sync_wait = default;
 
 # This will wait for the background INSERT to complete before we quit
 # from the test.
 DROP TABLE t_wait8;
+
+# Here we can be sure that the background INSERT has consumed the signal
+# so it safe to reset.
+SET debug_sync='RESET';
 
 # Make sure no pending signals are leftover to surprise subsequent tests.
 SELECT @@debug_sync;
