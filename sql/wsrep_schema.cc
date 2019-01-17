@@ -40,6 +40,9 @@ const std::string wsrep_schema_str= "mysql";
 static const std::string cluster_str= "wsrep_cluster";
 static const std::string cluster_members_str= "wsrep_cluster_members";
 
+static const std::string create_database_str=
+  "CREATE DATABASE IF NOT EXISTS mysql;";
+
 static const std::string create_cluster_table_str=
   "CREATE TABLE IF NOT EXISTS mysql.wsrep_cluster"
   "("
@@ -570,7 +573,10 @@ int Wsrep_schema::init()
     DBUG_RETURN(1);
   }
 
-  if (Wsrep_schema_impl::execute_SQL(thd, create_cluster_table_str.c_str(),
+  if (
+      Wsrep_schema_impl::execute_SQL(thd, create_database_str.c_str(),
+                                     create_database_str.size()) ||
+      Wsrep_schema_impl::execute_SQL(thd, create_cluster_table_str.c_str(),
                                      create_cluster_table_str.size()) ||
       Wsrep_schema_impl::execute_SQL(thd, create_members_table_str.c_str(),
                                      create_members_table_str.size()) ||
