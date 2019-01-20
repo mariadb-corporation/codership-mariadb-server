@@ -678,7 +678,11 @@ int wsrep_init()
   {
     // enable normal operation in case no provider is specified
     global_system_variables.wsrep_on= 0;
-    int err= Wsrep_server_state::instance().load_provider(wsrep_provider, wsrep_provider_options ? wsrep_provider_options : "");
+    int err= Wsrep_server_state::instance().load_provider(
+      wsrep_provider,
+      wsrep_provider_options ? wsrep_provider_options : "",
+      encrypt_binlog
+    );
     if (err)
     {
       DBUG_PRINT("wsrep",("wsrep::init() failed: %d", err));
@@ -705,7 +709,8 @@ int wsrep_init()
     wsrep_data_home_dir= mysql_real_data_home;
 
   if (Wsrep_server_state::instance().load_provider(wsrep_provider,
-                                                   wsrep_provider_options))
+                                                   wsrep_provider_options,
+                                                   encrypt_binlog))
   {
     WSREP_ERROR("Failed to load provider");
     return 1;
@@ -2905,7 +2910,7 @@ bool wsrep_key_deserialize(const void* input, const size_t& input_size,
   if(input_size >= key_version_preamble_size)
   {
     memcpy(&version, input, sizeof(version));
-    key_ptr= input + key_version_preamble_size;
+    key_ptr= static_cast<const char*>(input) + key_version_preamble_size;
     size= input_size - key_version_preamble_size;
     ret= false;
   }
