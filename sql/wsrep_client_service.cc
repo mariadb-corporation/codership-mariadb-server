@@ -54,6 +54,11 @@ Wsrep_client_service::Wsrep_client_service(THD* thd,
   , m_client_state(client_state)
 { }
 
+std::string Wsrep_client_service::query() const
+{
+  return WSREP_QUERY(m_thd);
+}
+
 void Wsrep_client_service::store_globals()
 {
   DBUG_ENTER("Wsrep_client_service::store_globals");
