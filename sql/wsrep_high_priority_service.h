@@ -35,6 +35,7 @@ public:
   ~Wsrep_high_priority_service();
   int start_transaction(const wsrep::ws_handle&,
                         const wsrep::ws_meta&);
+  int next_fragment(const wsrep::ws_meta&);
   const wsrep::transaction& transaction() const;
   void adopt_transaction(const wsrep::transaction&);
   int apply_write_set(const wsrep::ws_meta&, const wsrep::const_buffer&) = 0;
