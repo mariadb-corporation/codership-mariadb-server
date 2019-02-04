@@ -33,7 +33,8 @@ public:
   int append_fragment(const wsrep::id&,
                       wsrep::transaction_id,
                       int flags,
-                      const wsrep::const_buffer&);
+                      const wsrep::const_buffer&,
+                      const std::string&);
   int update_fragment_meta(const wsrep::ws_meta&);
   int remove_fragments();
   int commit(const wsrep::ws_handle&, const wsrep::ws_meta&);
