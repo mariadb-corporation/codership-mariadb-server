@@ -962,9 +962,22 @@ bool trans_xa_commit(THD *thd)
     {
       DEBUG_SYNC(thd, "trans_xa_commit_after_acquire_commit_lock");
 
+#ifdef WITH_WSREP
+      const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, 1);
+      if (run_wsrep_hooks)
+      {
+        wsrep_before_commit(thd, 1);
+      }
+#endif /* WITH_WSREP */
       res= MY_TEST(ha_commit_one_phase(thd, 1));
       if (res)
         my_error(ER_XAER_RMERR, MYF(0));
+#ifdef WITH_WSREP
+      if (run_wsrep_hooks)
+      {
+        wsrep_after_commit(thd, 1);
+      }
+#endif /* WITH_WSREP */
     }
   }
   else
