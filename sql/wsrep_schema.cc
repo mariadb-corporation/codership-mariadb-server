@@ -1340,7 +1340,7 @@ int Wsrep_schema::recover_sr_transactions(THD *orig_thd)
         server_state.start_streaming_applier(server_id, transaction_id,
                                              applier);
         applier->start_transaction(wsrep::ws_handle(transaction_id, 0),
-                                   ws_meta);
+                                  ws_meta);
       }
       applier->store_globals();
       applier->apply_write_set(ws_meta, data);
