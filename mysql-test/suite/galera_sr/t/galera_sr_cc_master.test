@@ -70,7 +70,6 @@ SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
 --connection node_2b
 --source include/galera_wait_ready.inc
 SELECT * FROM mysql.wsrep_streaming_log;
-SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
 
 # Repeat transaction to confirm no locks are left from previous transaction
 

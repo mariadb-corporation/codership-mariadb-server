@@ -55,6 +55,14 @@ Wsrep_client_service::Wsrep_client_service(THD* thd,
   , m_client_state(client_state)
 { }
 
+std::string Wsrep_client_service::query() const
+{
+  if (m_thd->query())
+    return m_thd->query();
+  else
+    return "";
+}
+
 void Wsrep_client_service::store_globals()
 {
   DBUG_ENTER("Wsrep_client_service::store_globals");
@@ -141,12 +149,59 @@ void Wsrep_client_service::cleanup_transaction()
   m_thd->wsrep_affected_rows= 0;
 }
 
+bool Wsrep_client_service::is_xa() const
+{
+  return m_thd->transaction.xid_state.is_explicit_XA();
+}
 
-int Wsrep_client_service::prepare_fragment_for_replication(wsrep::mutable_buffer& buffer)
+bool Wsrep_client_service::is_xa_prepare() const
+{
+  DBUG_ASSERT(m_thd == current_thd);
+  return m_thd->lex->sql_command == SQLCOM_XA_PREPARE;
+}
+
+std::string Wsrep_client_service::xid() const
+{
+  if (is_xa())
+  {
+    std::string xid;
+    wsrep_get_sql_xid(m_thd->transaction.xid_state.get_xid(), xid);
+    return xid;
+  }
+  return "";
+}
+
+static int write_xa_event_helper(THD* thd,
+                                 const char* query,
+                                 size_t query_len,
+                                 wsrep::mutable_buffer& buffer)
+{
+  std::string stmt;
+  stmt.append(query, query_len);
+  wsrep_get_sql_xid(thd->transaction.xid_state.get_xid(), stmt);
+
+  uchar* event_buf= NULL;
+  size_t event_buf_len= 0;
+  wsrep_to_buf_helper(thd, stmt.c_str(), stmt.length(),
+                      &event_buf, &event_buf_len);
+  buffer.push_back(reinterpret_cast<const char*>(event_buf),
+                   reinterpret_cast<const char*>(event_buf + event_buf_len));
+  my_free(event_buf);
+  return 0;
+}
+
+int Wsrep_client_service::prepare_fragment_for_replication(
+  wsrep::mutable_buffer& buffer, size_t& log_position)
 {
   DBUG_ASSERT(m_thd == current_thd);
   THD* thd= m_thd;
   DBUG_ENTER("Wsrep_client_service::prepare_fragment_for_replication");
+
+  if (is_xa() && thd->wsrep_sr().fragments_certified() == 0)
+  {
+    write_xa_event_helper(thd, STRING_WITH_LEN("XA START "), buffer);
+  }
+
   IO_CACHE* cache= wsrep_get_trans_cache(thd);
   thd->binlog_flush_pending_rows_event(true);
 
@@ -156,13 +211,13 @@ int Wsrep_client_service::prepare_fragment_for_replication(wsrep::mutable_buffer
   }
 
   const my_off_t saved_pos(my_b_tell(cache));
-  if (reinit_io_cache(cache, READ_CACHE, thd->wsrep_sr().bytes_certified(), 0, 0))
+  if (reinit_io_cache(cache, READ_CACHE, thd->wsrep_sr().log_position(), 0, 0))
   {
     DBUG_RETURN(1);
   }
 
   int ret= 0;
-  size_t total_length= 0;
+  size_t total_length= buffer.size();
   size_t length= my_b_bytes_in_cache(cache);
 
   if (!length)
@@ -190,6 +245,14 @@ int Wsrep_client_service::prepare_fragment_for_replication(wsrep::mutable_buffer
     while (cache->file >= 0 && (length= my_b_fill(cache)));
   }
   DBUG_ASSERT(total_length == buffer.size());
+
+  if (is_xa_prepare())
+  {
+    write_xa_event_helper(thd, STRING_WITH_LEN("XA END "), buffer);
+    write_xa_event_helper(thd, STRING_WITH_LEN("XA PREPARE "), buffer);
+  }
+
+  log_position = saved_pos;
 cleanup:
   if (reinit_io_cache(cache, WRITE_CACHE, saved_pos, 0, 0))
   {
@@ -319,8 +382,17 @@ int Wsrep_client_service::bf_rollback()
 {
   DBUG_ASSERT(m_thd == current_thd);
   DBUG_ENTER("Wsrep_client_service::rollback");
-
-  int ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
+  int ret(1);
+  if (is_xa())
+  {
+    m_thd->lex->xid= m_thd->transaction.xid_state.get_xid();
+    ret= wsrep_trans_xa_end_and_rollback(m_thd);
+    wsrep_override_error(m_thd, ER_XA_RBDEADLOCK);
+  }
+  else
+  {
+    ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
+  }
   if (m_thd->locked_tables_mode && m_thd->lock)
   {
     m_thd->locked_tables_list.unlock_locked_tables(m_thd);

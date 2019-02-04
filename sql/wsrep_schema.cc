@@ -86,6 +86,7 @@ static const std::string create_frag_table_str=
   "seqno BIGINT, "
   "flags INT NOT NULL, "
   "frag LONGBLOB NOT NULL, "
+  "xid VARCHAR(256) NOT NULL,"
   "PRIMARY KEY (node_uuid, trx_id, seqno)"
   ") ENGINE=InnoDB";
 
@@ -476,6 +477,13 @@ static int scan(TABLE* table, uint field, char* strbuf, uint strbuf_len)
   (void)table->field[field]->val_str(&str);
   strncpy(strbuf, str.c_ptr(), std::min(str.length(), strbuf_len));
   strbuf[strbuf_len - 1]= '\0';
+  return 0;
+}
+
+static int scan(TABLE* table, uint field, String& str)
+{
+  assert(field < table->s->fields);
+  (void)table->field[field]->val_str(&str);
   return 0;
 }
 
@@ -881,7 +889,8 @@ int Wsrep_schema::append_fragment(THD* thd,
                                   wsrep::transaction_id transaction_id,
                                   wsrep::seqno seqno,
                                   int flags,
-                                  const wsrep::const_buffer& data)
+                                  const wsrep::const_buffer& data,
+                                  const std::string& xid)
 {
   DBUG_ENTER("Wsrep_schema::append_fragment");
   std::ostringstream os;
@@ -905,6 +914,7 @@ int Wsrep_schema::append_fragment(THD* thd,
   Wsrep_schema_impl::store(frag_table, 2, seqno.get());
   Wsrep_schema_impl::store(frag_table, 3, flags);
   Wsrep_schema_impl::store(frag_table, 4, data.data(), data.size());
+  Wsrep_schema_impl::store(frag_table, 5, xid);
 
   int error;
   if ((error= Wsrep_schema_impl::insert(frag_table))) {
@@ -1315,10 +1325,13 @@ int Wsrep_schema::recover_sr_transactions(THD *orig_thd)
       wsrep::gtid gtid(cluster_id, seqno);
       int flags;
       Wsrep_schema_impl::scan(frag_table, 3, flags);
-      String data_str;
 
-      (void)frag_table->field[4]->val_str(&data_str);
+      String data_str;
+      Wsrep_schema_impl::scan(frag_table, 4, data_str);
       wsrep::const_buffer data(data_str.c_ptr_quick(), data_str.length());
+      String frag_xid;
+      Wsrep_schema_impl::scan(frag_table, 5, frag_xid);
+
       wsrep::ws_meta ws_meta(gtid,
                              wsrep::stid(server_id,
                                          transaction_id,
@@ -1331,17 +1344,29 @@ int Wsrep_schema::recover_sr_transactions(THD *orig_thd)
                                                          transaction_id)))
       {
         DBUG_ASSERT(wsrep::starts_transaction(flags));
+
         THD* thd= new THD(next_thread_id(), true);
         thd->thread_stack= (char*)&storage_thd;
-
         thd->real_id= pthread_self();
 
-        applier= new Wsrep_applier_service(thd);
-        server_state.start_streaming_applier(server_id, transaction_id,
+        XID xid;
+        const std::string xid_match(frag_xid.c_ptr(), frag_xid.length());
+        if (frag_xid.length() &&
+            wsrep_find_prepared_xid(thd, xid_match, &xid))
+        {
+          applier= new Wsrep_prepared_applier_service(thd, &xid);
+        }
+        else
+        {
+          applier= new Wsrep_applier_service(thd);
+        }
+        server_state.start_streaming_applier(server_id,
+                                             transaction_id,
                                              applier);
         applier->start_transaction(wsrep::ws_handle(transaction_id, 0),
                                    ws_meta);
       }
+
       applier->store_globals();
       applier->apply_write_set(ws_meta, data);
       applier->after_apply();
