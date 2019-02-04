@@ -1,0 +1,90 @@
+--source include/galera_cluster.inc
+
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+#
+# Test A: Rollback XA transaction after XA PREPARE
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+
+XA START 'test';
+INSERT INTO t1 VALUES (1);
+XA END 'test';
+XA PREPARE 'test';
+
+# Expect a fragment after XA PREPARE
+--connection node_1a
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1
+XA ROLLBACK 'test';
+
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+DROP TABLE t1;
+
+
+#
+# Test B: Rollback XA transaction before XA PREPARE
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+
+XA START 'test';
+INSERT INTO t1 VALUES (1);
+XA END 'test';
+
+--connection node_2
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+--connection node_1
+XA ROLLBACK 'test';
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+DROP TABLE t1;
+
+
+#
+# Test C: Rollback XA transaction before XA END should error
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+
+XA START 'test';
+INSERT INTO t1 VALUES (1);
+
+--connection node_2
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+--connection node_1
+--error ER_XAER_RMFAIL
+XA ROLLBACK 'test';
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+--connection node_1
+XA END 'test';
+XA ROLLBACK 'test';
+DROP TABLE t1;

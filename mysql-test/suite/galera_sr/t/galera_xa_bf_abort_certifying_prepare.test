@@ -1,0 +1,135 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+--source include/have_debug_sync.inc
+--source include/galera_have_debug_sync.inc
+
+# Control connection for manipulating galera sync points
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+SET SESSION wsrep_sync_wait = 0;
+
+--connection node_1
+
+--let $wsrep_local_replays_old = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_replays'`
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY, f2 CHAR(1));
+
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'a');
+
+--connection node_1
+XA START 't';
+UPDATE t1 SET f2 = 'b' WHERE f1 = 1;
+SELECT * FROM t1 WHERE f1 = 2 FOR UPDATE;
+XA END 't';
+
+--connection node_2
+SELECT xid from mysql.wsrep_streaming_log;
+
+#
+# Block the commit from node_2
+#
+--connection node_1a
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_set_sync_point.inc
+
+#
+# Issue conflicting UPDATE from node_2 and wait until it hits the
+# apply monitor (but does not apply yet)
+#
+--connection node_2
+UPDATE t1 SET f2 = 'c' WHERE f1 = 2;
+
+--connection node_1a
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_wait_sync_point.inc
+
+#
+# Set a new sync point to block XA PREPARE in local monitor on node_1
+#
+--source include/galera_clear_sync_point.inc
+--let $galera_sync_point = local_monitor_master_enter_sync
+--source include/galera_set_sync_point.inc
+
+#
+# Send the XA PREPARE on node_1
+#
+--connection node_1
+--send XA PREPARE 't';
+
+#
+# Wait until prepare reaches sync point
+#
+--connection node_1a
+SET SESSION wsrep_sync_wait = 0;
+--let $galera_sync_point = apply_monitor_slave_enter_sync local_monitor_master_enter_sync
+--source include/galera_wait_sync_point.inc
+
+#
+# Release conflicting slave transaction and wait until it has BF
+# aborted pending XA PREPARE
+#
+--source include/galera_clear_sync_point.inc
+--let $galera_sync_point = abort_trx_end
+--source include/galera_set_sync_point.inc
+
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_signal_sync_point.inc
+
+--let $galera_sync_point = abort_trx_end local_monitor_master_enter_sync
+--source include/galera_wait_sync_point.inc
+
+#
+# Release both threads, local thread will now replay
+#
+--source include/galera_clear_sync_point.inc
+--let $galera_sync_point = abort_trx_end
+--source include/galera_signal_sync_point.inc
+
+--let $galera_sync_point = local_monitor_master_enter_sync
+--source include/galera_signal_sync_point.inc
+
+#
+# XA PREPARE must abort
+#
+--connection node_1
+--error ER_XA_RBDEADLOCK
+--reap
+
+XA ROLLBACK 't';
+
+#
+# Check the outcome and that wsrep schema SR table is empty
+#
+SELECT * FROM t1;
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
+
+#
+# wsrep_local_replays has increased by 1
+#
+--let $wsrep_local_replays_new = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_replays'`
+--disable_query_log
+--eval SELECT $wsrep_local_replays_new - $wsrep_local_replays_old = 1 AS wsrep_local_replays;
+--enable_query_log
+
+
+--connection node_1
+SELECT * FROM t1;
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+#
+# Check that the transaction has been cleaned up properly
+#
+--connection node_1
+XA START 't';
+INSERT INTO t1 VALUES (100, 't');
+XA END 't';
+XA PREPARE 't';
+XA COMMIT 't';
+
+DROP TABLE t1;

@@ -1,0 +1,60 @@
+--source include/galera_cluster.inc
+
+--let $count = 500
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY AUTO_INCREMENT, f2 CHAR(255)) ENGINE=InnoDB;
+
+--connect trx1, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection trx1
+SET SESSION wsrep_sync_wait = 0;
+
+--connect trx2, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection trx2
+SET SESSION wsrep_sync_wait = 0;
+
+--disable_query_log
+while ($count)
+{
+  --connection trx1
+  XA START 'trx1';
+  --eval INSERT INTO t1 VALUES ($count, 'trx1');
+  XA END 'trx1';
+
+  --connection trx2
+  XA START 'trx2';
+  --eval INSERT INTO t1 VALUES ($count, 'trx2');
+  XA END 'trx2';
+
+  --connection trx1
+  --send XA PREPARE 'trx1'
+
+  --connection trx2
+  --send XA PREPARE 'trx2'
+
+  --connection trx1
+  --error 0,ER_XA_RBDEADLOCK,ER_XAER_RMFAIL
+  --reap
+  --error 0,ER_XAER_NOTA,ER_XA_RBDEADLOCK
+  XA COMMIT 'trx1';
+
+  --connection trx2
+  --error 0,ER_XA_RBDEADLOCK,ER_XAER_RMFAIL
+  --reap
+  --error 0,ER_XAER_NOTA,ER_XA_RBDEADLOCK
+  XA COMMIT 'trx2';
+
+  --dec $count
+}
+--enable_query_log
+
+--connection node_1
+SELECT COUNT(*) FROM t1;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT COUNT(*) FROM t1;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+DROP TABLE t1;

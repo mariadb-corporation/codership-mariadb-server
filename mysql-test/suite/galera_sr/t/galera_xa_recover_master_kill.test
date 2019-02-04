@@ -1,0 +1,20 @@
+#
+# Test recovery of XA prepared transaction
+#
+# The master of XA transaction is killed after successful XA PREPARE.
+# Upon recovery it is expected that the transaction is still is prepared,
+# and master can issue XA COMMIT to terminate the transaction.
+#
+
+--source include/galera_cluster.inc
+
+# Save original auto_increment_offset values.
+--let $node_1=node_1
+--let $node_2=node_2
+--source ../galera/include/auto_increment_offset_save.inc
+
+--let $restart_script = galera_xa_recover_master_do_kill.inc
+--source galera_xa_recover_master.inc
+
+# Restore original auto_increment_offset values.
+--source ../galera/include/auto_increment_offset_restore.inc

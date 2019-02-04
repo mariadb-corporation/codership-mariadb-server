@@ -1,0 +1,36 @@
+connection node_2;
+connection node_1;
+CREATE TABLE t1(f1 INTEGER PRIMARY KEY, f2 INTEGER);
+INSERT INTO t1 VALUES (1, 1);
+INSERT INTO t1 VALUES (2, 2);
+connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connect node_1b, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connection node_1a;
+XA START 'trx_a';
+UPDATE t1 set f2 = 10 WHERE f1 = 1;
+connection node_1b;
+XA START 'trx_b';
+UPDATE t1 SET f2 = 20 WHERE f1 = 2;
+connection node_1a;
+UPDATE t1 set f2 = 20 WHERE f1 = 2 /* node 1a */;
+connection node_1b;
+UPDATE t1 SET f2 = 20 WHERE f1 = 1 /* node_1b */;
+ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+2
+INSERT INTO t1 VALUES (10,10);
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+3
+XA END 'trx_b';
+ERROR XA102: XA_RBDEADLOCK: Transaction branch was rolled back: deadlock was detected
+XA ROLLBACK 'trx_b';
+connection node_1a;
+XA END 'trx_a';
+XA ROLLBACK 'trx_a';
+SELECT * FROM t1;
+f1	f2
+1	1
+2	2
+DROP TABLE t1;

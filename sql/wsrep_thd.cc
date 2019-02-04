@@ -297,6 +297,40 @@ void wsrep_create_rollbacker()
    }
 }
 
+static void wsrep_xa_replay_process(THD *replayer, void *wsrep_args)
+{
+  Wsrep_thd_args* args= (Wsrep_thd_args*)wsrep_args;
+  THD* thd= (THD*)args->arg();
+
+  DBUG_ASSERT(thd);
+  mysql_mutex_lock(&thd->LOCK_thd_data);
+  auto saved_mysys_var= thd->mysys_var;
+  DBUG_ASSERT(thd->wsrep_trx().is_xa());
+  DBUG_ASSERT(thd->wsrep_cs().state() == wsrep::client_state::s_idle);
+  DBUG_ASSERT(thd->wsrep_trx().state() == wsrep::transaction::s_must_replay);
+  mysql_mutex_unlock(&thd->LOCK_thd_data);
+
+  wsrep_reset_threadvars(replayer);
+  wsrep_store_threadvars(thd);
+  thd->wsrep_cs().acquire_ownership();
+  char* orig_thread_stack= thd->thread_stack;
+  thd->thread_stack= replayer->thread_stack;
+  auto saved_esd= thd->event_scheduler.data;
+  thd->event_scheduler.data= 0;
+  mysql_mutex_lock(&thd->LOCK_thd_data);
+  thd->reset_for_next_command();
+  mysql_mutex_unlock(&thd->LOCK_thd_data);
+  thd->wsrep_cs().client_service().bf_rollback();
+  wsrep_reset_threadvars(thd);
+  wsrep_store_threadvars(replayer);
+  thd->wsrep_cs().xa_replay();
+  thd->set_mysys_var(saved_mysys_var);
+  thd->event_scheduler.data= saved_esd;
+  thd->thread_stack= orig_thread_stack;
+  thd->wsrep_cs().sync_rollback_complete();
+  wsrep_store_threadvars(replayer);
+}
+
 /*
   Start async rollback process
 
@@ -304,13 +338,36 @@ void wsrep_create_rollbacker()
  */
 void wsrep_fire_rollbacker(THD *thd)
 {
-  DBUG_ASSERT(thd->wsrep_trx().state() == wsrep::transaction::s_aborting);
-  DBUG_PRINT("wsrep",("enqueuing trx abort for %llu", thd->thread_id));
-  WSREP_DEBUG("enqueuing trx abort for (%llu)", thd->thread_id);
-  if (wsrep_rollback_queue->push_back(thd))
+  switch (thd->wsrep_trx().state())
   {
-    WSREP_WARN("duplicate thd %llu for rollbacker",
-               thd->thread_id);
+  case wsrep::transaction::s_aborting:
+  {
+    DBUG_PRINT("wsrep",("enqueuing trx abort for %llu", thd->thread_id));
+    WSREP_DEBUG("enqueuing trx abort for (%llu)", thd->thread_id);
+    if (wsrep_rollback_queue->push_back(thd))
+    {
+      WSREP_WARN("duplicate thd %llu for rollbacker",
+                 thd->thread_id);
+    }
+    break;
+  }
+  case wsrep::transaction::s_must_replay:
+  {
+    DBUG_ASSERT(thd->wsrep_trx().is_xa());
+    DBUG_ASSERT(thd->wsrep_cs().state() == wsrep::client_state::s_idle);
+    WSREP_DEBUG("creating xa replayer for %llu", thd->thread_id);
+    Wsrep_thd_args* args(new Wsrep_thd_args(wsrep_xa_replay_process,
+                                            WSREP_ROLLBACKER_THREAD,
+                                            pthread_self(),
+                                            thd));
+    if (create_wsrep_THD(args, false))
+    {
+      WSREP_WARN("Failed to create thread for xa replay");
+    }
+    break;
+  }
+  default:
+    DBUG_ASSERT(0);
   }
 }
 

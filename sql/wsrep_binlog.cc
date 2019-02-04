@@ -158,7 +158,8 @@ static int wsrep_write_cache_inc(THD*      const thd,
   }
   if (ret == 0)
   {
-    assert(total_length + thd->wsrep_sr().log_position() == saved_pos);
+    assert(!WSREP_EMULATE_BINLOG(thd) ||
+           total_length + thd->wsrep_sr().log_position() == saved_pos);
   }
 
 cleanup:

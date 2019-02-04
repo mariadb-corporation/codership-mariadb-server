@@ -29,6 +29,7 @@
 #define NUMBER_OF_FIELDS_TO_IDENTIFY_WORKER 2
 #include "slave.h"
 #include "rpl_mi.h"
+#include <mysql/psi/mysql_transaction.h>
 
 namespace
 {
@@ -62,48 +63,6 @@ private:
 };
 }
 
-static rpl_group_info* wsrep_relay_group_init(THD* thd, const char* log_fname)
-{
-  Relay_log_info* rli= new Relay_log_info(false);
-
-  if (!rli->relay_log.description_event_for_exec)
-  {
-    rli->relay_log.description_event_for_exec=
-      new Format_description_log_event(4);
-  }
-
-  static LEX_CSTRING connection_name= { STRING_WITH_LEN("wsrep") };
-
-  /*
-    Master_info's constructor initializes rpl_filter by either an already
-    constructed Rpl_filter object from global 'rpl_filters' list if the
-    specified connection name is same, or it constructs a new Rpl_filter
-    object and adds it to rpl_filters. This object is later destructed by
-    Mater_info's destructor by looking it up based on connection name in
-    rpl_filters list.
-
-    However, since all Master_info objects created here would share same
-    connection name ("wsrep"), destruction of any of the existing Master_info
-    objects (in wsrep_return_from_bf_mode()) would free rpl_filter referenced
-    by any/all existing Master_info objects.
-
-    In order to avoid that, we have added a check in Master_info's destructor
-    to not free the "wsrep" rpl_filter. It will eventually be freed by
-    free_all_rpl_filters() when server terminates.
-  */
-  rli->mi= new Master_info(&connection_name, false);
-
-  struct rpl_group_info *rgi= new rpl_group_info(rli);
-  rgi->thd= rli->sql_driver_thd= thd;
-
-  if ((rgi->deferred_events_collecting= rli->mi->rpl_filter->is_on()))
-  {
-    rgi->deferred_events= new Deferred_log_events(rli);
-  }
-
-  return rgi;
-}
-
 static void wsrep_setup_uk_and_fk_checks(THD* thd)
 {
   /* Tune FK and UK checking policy. These are reset back to original
@@ -133,6 +92,28 @@ static int apply_events(THD*                       thd,
     }
     wsrep_dump_rbr_buf_with_header(thd, data.data(), data.size());
   }
+  return ret;
+}
+
+static void prepare_for_xa_command(THD* thd,
+                                   XID* xid,
+                                   enum enum_sql_command cmd)
+{
+  thd->lex->xid= xid;
+  thd->lex->xa_opt= XA_NONE;
+  thd->lex->sql_command= cmd;
+  thd->variables.option_bits&= ~OPTION_BEGIN;
+  thd->variables.option_bits&= ~OPTION_NOT_AUTOCOMMIT;
+  thd->server_status&= ~SERVER_STATUS_IN_TRANS;
+}
+
+static int wsrep_trans_xa_end_and_prepare(THD* thd, XID* xid)
+{
+  int ret= 0;
+  prepare_for_xa_command(thd, xid, SQLCOM_XA_END);
+  ret= trans_xa_end(thd);
+  prepare_for_xa_command(thd, xid, SQLCOM_XA_PREPARE);
+  ret= ret || trans_xa_prepare(thd);
   return ret;
 }
 
@@ -212,8 +193,22 @@ int Wsrep_high_priority_service::start_transaction(
   const wsrep::ws_handle& ws_handle, const wsrep::ws_meta& ws_meta)
 {
   DBUG_ENTER(" Wsrep_high_priority_service::start_transaction");
-  DBUG_RETURN(m_thd->wsrep_cs().start_transaction(ws_handle, ws_meta) ||
-              trans_begin(m_thd));
+  int error= m_thd->wsrep_cs().start_transaction(ws_handle, ws_meta);
+  if (error)
+  {
+    DBUG_RETURN(error);
+  }
+  if (m_thd->wsrep_trx().is_xa() ||
+      wsrep::prepares_transaction(ws_meta.flags()))
+  {
+    m_thd->variables.option_bits&= ~OPTION_BEGIN;
+    m_thd->server_status&= ~SERVER_STATUS_IN_TRANS;
+  }
+  else
+  {
+    error= trans_begin(m_thd);
+  }
+  DBUG_RETURN(error);
 }
 
 const wsrep::transaction& Wsrep_high_priority_service::transaction() const
@@ -249,7 +244,7 @@ int Wsrep_high_priority_service::append_fragment_and_commit(
   const wsrep::ws_handle& ws_handle,
   const wsrep::ws_meta& ws_meta,
   const wsrep::const_buffer& data,
-  const wsrep::xid& xid WSREP_UNUSED)
+  const wsrep::xid& xid)
 {
   DBUG_ENTER("Wsrep_high_priority_service::append_fragment_and_commit");
   int ret= start_transaction(ws_handle, ws_meta);
@@ -263,7 +258,8 @@ int Wsrep_high_priority_service::append_fragment_and_commit(
                                             ws_meta.transaction_id(),
                                             ws_meta.seqno(),
                                             ws_meta.flags(),
-                                            data);
+                                            data,
+                                            xid);
 
   /*
     Note: The commit code below seems to be identical to
@@ -313,28 +309,36 @@ int Wsrep_high_priority_service::commit(const wsrep::ws_handle& ws_handle,
                                         const wsrep::ws_meta& ws_meta)
 {
   DBUG_ENTER("Wsrep_high_priority_service::commit");
-  THD* thd= m_thd;
-  DBUG_ASSERT(thd->wsrep_trx().active());
-  thd->wsrep_cs().prepare_for_ordering(ws_handle, ws_meta, true);
-  thd_proc_info(thd, "committing");
-  int ret=0;
-
+  DBUG_ASSERT(m_thd->wsrep_trx().active());
+  m_thd->wsrep_cs().prepare_for_ordering(ws_handle, ws_meta, true);
+  thd_proc_info(m_thd, "committing");
+  int ret= 0;
+  
   const bool is_ordered= !ws_meta.seqno().is_undefined();
 
-  if (!thd->transaction->stmt.is_empty())
-    ret= trans_commit_stmt(thd);
+  if (m_thd->wsrep_trx().is_xa())
+  {
+    XID xid= static_cast<const Wsrep_xid&>(m_thd->wsrep_trx().xid());
+    prepare_for_xa_command(m_thd, &xid, SQLCOM_XA_COMMIT);
+    ret= trans_xa_commit(m_thd);
+  }
+  else
+  {
+    if (!m_thd->transaction->stmt.is_empty())
+      ret= trans_commit_stmt(m_thd);
 
-  if (ret == 0)
-    ret= trans_commit(thd);
+    if (ret == 0)
+      ret= trans_commit(m_thd);
+  }
 
   if (ret == 0)
   {
-    m_rgi->cleanup_context(thd, 0);
+    m_rgi->cleanup_context(m_thd, 0);
   }
 
   m_thd->mdl_context.release_transactional_locks();
 
-  thd_proc_info(thd, "wsrep applier committed");
+  thd_proc_info(m_thd, "wsrep applier committed");
 
   if (!is_ordered)
   {
@@ -350,15 +354,15 @@ int Wsrep_high_priority_service::commit(const wsrep::ws_handle& ws_handle,
 
       This is a workaround for CTAS with empty result set.
     */
-    WSREP_DEBUG("Commit not finished for applier %llu", thd->thread_id);
+    WSREP_DEBUG("Commit not finished for applier %llu", m_thd->thread_id);
     ret= ret || m_thd->wsrep_cs().before_commit() ||
       m_thd->wsrep_cs().ordered_commit() ||
       m_thd->wsrep_cs().after_commit();
   }
 
-  thd->lex->sql_command= SQLCOM_END;
+  m_thd->lex->sql_command= SQLCOM_END;
 
-  free_root(thd->mem_root, MYF(MY_KEEP_PREALLOC));
+  free_root(m_thd->mem_root, MYF(MY_KEEP_PREALLOC));
 
   must_exit_= check_exit_status();
   DBUG_RETURN(ret);
@@ -377,7 +381,17 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
      assert(ws_meta == wsrep::ws_meta());
      assert(ws_handle == wsrep::ws_handle());
   }
-  int ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
+  int ret;
+  if (m_thd->wsrep_trx().is_xa())
+  {
+    XID xid= static_cast<const Wsrep_xid&>(m_thd->wsrep_trx().xid());
+    prepare_for_xa_command(m_thd, &xid, SQLCOM_XA_ROLLBACK);
+    ret= trans_xa_rollback(m_thd);
+  }
+  else
+  {
+    ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
+  }
   m_thd->mdl_context.release_transactional_locks();
   m_thd->mdl_context.release_explicit_locks();
 
@@ -393,6 +407,7 @@ int Wsrep_high_priority_service::apply_toi(const wsrep::ws_meta& ws_meta,
   DBUG_ENTER("Wsrep_high_priority_service::apply_toi");
   THD* thd= m_thd;
   Wsrep_non_trans_mode non_trans_mode(thd, ws_meta);
+  DBUG_ASSERT(thd->m_transaction_psi == NULL);
 
   wsrep::client_state& client_state(thd->wsrep_cs());
   DBUG_ASSERT(client_state.in_toi());
@@ -466,6 +481,10 @@ int Wsrep_high_priority_service::log_dummy_write_set(const wsrep::ws_handle& ws_
     ret= ret || cs.provider().commit_order_leave(ws_handle, ws_meta, err);
     cs.after_applying();
   }
+
+  MYSQL_ROLLBACK_TRANSACTION(m_thd->m_transaction_psi);
+  m_thd->m_transaction_psi= NULL;
+
   DBUG_RETURN(ret);
 }
 
@@ -517,7 +536,9 @@ int Wsrep_applier_service::apply_write_set(const wsrep::ws_meta& ws_meta,
   thd->variables.option_bits |= OPTION_BEGIN;
   thd->variables.option_bits |= OPTION_NOT_AUTOCOMMIT;
   DBUG_ASSERT(thd->wsrep_trx().active());
-  DBUG_ASSERT(thd->wsrep_trx().state() == wsrep::transaction::s_executing);
+  DBUG_ASSERT(thd->wsrep_trx().state() == wsrep::transaction::s_executing ||
+              (thd->wsrep_trx().state() == wsrep::transaction::s_prepared &&
+               thd->wsrep_trx().is_xa()));
 
   thd_proc_info(thd, "applying write set");
 
@@ -540,11 +561,24 @@ int Wsrep_applier_service::apply_write_set(const wsrep::ws_meta& ws_meta,
   wsrep_setup_uk_and_fk_checks(thd);
   int ret= apply_events(thd, m_rli, data, err);
 
-  thd->close_temporary_tables();
-  if (!ret && !(ws_meta.flags() & wsrep::provider::flag::commit))
+  if (!ret)
   {
-    thd->wsrep_cs().fragment_applied(ws_meta.seqno());
+    if (wsrep::prepares_transaction(ws_meta.flags()))
+    {
+      DBUG_ASSERT(thd->wsrep_trx().is_xa());
+      XID xid= static_cast<const Wsrep_xid&>(thd->wsrep_trx().xid());
+      ret= wsrep_trans_xa_end_and_prepare(thd, &xid);
+      thd->mdl_context.release_statement_locks();
+    }
+
+    if (!wsrep::commits_transaction(ws_meta.flags()))
+    {
+      thd->wsrep_cs().fragment_applied(ws_meta.seqno());
+    }
   }
+
+  thd->close_temporary_tables();
+
   thd_proc_info(thd, "wsrep applied write set");
   DBUG_RETURN(ret);
 }
@@ -574,6 +608,55 @@ bool Wsrep_applier_service::check_exit_status() const
     ret= true;
   }
   mysql_mutex_unlock(&LOCK_wsrep_slave_threads);
+  return ret;
+}
+
+/****************************************************************************
+                            Prepared replayer service
+*****************************************************************************/
+
+int Wsrep_prepared_replayer_service::replay()
+{
+  if (m_thd->wsrep_trx().is_streaming())
+  {
+    return replay_from_storage();
+  }
+  else
+  {
+    return replay_empty();
+  }
+}
+
+int Wsrep_prepared_replayer_service::replay_from_storage()
+{
+  DBUG_ASSERT(m_thd->wsrep_trx().is_streaming());
+  const wsrep::stid stid(m_thd->wsrep_trx().server_id(),
+                         m_thd->wsrep_trx().id(),
+                         m_thd->wsrep_cs().id());
+  const wsrep::ws_meta meta(stid);
+
+  m_thd->variables.option_bits&= ~OPTION_BEGIN;
+  m_thd->server_status&= ~SERVER_STATUS_IN_TRANS;
+  int ret= wsrep_schema->replay_transaction(m_thd,
+                                            m_rli,
+                                            meta,
+                                            m_thd->wsrep_sr().fragments(),
+                                            false);
+  if (!ret)
+  {
+    DBUG_ASSERT(m_thd->transaction->xid_state.is_explicit_XA());
+    ret= wsrep_trans_xa_end_and_prepare(m_thd, &m_xid);
+    ret= ret || wsrep_restore_prepared_transaction(m_thd, &m_xid);
+  }
+  return ret;
+}
+
+int Wsrep_prepared_replayer_service::replay_empty()
+{
+  prepare_for_xa_command(m_thd, &m_xid, SQLCOM_XA_START);
+  int ret= trans_xa_start(m_thd);
+  ret= ret || wsrep_trans_xa_end_and_prepare(m_thd, &m_xid);
+  ret= ret || wsrep_restore_prepared_transaction(m_thd, &m_xid);
   return ret;
 }
 
@@ -673,29 +756,41 @@ int Wsrep_replayer_service::apply_write_set(const wsrep::ws_meta& ws_meta,
                                             wsrep::mutable_buffer& err)
 {
   DBUG_ENTER("Wsrep_replayer_service::apply_write_set");
-  THD* thd= m_thd;
+  DBUG_ASSERT(m_thd->wsrep_trx().active());
+  DBUG_ASSERT(m_thd->wsrep_trx().state() == wsrep::transaction::s_replaying);
 
-  DBUG_ASSERT(thd->wsrep_trx().active());
-  DBUG_ASSERT(thd->wsrep_trx().state() == wsrep::transaction::s_replaying);
-
-  wsrep_setup_uk_and_fk_checks(thd);
+  wsrep_setup_uk_and_fk_checks(m_thd);
 
   int ret= 0;
   if (!wsrep::starts_transaction(ws_meta.flags()))
   {
-    DBUG_ASSERT(thd->wsrep_trx().is_streaming());
-    ret= wsrep_schema->replay_transaction(thd,
+    if (m_thd->wsrep_trx().is_xa())
+    {
+      m_thd->variables.option_bits&= ~OPTION_BEGIN;
+      m_thd->server_status&= ~SERVER_STATUS_IN_TRANS;
+      m_thd->close_temporary_tables();
+    }
+
+    DBUG_ASSERT(m_thd->wsrep_trx().is_streaming());
+    ret= wsrep_schema->replay_transaction(m_thd,
                                           m_rli,
                                           ws_meta,
-                                          thd->wsrep_sr().fragments());
+                                          m_thd->wsrep_sr().fragments(),
+                                          true);
+    if (!ret && m_thd->wsrep_trx().is_xa())
+    {
+      m_thd->wsrep_cs().fragment_applied(ws_meta.seqno());
+      XID xid= static_cast<const Wsrep_xid&>(m_thd->wsrep_trx().xid());
+      ret= wsrep_trans_xa_end_and_prepare(m_thd, &xid);
+    }
   }
-  ret= ret || apply_events(thd, m_rli, data, err);
-  thd->close_temporary_tables();
+  ret= ret || apply_events(m_thd, m_rli, data, err);
+  m_thd->close_temporary_tables();
   if (!ret && !(ws_meta.flags() & wsrep::provider::flag::commit))
   {
-    thd->wsrep_cs().fragment_applied(ws_meta.seqno());
+    m_thd->wsrep_cs().fragment_applied(ws_meta.seqno());
   }
 
-  thd_proc_info(thd, "wsrep replayed write set");
+  thd_proc_info(m_thd, "wsrep replayed write set");
   DBUG_RETURN(ret);
 }

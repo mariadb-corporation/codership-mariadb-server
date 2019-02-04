@@ -22,6 +22,7 @@
 #include "wsrep_xid.h"
 #include "wsrep_thd.h"
 #include "wsrep_binlog.h" /* register/deregister group commit */
+#include "wsrep_high_priority_service.h"
 #include "my_dbug.h"
 
 class THD;
@@ -122,7 +123,10 @@ static inline int wsrep_check_pk(THD* thd)
 
 static inline bool wsrep_streaming_enabled(THD* thd)
 {
-  return (thd->wsrep_sr().fragment_size() > 0);
+  // XA ignores streaming settings, as wsrep patch
+  // does not support streaming within XA.
+  return (!thd->wsrep_trx().is_xa() &&
+          thd->wsrep_sr().fragment_size() > 0);
 }
 
 /*
@@ -154,6 +158,70 @@ static inline int wsrep_start_trx_if_not_started(THD* thd)
     ret= wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
   }
   return ret;
+}
+
+static inline void wsrep_assign_xid(THD* thd)
+{
+  if (thd->wsrep_trx().state() != wsrep::transaction::s_replaying)
+  {
+    Wsrep_xid xid(thd->lex->xid);
+    thd->wsrep_cs().assign_xid(xid);
+  }
+}
+
+static inline bool wsrep_restore_prepared_transaction(THD* thd, XID* xid)
+{
+  Wsrep_xid wsrep_xid(xid);
+  return thd->wsrep_cs().restore_xid(wsrep_xid);
+}
+
+/*
+  Helper method to determine if a transaction must terminate
+  a prepared XA by XID (possibly on behalf of another node).
+
+  Return true if the caller must call wsrep_commit_or_rollback_by_xid,
+  false otherwise.
+ */
+static inline bool wsrep_must_commit_or_rollback_by_xid(THD* thd)
+{
+  bool ret= false;
+  if (!thd->wsrep_applier)
+  {
+    Wsrep_xid xid(thd->lex->xid);
+    Wsrep_server_state& server_state(Wsrep_server_state::instance());
+    wsrep::high_priority_service* sa(server_state.find_streaming_applier(xid));
+    if (sa)
+    {
+      ret= (sa->transaction().state() == wsrep::transaction::s_prepared);
+    }
+  }
+  return ret;
+}
+
+/*
+  Commits or rolls back transaction with the given xid.
+  This is used in the case where prepared XA transaction
+  is terminated on behalf of another node which failed or
+  went non-Primary.
+
+  Return zero on success, non-zero on failures.
+ */
+static inline int wsrep_commit_or_rollback_by_xid(THD* thd,
+                                                  bool commit)
+{
+  DBUG_ASSERT(!thd->wsrep_applier);
+  Wsrep_xid xid(thd->lex->xid);
+  return commit ? thd->wsrep_cs().commit_by_xid(xid) :
+    thd->wsrep_cs().rollback_by_xid(xid);
+}
+
+static inline void wsrep_xa_detach(THD* thd)
+{
+  DBUG_ASSERT(thd->wsrep_trx().state() == wsrep::transaction::s_prepared);
+  if (thd->wsrep_trx().state() == wsrep::transaction::s_prepared)
+  {
+    thd->wsrep_cs().xa_detach();
+  }
 }
 
 /*
@@ -211,7 +279,8 @@ static inline bool wsrep_run_commit_hook(THD* thd, bool all)
     /* Transaction is local but has no changes, the commit hooks will
        be skipped and the wsrep transaction is terminated in
        wsrep_commit_empty() */
-    if (thd->wsrep_trx().state() == wsrep::transaction::s_executing)
+    if (thd->wsrep_trx().state() == wsrep::transaction::s_executing &&
+        !(thd->lex->sql_command == SQLCOM_XA_PREPARE))
     {
       ret= false;
     }
@@ -234,10 +303,13 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   if ((ret= thd->wsrep_cs().before_prepare()) == 0)
   {
-    DBUG_ASSERT(!thd->wsrep_trx().ws_meta().gtid().is_undefined());
-    wsrep_xid_init(&thd->wsrep_xid,
-                   thd->wsrep_trx().ws_meta().gtid(),
-                   wsrep_gtid_server.gtid());
+    if (!thd->wsrep_trx().is_xa())
+    {
+      DBUG_ASSERT(!thd->wsrep_trx().ws_meta().gtid().is_undefined());
+      wsrep_xid_init(&thd->wsrep_xid,
+                     thd->wsrep_trx().ws_meta().gtid(),
+                     wsrep_gtid_server.gtid());
+    }
   }
   DBUG_RETURN(ret);
 }
@@ -300,10 +372,12 @@ static inline int wsrep_before_commit(THD* thd, bool all)
           thd->variables.server_id= wsrep_gtid_server.server_id;
         }
     }
-
-    wsrep_xid_init(&thd->wsrep_xid,
-                   thd->wsrep_trx().ws_meta().gtid(),
-                   wsrep_gtid_server.gtid());
+    if (!thd->wsrep_trx().is_xa())
+    {
+      wsrep_xid_init(&thd->wsrep_xid,
+                     thd->wsrep_trx().ws_meta().gtid(),
+                     wsrep_gtid_server.gtid());
+    }
     wsrep_register_for_group_commit(thd);
   }
   DBUG_RETURN(ret);
@@ -510,17 +584,6 @@ static inline void wsrep_after_command_ignore_result(THD* thd)
   wsrep_after_command_before_result(thd);
   DBUG_ASSERT(!thd->wsrep_cs().current_error());
   wsrep_after_command_after_result(thd);
-}
-
-static inline enum wsrep::client_error wsrep_current_error(THD* thd)
-{
-  return thd->wsrep_cs().current_error();
-}
-
-static inline enum wsrep::provider::status
-wsrep_current_error_status(THD* thd)
-{
-  return thd->wsrep_cs().current_error_status();
 }
 
 #endif /* WSREP_TRANS_OBSERVER */

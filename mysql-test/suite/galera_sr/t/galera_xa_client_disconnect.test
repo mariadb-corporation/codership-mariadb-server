@@ -1,0 +1,230 @@
+--source include/galera_cluster.inc
+
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+
+#
+# Test A: Client disconnect before XA PREPARE
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+
+XA START 'test';
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+
+--disconnect node_1
+
+--connection node_1a
+SELECT COUNT(*) AS expect_0 FROM t1;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT COUNT(*) AS expect_0 FROM t1;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1a
+DROP TABLE t1;
+
+--connect node_1, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+
+#
+# Test B: Client disconnect after XA PREPARE
+#
+
+--connect trx1, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection trx1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+
+XA START 'trx1';
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+XA END 'trx1';
+XA PREPARE 'trx1';
+
+--disconnect trx1
+
+--connect trx2, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection trx2
+XA START 'trx2';
+INSERT INTO t1 VALUES (5);
+INSERT INTO t1 VALUES (6);
+INSERT INTO t1 VALUES (7);
+INSERT INTO t1 VALUES (8);
+XA END 'trx2';
+XA PREPARE 'trx2';
+
+--disconnect trx2
+
+--connection node_1
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1a
+XA COMMIT 'trx1';
+XA ROLLBACK 'trx2';
+
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1a
+DROP TABLE t1;
+
+
+#
+# Test C: Client disconnect read-only after XA PREPARE
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+INSERT INTO t1 VALUES (1);
+
+XA START 'test';
+SELECT * FROM t1;
+XA END 'test';
+XA PREPARE 'test';
+
+--disconnect node_1
+
+--connection node_1a
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1a
+XA COMMIT 'test';
+
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1a
+DROP TABLE t1;
+
+--connect node_1, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+
+#
+# Test D: KILL connection before XA PREPARE
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+
+--let connection_id = `SELECT CONNECTION_ID()`
+XA START 'test';
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+
+--connection node_1a
+--disable_query_log
+--eval KILL CONNECTION $connection_id
+--enable_query_log
+
+--connection node_1a
+SELECT COUNT(*) AS expect_0 FROM t1;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT COUNT(*) AS expect_0 FROM t1;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1
+--enable_reconnect
+--source include/wait_until_connected_again.inc
+--disable_reconnect
+DROP TABLE t1;
+
+
+#
+# Test E: Kill connection after XA PREPARE
+#
+
+--connect trx1, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection trx1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+
+--let trx1_connection_id = `SELECT CONNECTION_ID()`
+XA START 'trx1';
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+XA END 'trx1';
+XA PREPARE 'trx1';
+
+--connect trx2, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection trx2
+--let trx2_connection_id = `SELECT CONNECTION_ID()`
+XA START 'trx2';
+INSERT INTO t1 VALUES (5);
+INSERT INTO t1 VALUES (6);
+INSERT INTO t1 VALUES (7);
+INSERT INTO t1 VALUES (8);
+XA END 'trx2';
+XA PREPARE 'trx2';
+
+--connection node_1
+--disable_query_log
+--eval KILL CONNECTION $trx1_connection_id
+--eval KILL CONNECTION $trx2_connection_id
+--enable_query_log
+
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1a
+XA COMMIT 'trx1';
+XA ROLLBACK 'trx2';
+
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT xid FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1a
+DROP TABLE t1;

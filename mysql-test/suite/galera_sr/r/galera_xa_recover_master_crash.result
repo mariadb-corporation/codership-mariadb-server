@@ -1,0 +1,122 @@
+connection node_2;
+connection node_1;
+connection node_1;
+connection node_2;
+connection node_1;
+SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
+connection node_2;
+SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+INSERT INTO t1 VALUES (1);
+connect t1, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connection t1;
+XA START 't1';
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+XA END 't1';
+XA PREPARE 't1';
+connect t2, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connection t2;
+XA START 't2';
+INSERT INTO t1 VALUES (4);
+INSERT INTO t1 VALUES (5);
+XA END 't2';
+XA PREPARE 't2';
+connect conn_control, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connect conn_restart, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connection conn_restart;
+SET GLOBAL debug_dbug="d,crash_replicate_fragment_after_certify";
+XA START 'crash';
+INSERT INTO t1 VALUES(999);
+XA END 'crash';
+XA PREPARE 'crash';
+ERROR HY000: Lost connection to MySQL server during query
+connection conn_control;
+SET SESSION wsrep_sync_wait = 0;
+connection conn_restart;
+Performing --wsrep-recover ...
+# restart
+connection conn_control;
+Expect transactions 't1', 't2', and 'crash'
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	2	0	t1
+1	2	0	t2
+1	5	0	crash
+SELECT xid FROM mysql.wsrep_streaming_log;
+xid
+X'7431',X'',1
+X'7432',X'',1
+X'6372617368',X'',1
+connection conn_restart;
+Expect transactions 't1', 't2', and 'crash'
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	2	0	t1
+1	2	0	t2
+1	5	0	crash
+SELECT xid FROM mysql.wsrep_streaming_log;
+xid
+X'7431',X'',1
+X'7432',X'',1
+X'6372617368',X'',1
+XA ROLLBACK 'crash';
+SELECT * FROM t1;
+f1
+1
+connection conn_control;
+SELECT * FROM t1;
+f1
+1
+disconnect conn_control;
+disconnect conn_restart;
+connection node_1;
+Expect transactions 't1' and 't2'
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	2	0	t1
+1	2	0	t2
+connection node_2;
+Expect transactions 't1' and 't2'
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	2	0	t1
+1	2	0	t2
+connection t1;
+XA COMMIT 't1';
+connection t2;
+XA ROLLBACK 't2';
+connection node_1;
+Expect rows 1,2,3
+SELECT * FROM t1;
+f1
+1
+2
+3
+Expect empty set
+SELECT flags, xid FROM mysql.wsrep_streaming_log;
+flags	xid
+Expect empty set
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+connection node_2;
+Expect rows 1,2,3
+SELECT * FROM t1;
+f1
+1
+2
+3
+Expect empty set
+SELECT flags, xid FROM mysql.wsrep_streaming_log;
+flags	xid
+Expect empty set
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+connection node_1;
+SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=false';
+connection node_2;
+DROP TABLE t1;
+SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=false';
+call mtr.add_suppression('Found 2 prepared XA transactions');
+call mtr.add_suppression('Discovered discontinuity in recovered wsrep transaction XIDs.');
+call mtr.add_suppression('Found 3 prepared XA transactions');

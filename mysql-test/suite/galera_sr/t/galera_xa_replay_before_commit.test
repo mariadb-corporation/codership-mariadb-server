@@ -1,0 +1,110 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+--source include/have_debug_sync.inc
+--source include/galera_have_debug_sync.inc
+
+# Control connection for manipulating galera sync points
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+SET SESSION wsrep_sync_wait = 0;
+
+--connection node_1
+--let $wsrep_local_bf_aborts_old = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'`
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY, f2 CHAR(1));
+
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'a');
+
+--connection node_1
+SET DEBUG_SYNC='trans_xa_commit_after_acquire_commit_lock SIGNAL before_commit WAIT_FOR continue';
+
+XA START 't';
+UPDATE t1 SET f2 = 'b' WHERE f1 = 1;
+SELECT * FROM t1 WHERE f1 = 2 FOR UPDATE;
+XA END 't';
+XA PREPARE 't';
+--send XA COMMIT 't';
+
+--connection node_1a
+SET DEBUG_SYNC='now WAIT_FOR before_commit';
+
+#
+# Block the commit from node_2
+#
+--connection node_1a
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_set_sync_point.inc
+
+#
+# Issue conflicting UPDATE from node_2 and wait until it hits the
+# apply monitor (but does not apply yet)
+#
+--connection node_2
+UPDATE t1 SET f2 = 'c' WHERE f1 = 2;
+
+--connection node_1a
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_wait_sync_point.inc
+
+#
+# Release conflicting slave transaction and wait until it has BF
+# aborted pending XA COMMIT
+#
+--connection node_1a
+--source include/galera_clear_sync_point.inc
+--let $galera_sync_point = abort_trx_end
+--source include/galera_set_sync_point.inc
+
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_signal_sync_point.inc
+
+--let $galera_sync_point = abort_trx_end
+--source include/galera_wait_sync_point.inc
+
+#
+# Release both threads, local thread will now replay
+#
+--source include/galera_clear_sync_point.inc
+--let $galera_sync_point = abort_trx_end
+--source include/galera_signal_sync_point.inc
+
+SET DEBUG_SYNC = 'now SIGNAL continue';
+SET DEBUG_SYNC = 'RESET';
+
+#
+# XA COMMIT must succeed
+#
+--connection node_1
+--reap
+
+#
+# Check the outcome and that wsrep schema SR table is empty
+#
+SELECT * FROM t1;
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+#
+# wsrep_local_replays has increased by 1
+#
+--let $wsrep_local_bf_aborts_new = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'`
+--disable_query_log
+--eval SELECT $wsrep_local_bf_aborts_new - $wsrep_local_bf_aborts_old = 1 AS wsrep_local_bf_aborts;
+--enable_query_log
+
+--connection node_2
+SELECT * FROM t1;
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+#
+# Check that the transaction has been cleaned up properly
+#
+--connection node_1
+XA START 't';
+INSERT INTO t1 VALUES (100, 't');
+XA END 't';
+XA PREPARE 't';
+XA COMMIT 't';
+
+DROP TABLE t1;

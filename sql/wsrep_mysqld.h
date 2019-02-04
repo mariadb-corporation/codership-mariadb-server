@@ -527,7 +527,7 @@ bool wsrep_prepare_keys_for_isolation(THD*              thd,
                                       wsrep_key_arr_t*  ka);
 void wsrep_keys_free(wsrep_key_arr_t* key_arr);
 
-extern void
+extern bool
 wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                           const MDL_ticket *ticket,
                           const MDL_key *key);
@@ -547,12 +547,25 @@ class Wsrep_thd_args
    :
   fun_ (fun),
   thread_type_ (thread_type),
-  thread_id_ (thread_id)
+  thread_id_ (thread_id),
+  arg_ (NULL)
+  { }
+
+  Wsrep_thd_args(wsrep_thd_processor_fun fun,
+                 wsrep_thread_type thread_type,
+                 pthread_t thread_id,
+                 void* arg)
+   :
+  fun_(fun),
+  thread_type_ (thread_type),
+  thread_id_ (thread_id),
+  arg_ (arg)
   { }
 
   wsrep_thd_processor_fun fun() { return fun_; }
   pthread_t* thread_id() {return &thread_id_; }
   enum wsrep_thread_type thread_type() {return thread_type_;}
+  void* arg() { return arg_; }
 
  private:
 
@@ -562,6 +575,7 @@ class Wsrep_thd_args
   wsrep_thd_processor_fun fun_;
   enum wsrep_thread_type  thread_type_;
   pthread_t thread_id_;
+  void* arg_;
 };
 
 void* start_wsrep_THD(void*);

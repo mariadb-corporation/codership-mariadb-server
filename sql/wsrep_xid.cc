@@ -24,6 +24,8 @@
 #include <mysql/service_wsrep.h>
 
 #include <algorithm> /* std::sort() */
+#include "log_event.h" /* serialize_xid */
+
 /*
  * WSREPXid
  */
@@ -251,4 +253,21 @@ struct Wsrep_xid_cmp
 void wsrep_sort_xid_array(XID *array, int len)
 {
   std::sort(array, array + len, Wsrep_xid_cmp());
+}
+
+char* Wsrep_xid::serialize()
+{
+  if (data_.size() <= 0 || is_null())
+  {
+    m_serialized[0]= '\0';
+  }
+  else
+  {
+    serialize_xid(m_serialized,
+                  format_id_,
+                  gtrid_len_,
+                  bqual_len_,
+                  data_.data());
+  }
+  return m_serialized;
 }

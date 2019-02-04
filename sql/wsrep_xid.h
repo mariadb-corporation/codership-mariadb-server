@@ -35,5 +35,33 @@ bool wsrep_set_SE_checkpoint(const wsrep::gtid& gtid, const wsrep_server_gtid_t&
 
 void wsrep_sort_xid_array(XID *array, int len);
 
+
+// maximum size of xid string representation returned by
+// Wsrep_xid::serialize(). See serialize_xid and ser_buf_size
+// in log_event.h.
+static const uint WSREP_XID_SERIALIZED_SIZE=
+  8 + 2 * MYSQL_XIDDATASIZE + 4 * sizeof(long) + 1;
+
+class Wsrep_xid : public wsrep::xid
+{
+public:
+  Wsrep_xid(const XID* xid) :
+    wsrep::xid(xid->formatID,
+               xid->gtrid_length,
+               xid->bqual_length,
+               xid->data)
+  { }
+  operator XID() const
+  {
+    XID xid;
+    xid.set(gtrid_len_, bqual_len_, data_.data());
+    xid.formatID= format_id_;
+    return xid;
+  }
+  char* serialize();
+private:
+  char m_serialized[WSREP_XID_SERIALIZED_SIZE];
+};
+
 #endif /* WITH_WSREP */
 #endif /* WSREP_UTILS_H */

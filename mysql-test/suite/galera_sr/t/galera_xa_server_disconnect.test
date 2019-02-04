@@ -1,0 +1,131 @@
+#
+# The test uses gmcast.isolate to temporarily drop the node out
+# of the cluster, while there are XA transactions in prepared state.
+# The test creates three transactions up to the prepared state,
+# and tests the following scenarios:
+#
+# t1 - The transaction attempts XA COMMIT while the node is
+#      disconnected. We expect that the XA COMMIT initially
+#      fails with an error. When the cluster forms a primary
+#      component, client can XA COMMIT successfully.
+# t2 - XA COMMIT after the node is connected again. We expect
+#      the XA COMMIT to complete successfully
+# t3 - Same as t2, with XA ROLLBACK
+#
+
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+# Save original auto_increment_offset values.
+--let $node_1=node_1
+--let $node_2=node_2
+--source ../galera/include/auto_increment_offset_save.inc
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
+
+--connect t1, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection t1
+XA START 't1';
+INSERT INTO t1 VALUES (1);
+XA END 't1';
+XA PREPARE 't1';
+
+--connect t2, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection t2
+XA START 't2';
+INSERT INTO t1 VALUES (2);
+XA END 't2';
+XA PREPARE 't2';
+
+--connect t3, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection t3
+XA START 't3';
+INSERT INTO t1 VALUES (3);
+XA END 't3';
+XA PREPARE 't3';
+
+
+--connection node_1
+SELECT COUNT(*) AS expect_3 FROM mysql.wsrep_streaming_log;
+
+
+#
+# Disconnect node_2 from the group
+#
+--connection node_2
+SET SESSION wsrep_sync_wait = 0;
+SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+
+--let $wait_condition = SELECT VARIABLE_VALUE = 'non-Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
+--source include/wait_condition.inc
+
+#
+# Client fails to XA COMMIT the transaction while 'non-Primary'
+#
+--connection t1
+--error ER_ERROR_DURING_COMMIT
+XA COMMIT 't1';
+
+#
+# Reconnect node_2 to the group
+#
+--connection node_2
+SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--let $wait_condition = SELECT VARIABLE_VALUE = 'Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
+--source include/wait_condition.inc
+
+--connection node_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--let $wait_condition = SELECT VARIABLE_VALUE = 'Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
+--source include/wait_condition.inc
+
+--echo Expect transactions 't1', 't2' and 't3' to be in prepared state
+XA RECOVER;
+SELECT COUNT(*) AS expect_3 FROM mysql.wsrep_streaming_log;
+
+--connection node_2
+--echo Expect transactions 't1', 't2' and 't3' to be in prepared state
+XA RECOVER;
+SELECT COUNT(*) AS expect_3 FROM mysql.wsrep_streaming_log;
+
+#
+# XA COMMIT / ROLLBACK should now complete
+#
+--connection t1
+XA COMMIT 't1';
+
+--connection t2
+XA COMMIT 't2';
+
+--connection t3
+XA ROLLBACK 't3';
+
+#
+# Check that the transaction is committed and cleanup
+#
+--connection node_1
+SELECT * FROM t1;
+XA RECOVER;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+
+call mtr.add_suppression('Quorum: No node with complete state');
+
+
+--connection node_2
+SET SESSION wsrep_sync_wait = DEFAULT;
+SELECT * FROM t1;
+XA RECOVER;
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+
+DROP TABLE t1;
+
+call mtr.add_suppression('Quorum: No node with complete state');
+
+# Restore original auto_increment_offset values.
+--source ../galera/include/auto_increment_offset_restore.inc

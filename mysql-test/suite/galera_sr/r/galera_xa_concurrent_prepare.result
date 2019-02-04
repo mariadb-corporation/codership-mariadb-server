@@ -1,0 +1,28 @@
+connection node_2;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY AUTO_INCREMENT, f2 CHAR(255)) ENGINE=InnoDB;
+connect trx1, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connection trx1;
+SET SESSION wsrep_sync_wait = 0;
+connect trx2, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connection trx2;
+SET SESSION wsrep_sync_wait = 0;
+connection node_1;
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+500
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+expect_0
+0
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+connection node_2;
+SELECT COUNT(*) FROM t1;
+COUNT(*)
+500
+SELECT COUNT(*) AS expect_0 FROM mysql.wsrep_streaming_log;
+expect_0
+0
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+DROP TABLE t1;

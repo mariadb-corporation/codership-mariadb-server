@@ -1,0 +1,81 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+--source include/have_debug_sync.inc
+--source include/galera_have_debug_sync.inc
+
+# Control connection for manipulating galera sync points
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+SET SESSION wsrep_sync_wait = 0;
+
+--connection node_1
+--let $wsrep_local_bf_aborts_old = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'`
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY, f2 CHAR(1));
+
+INSERT INTO t1 VALUES (1, 'a');
+INSERT INTO t1 VALUES (2, 'a');
+
+--connection node_1
+SET DEBUG_SYNC='at_unlog_xa_prepare SIGNAL after_prepare WAIT_FOR continue';
+XA START 't';
+UPDATE t1 SET f2 = 'b' WHERE f1 = 1;
+SELECT * FROM t1 WHERE f1 = 2 FOR UPDATE;
+XA END 't';
+--send XA PREPARE 't';
+
+
+--connection node_1a
+SET DEBUG_SYNC='now WAIT_FOR after_prepare';
+
+#
+# Issue conflicting UPDATE from node_2
+#
+--connection node_2
+SELECT xid FROM mysql.wsrep_streaming_log;
+UPDATE t1 SET f2 = 'c' WHERE f1 = 2;
+
+--let $wait_condition = `SELECT VARIABLE_VALUE = $wsrep_local_bf_abort_old + 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'`
+
+#
+# XA PREPARE must rollback
+#
+--connection node_1
+--error ER_XA_RBDEADLOCK
+--reap
+
+--error ER_XA_RBDEADLOCK
+XA COMMIT 't';
+
+SET DEBUG_SYNC = 'RESET';
+
+#
+# Check the outcome and that wsrep schema SR table is empty
+#
+SELECT * FROM t1;
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+#
+# wsrep_local_bf_aborts has increased by 1
+#
+--let $wsrep_local_bf_aborts_new = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'`
+--disable_query_log
+--eval SELECT $wsrep_local_bf_aborts_new - $wsrep_local_bf_aborts_old = 1 AS wsrep_local_bf_aborts;
+--enable_query_log
+
+--connection node_2
+SELECT * FROM t1;
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+#
+# Check that previous transaction was cleaned up properly
+#
+--connection node_1
+XA START 't';
+INSERT INTO t1 VALUES (100, 't');
+XA END 't';
+XA PREPARE 't';
+XA COMMIT 't';
+
+DROP TABLE t1;

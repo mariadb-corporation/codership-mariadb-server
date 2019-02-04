@@ -537,6 +537,9 @@ trx_free_at_shutdown(trx_t *trx)
 	trx->state = TRX_STATE_NOT_STARTED;
 	ut_ad(!UT_LIST_GET_LEN(trx->lock.trx_locks));
 	trx->id = 0;
+#ifdef WITH_WSREP
+	trx->wsrep = false;
+#endif /* WITH_WSREP */
 	trx->free();
 }
 
@@ -1477,7 +1480,10 @@ inline void trx_t::commit_in_memory(const mtr_t *mtr)
   if (wsrep)
   {
     wsrep= false;
-    wsrep_commit_ordered(mysql_thd);
+    if (mysql_thd)
+    {
+      wsrep_commit_ordered(mysql_thd);
+    }
   }
   lock.was_chosen_as_wsrep_victim= false;
 #endif /* WITH_WSREP */

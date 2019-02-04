@@ -1,0 +1,145 @@
+--source include/galera_cluster.inc
+
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+#
+# Test A: XA transaction replicates a fragment on XA PREPARE
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+
+XA START 'test';
+INSERT INTO t1 VALUES (10);
+XA END 'test';
+XA PREPARE 'test';
+
+# Expect one fragment after XA PREPARE
+--connection node_1a
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+--echo expect empty set
+SELECT * FROM t1;
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+--echo expect 10
+SELECT * FROM t1;
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1
+XA COMMIT 'test';
+
+--echo expect 10
+SELECT * FROM t1;
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+--echo expect 10
+SELECT * FROM t1;
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1
+DROP TABLE t1;
+
+
+#
+# Test B: Read-only XA
+#
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+INSERT INTO t1 VALUES (1);
+
+XA START 'test';
+SELECT * FROM t1;
+XA END 'test';
+XA PREPARE 'test';
+
+--connection node_1a
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_2
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+XA RECOVER;
+
+--connection node_1
+XA COMMIT 'test';
+
+DROP TABLE t1;
+
+
+#
+# Test C: Streaming within XA is not supported.
+#         XA transactions ignore wsrep_trx_fragment_size setting.
+#
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+
+SET SESSION wsrep_trx_fragment_size = 1;
+XA START 'test';
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+INSERT INTO t1 VALUES (5);
+
+--connection node_2
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+--connection node_1
+XA END 'test';
+XA PREPARE 'test';
+XA COMMIT 'test';
+
+# Subsequent transaction finds streaming enabled
+START TRANSACTION;
+INSERT INTO t1 VALUES (6);
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+COMMIT;
+SET SESSION wsrep_trx_fragment_size = 0;
+
+DROP TABLE t1;
+
+
+#
+# Test D: XA COMMIT ONE PHASE
+#
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+
+XA START 'test';
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+INSERT INTO t1 VALUES (5);
+XA END 'test';
+XA COMMIT 'test' ONE PHASE;
+
+SELECT * FROM t1;
+
+DROP TABLE t1;
+
+
+#
+# Test E: Empty XA transactions
+#
+
+XA START 'test';
+XA END 'test';
+XA ROLLBACK 'test';
+
+XA START 'test';
+XA END 'test';
+XA PREPARE 'test';
+XA ROLLBACK 'test';
+
+XA START 'test';
+XA END 'test';
+XA PREPARE 'test';
+XA COMMIT 'test';

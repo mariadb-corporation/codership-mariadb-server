@@ -22,6 +22,10 @@
 #include "my_cpu.h"
 #include <pfs_transaction_provider.h>
 #include <mysql/psi/mysql_transaction.h>
+#ifdef WITH_WSREP
+#include "wsrep_trans_observer.h"
+static int wsrep_ha_commit_or_rollback_by_xid(THD *thd, bool commit);
+#endif /* WITH_WSREP */
 
 static bool slave_applier_reset_xa_trans(THD *thd);
 
@@ -455,6 +459,12 @@ bool trans_xa_start(THD *thd)
       trans_rollback(thd);
       DBUG_RETURN(true);
     }
+#ifdef WITH_WSREP
+    if (WSREP(thd))
+    {
+      wsrep_assign_xid(thd);
+    }
+#endif /* WITH_WSREP */
     DBUG_RETURN(FALSE);
   }
 
@@ -536,6 +546,16 @@ bool trans_xa_prepare(THD *thd)
       thd->transaction->all.reset();
       thd->server_status&=
         ~(SERVER_STATUS_IN_TRANS | SERVER_STATUS_IN_TRANS_READONLY);
+#ifdef WITH_WSREP
+      /* Galera may BF abort or fail certification on XA PREPARE */
+      if (wsrep_current_error(thd) == wsrep::e_deadlock_error)
+      {
+        MYSQL_ROLLBACK_TRANSACTION(thd->m_transaction_psi);
+        thd->m_transaction_psi= NULL;
+        wsrep_override_error(thd, ER_XA_RBDEADLOCK);
+        DBUG_RETURN(1);
+      }
+#endif /* WITH_WSREP */
       xid_cache_delete(thd, &thd->transaction->xid_state);
       my_error(ER_XA_RBROLLBACK, MYF(0));
     }
@@ -594,6 +614,13 @@ bool trans_xa_commit(THD *thd)
       my_error(ER_OUT_OF_RESOURCES, MYF(0));
       DBUG_RETURN(TRUE);
     }
+#ifdef WITH_WSREP
+    if (WSREP(thd) && wsrep_must_commit_or_rollback_by_xid(thd))
+    {
+      res= wsrep_commit_or_rollback_by_xid(thd, TRUE);
+      DBUG_RETURN(res);
+    }
+#endif /* WITH_WSREP */
 
     if (auto xs= xid_cache_search(thd, thd->lex->xid))
     {
@@ -632,7 +659,12 @@ bool trans_xa_commit(THD *thd)
       }
 
       xid_state.xid_cache_element= xs;
+#ifdef WITH_WSREP
+      if (wsrep_ha_commit_or_rollback_by_xid(thd, !res))
+        DBUG_RETURN(TRUE);
+#else
       ha_commit_or_rollback_by_xid(thd->lex->xid, !res);
+#endif /* WITH_WSREP */
       xid_state.xid_cache_element= 0;
 
       res= res || thd->is_error();
@@ -652,6 +684,12 @@ bool trans_xa_commit(THD *thd)
            thd->lex->xa_opt == XA_ONE_PHASE)
   {
     int r= ha_commit_trans(thd, TRUE);
+#ifdef WITH_WSREP
+    if (WSREP(thd) && wsrep_current_error(thd) == wsrep::e_deadlock_error)
+    {
+      wsrep_override_error(thd, ER_XA_RBDEADLOCK);
+    } else
+#endif
     if ((res= MY_TEST(r)))
       my_error(r == 1 ? ER_XA_RBROLLBACK : ER_XAER_RMERR, MYF(0));
   }
@@ -688,6 +726,33 @@ bool trans_xa_commit(THD *thd)
     else
     {
       DEBUG_SYNC(thd, "trans_xa_commit_after_acquire_commit_lock");
+#ifdef WITH_WSREP
+      const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, 1);
+      if (run_wsrep_hooks)
+      {
+        res= wsrep_before_commit(thd, TRUE);
+        if (res)
+        {
+          if (thd->wsrep_trx().state() == wsrep::transaction::s_prepared)
+          {
+            trans_xa_detach(thd);
+            ha_close_connection(thd);
+            MYSQL_ROLLBACK_TRANSACTION(thd->m_transaction_psi);
+            thd->m_transaction_psi= NULL;
+          }
+          else if (wsrep_must_replay(thd))
+          {
+             xid_cache_delete(thd, &thd->transaction->xid_state);
+             ha_rollback_trans(thd, TRUE);
+          }
+          thd->variables.option_bits&= ~(OPTION_BEGIN | OPTION_KEEP_LOG);
+          thd->server_status&=
+            ~(SERVER_STATUS_IN_TRANS | SERVER_STATUS_IN_TRANS_READONLY);
+          DBUG_PRINT("info", ("clearing SERVER_STATUS_IN_TRANS"));
+          DBUG_RETURN(TRUE);
+        }
+      }
+#endif /* WITH_WSREP */
 
       res= MY_TEST(ha_commit_one_phase(thd, 1));
       if (res)
@@ -702,6 +767,12 @@ bool trans_xa_commit(THD *thd)
       }
 
       thd->m_transaction_psi= NULL;
+#ifdef WITH_WSREP
+      if (run_wsrep_hooks)
+      {
+        wsrep_after_commit(thd, 1);
+      }
+#endif /* WITH_WSREP */
     }
   }
   else
@@ -752,6 +823,13 @@ bool trans_xa_rollback(THD *thd)
       my_error(ER_OUT_OF_RESOURCES, MYF(0));
       DBUG_RETURN(TRUE);
     }
+#ifdef WITH_WSREP
+    if (WSREP(thd) && wsrep_must_commit_or_rollback_by_xid(thd))
+    {
+      bool res= wsrep_commit_or_rollback_by_xid(thd, FALSE);
+      DBUG_RETURN(res);
+    }
+#endif /* WITH_WSREP */
 
     if (auto xs= xid_cache_search(thd, thd->lex->xid))
     {
@@ -782,7 +860,12 @@ bool trans_xa_rollback(THD *thd)
       }
 
       xid_state.xid_cache_element= xs;
+#ifdef WITH_WSREP
+      if (wsrep_ha_commit_or_rollback_by_xid(thd, 0))
+        DBUG_RETURN(TRUE);
+#else
       ha_commit_or_rollback_by_xid(thd->lex->xid, 0);
+#endif /* WITH_WSREP */
       xid_state.xid_cache_element= 0;
       xid_cache_delete(thd, xs);
     }
@@ -812,6 +895,10 @@ bool trans_xa_rollback(THD *thd)
     DBUG_RETURN(true);
   }
 
+#ifdef WITH_WSREP
+  if (WSREP(thd))
+    thd->wsrep_cs().reset_error();
+#endif /* WITH_WSREP */
   DBUG_RETURN(xa_trans_force_rollback(thd));
 }
 
@@ -822,7 +909,8 @@ bool trans_xa_detach(THD *thd)
 
   if (thd->transaction->xid_state.xid_cache_element->xa_state != XA_PREPARED)
     return xa_trans_force_rollback(thd);
-  else if (!thd->transaction->all.is_trx_read_write())
+  else if (!thd->transaction->all.is_trx_read_write() &&
+           !WSREP(thd))
   {
     thd->transaction->xid_state.set_error(ER_XA_RBROLLBACK);
     ha_rollback_trans(thd, true);
@@ -831,6 +919,12 @@ bool trans_xa_detach(THD *thd)
   thd->transaction->xid_state.xid_cache_element->acquired_to_recovered();
   thd->transaction->xid_state.xid_cache_element= 0;
   thd->transaction->cleanup();
+#ifdef WITH_WSREP
+  if (WSREP(thd) && !wsrep_must_replay(thd))
+  {
+    wsrep_xa_detach(thd);
+  }
+#endif
 
   Ha_trx_info *ha_info, *ha_info_next;
   for (ha_info= thd->transaction->all.ha_list;
@@ -1080,3 +1174,102 @@ static bool slave_applier_reset_xa_trans(THD *thd)
   thd->m_transaction_psi= NULL;
   return thd->is_error();
 }
+
+
+#ifdef WITH_WSREP
+static int wsrep_ha_commit_or_rollback_by_xid(THD *thd, bool commit)
+{
+  const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, TRUE);
+  if (run_wsrep_hooks)
+  {
+    const int res= commit ?
+      wsrep_before_commit(thd, TRUE) :
+      wsrep_before_rollback(thd, TRUE);
+    if (res)
+      return res;
+  }
+  ha_commit_or_rollback_by_xid(thd->lex->xid, commit);
+  if (run_wsrep_hooks)
+  {
+    commit ?
+      wsrep_after_commit(thd, TRUE) :
+      wsrep_after_rollback(thd, TRUE);
+  }
+  return FALSE;
+}
+
+bool wsrep_trans_xa_attach(THD *thd, XID *xid)
+{
+  bool ret= true;
+  DBUG_ASSERT(!thd->transaction->xid_state.is_explicit_XA());
+  if (thd->fix_xid_hash_pins())
+    return ret;
+  if (auto xs= xid_cache_search(thd, xid))
+  {
+    thd->transaction->xid_state.xid_cache_element= xs;
+    thd->transaction->xid_state.xid_cache_element->acquired_to_recovered();
+    ret= wsrep_restore_prepared_transaction(thd, xid);
+  }
+  return ret;
+}
+
+struct xid_finder_arg
+{
+  bool found;
+  XID *xid;
+  const char *xid_match;
+  size_t xid_match_len;
+};
+
+static my_bool xid_cache_finder(XID_cache_element *xs,
+                                struct xid_finder_arg *arg)
+{
+  Wsrep_xid xid(&xs->xid);
+  char* serialized= xid.serialize();
+  if (!strncmp(arg->xid_match,
+               serialized,
+               arg->xid_match_len))
+  {
+    arg->found= true;
+    arg->xid->set(&xs->xid);
+    return TRUE;
+  }
+  return FALSE;
+}
+
+bool wsrep_find_prepared_xid(THD *thd,
+                             const char *xid_match,
+                             size_t xid_match_len,
+                             XID *xid)
+{
+  struct xid_finder_arg arg= {false, xid, xid_match, xid_match_len};
+  my_hash_walk_action action= (my_hash_walk_action) xid_cache_finder;
+  xid_cache_iterate(thd, action, &arg);
+  return arg.found;
+}
+
+bool wsrep_trans_xa_force_rollback(THD *thd)
+{
+  int ret= 0;
+  if (wsrep_must_replay(thd))
+  {
+    ret= xa_trans_force_rollback(thd);
+  }
+  else
+  {
+    XID_STATE &xid_state= thd->transaction->xid_state;
+    xid_state.set_error(ER_LOCK_DEADLOCK);
+    if (xid_state.xid_cache_element)
+    {
+      wsrep_override_error(thd, ER_XA_RBDEADLOCK);
+      xid_state.xid_cache_element->xa_state= XA_ROLLBACK_ONLY;
+    }
+    ret= ha_rollback_trans(thd, true);
+    thd->variables.option_bits&= ~(OPTION_BEGIN | OPTION_KEEP_LOG);
+    thd->transaction->all.reset();
+    thd->server_status&=
+      ~(SERVER_STATUS_IN_TRANS | SERVER_STATUS_IN_TRANS_READONLY);
+  }
+  return ret;
+}
+#endif /* WITH_WSREP */

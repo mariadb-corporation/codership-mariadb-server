@@ -1,0 +1,54 @@
+#
+# Test BF abort after XA idle replay.
+#
+# This test would cause an attemp to lock mysys_var->mutex while uninitialized
+#
+
+--source include/galera_cluster.inc
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY AUTO_INCREMENT, f2 CHAR(255) , KEY(f2)) ENGINE=InnoDB;
+INSERT INTO t1 VALUES (1, 'a'), (2, 'b'), (4, 'd'), (5, 'f');
+
+
+#
+# First cause a XA to be replayed while its connection is idle...
+#
+--connection node_1
+--let $wsrep_local_bf_aborts_before = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'`
+XA START 't';
+UPDATE t1 SET f2 = 'x' WHERE f1 < 3;
+XA END 't';
+XA PREPARE 't';
+
+--connection node_2
+DELETE FROM t1 WHERE f1 > 2;
+
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1a
+--let $wait_condition = SELECT VARIABLE_VALUE = $wsrep_local_bf_aborts_before + 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'
+--source include/wait_condition.inc
+
+--connection node_1
+XA COMMIT 't';
+
+#
+# ... followed by a BF abort
+#
+--connection node_1
+START TRANSACTION;
+INSERT INTO t1 VALUES (100, 'x');
+
+--connection node_2
+INSERT INTO t1 VALUES (100, 'y');
+
+--connection node_1
+--error ER_LOCK_DEADLOCK
+COMMIT;
+
+SELECT * FROM t1;
+
+--connection node_2
+SELECT * FROM t1;
+
+
+DROP TABLE t1;

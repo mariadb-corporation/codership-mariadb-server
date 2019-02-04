@@ -53,4 +53,12 @@ bool trans_xa_rollback(THD *thd);
 bool trans_xa_detach(THD *thd);
 bool mysql_xa_recover(THD *thd);
 
+#ifdef WITH_WSREP
+bool wsrep_trans_xa_force_rollback(THD *thd);
+bool wsrep_trans_xa_attach(THD *thd, XID *xid);
+bool wsrep_find_prepared_xid(THD *thd,
+                             const char *xid_match,
+                             size_t xid_match_len,
+                             XID *xid);
+#endif /* WITH_WSREP */
 #endif /* XA_INCLUDED */

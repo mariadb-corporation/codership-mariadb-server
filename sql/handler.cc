@@ -1355,6 +1355,7 @@ static int prepare_or_error(handlerton *ht, THD *thd, bool all)
 #ifdef WITH_WSREP
   const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, all);
   if (run_wsrep_hooks && ht->flags & HTON_WSREP_REPLICATION &&
+      !thd->transaction->xid_state.is_explicit_XA() &&
       wsrep_before_prepare(thd, all))
   {
     return(1);
@@ -1369,6 +1370,7 @@ static int prepare_or_error(handlerton *ht, THD *thd, bool all)
   }
 #ifdef WITH_WSREP
   if (run_wsrep_hooks && !err && ht->flags & HTON_WSREP_REPLICATION &&
+      !thd->transaction->xid_state.is_explicit_XA() &&
       wsrep_after_prepare(thd, all))
   {
     err= 1;
@@ -1392,6 +1394,13 @@ int ha_prepare(THD *thd)
   Ha_trx_info *ha_info= trans->ha_list;
   DBUG_ENTER("ha_prepare");
 
+#ifdef WITH_WSREP
+  const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, all);
+  if (run_wsrep_hooks && wsrep_before_prepare(thd, all))
+  {
+    DBUG_RETURN(1);
+  }
+#endif /* WITH_WSREP */
   if (ha_info)
   {
     for (; ha_info; ha_info= ha_info->next())
@@ -1425,6 +1434,12 @@ int ha_prepare(THD *thd)
     }
   }
 
+#ifdef WITH_WSREP
+  if (run_wsrep_hooks && wsrep_after_prepare(thd, 1))
+  {
+    error= 1;
+  }
+#endif
   DBUG_RETURN(error);
 }
 
@@ -1699,6 +1714,7 @@ int ha_commit_trans(THD *thd, bool all)
   if (trans->no_2pc || (rw_ha_count <= 1))
   {
 #ifdef WITH_WSREP
+    DEBUG_SYNC(thd, "wsrep_ha_trans_commit_before_commit_one_phase");
     /*
       This commit will not go through log_and_order() where wsrep commit
       ordering is normally done. Commit ordering must be done here.

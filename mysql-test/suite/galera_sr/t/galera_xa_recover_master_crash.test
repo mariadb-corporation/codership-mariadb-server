@@ -1,0 +1,23 @@
+#
+# Test recovery of XA prepared transaction
+#
+# The master of XA transaction crashes while performing XA PREPARE.
+# The crash happens after replication of prepare fragment, before
+# the local innodb storage engine has prepared.
+#
+
+--source include/galera_cluster.inc
+--source include/have_debug.inc
+
+# Save original auto_increment_offset values.
+--let $node_1=node_1
+--let $node_2=node_2
+--source ../galera/include/auto_increment_offset_save.inc
+
+--let $restart_script = galera_xa_recover_master_do_crash.inc
+--source galera_xa_recover_master.inc
+
+# Restore original auto_increment_offset values.
+--source ../galera/include/auto_increment_offset_restore.inc
+
+call mtr.add_suppression('Found 3 prepared XA transactions');
