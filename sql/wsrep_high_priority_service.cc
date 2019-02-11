@@ -198,6 +198,12 @@ int Wsrep_high_priority_service::start_transaction(
   DBUG_RETURN(m_thd->wsrep_cs().start_transaction(ws_handle, ws_meta));
 }
 
+int Wsrep_high_priority_service::next_fragment(const wsrep::ws_meta& ws_meta)
+{
+  DBUG_ENTER(" Wsrep_high_priority_service::next_fragment");
+  DBUG_RETURN(m_thd->wsrep_cs().next_fragment(ws_meta));
+}
+
 const wsrep::transaction& Wsrep_high_priority_service::transaction() const
 {
   DBUG_ENTER(" Wsrep_high_priority_service::transaction");

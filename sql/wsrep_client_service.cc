@@ -154,6 +154,13 @@ bool Wsrep_client_service::is_xa() const
   return m_thd->transaction.xid_state.xa_state != XA_NOTR;
 }
 
+bool Wsrep_client_service::is_xa_prepare() const
+{
+  DBUG_ASSERT(m_thd == current_thd);
+  THD* thd= m_thd;
+  return thd->lex->sql_command == SQLCOM_XA_PREPARE;
+}
+
 int Wsrep_client_service::prepare_fragment_for_replication(wsrep::mutable_buffer& buffer)
 {
   DBUG_ASSERT(m_thd == current_thd);
