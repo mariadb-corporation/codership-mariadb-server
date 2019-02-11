@@ -55,6 +55,7 @@ public:
   void debug_crash(const char*);
   int bf_rollback();
   bool is_xa() const;
+  bool is_xa_prepare() const;
 private:
   friend class Wsrep_server_service;
   THD* m_thd;
