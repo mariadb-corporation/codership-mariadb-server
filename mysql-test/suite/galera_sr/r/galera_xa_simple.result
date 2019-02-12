@@ -87,4 +87,25 @@ SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
 expect 0
 0
 connection node_1;
+SET SESSION wsrep_trx_fragment_size=0;
+DROP TABLE t1;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+INSERT INTO t1 VALUES (1);
+XA START 'test';
+SELECT * FROM t1;
+f1
+1
+XA END 'test';
+XA PREPARE 'test';
+connection node_1a;
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+expect 0
+0
+connection node_2;
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+expect 0
+0
+connection node_1;
+XA COMMIT 'test';
 DROP TABLE t1;
