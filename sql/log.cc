@@ -5705,7 +5705,7 @@ THD::binlog_start_trans_and_stmt()
         writer.write(&gtid_event);
       }
 
-      if (this->transaction.xid_state.xa_state == XA_ACTIVE)
+      if (WSREP(this) && this->transaction.xid_state.xa_state == XA_ACTIVE)
       {
         Format_description_log_event fd_ev(4);
         fd_ev.checksum_alg= BINLOG_CHECKSUM_ALG_OFF; //(enum_binlog_checksum_alg)binlog_checksum_options;
