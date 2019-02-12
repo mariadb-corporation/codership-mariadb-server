@@ -5710,10 +5710,14 @@ THD::binlog_start_trans_and_stmt()
         Format_description_log_event fd_ev(4);
         fd_ev.checksum_alg= BINLOG_CHECKSUM_ALG_OFF; //(enum_binlog_checksum_alg)binlog_checksum_options;
 
-        String xa_start;
-        xa_start.append(STRING_WITH_LEN("XA START "));
-        wsrep_append_xid_string(xa_start, &this->transaction.xid_state.xid);
-        Query_log_event qinfo(this, "XA START 'test'", strlen("XA START 'test'"),
+        char buf[1024];
+        String xa_start(buf, sizeof(buf), &my_charset_bin);
+        xa_start.copy(STRING_WITH_LEN("XA START "), &my_charset_bin);
+        char xid[SQL_XIDSIZE];
+        size_t xid_len = get_sql_xid(&this->transaction.xid_state.xid, xid);
+        xa_start.append(xid, xid_len);
+
+        Query_log_event qinfo(this, xa_start.c_ptr_safe(), xa_start.length(),
                               TRUE, FALSE, TRUE, 0);
         qinfo.checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
 
@@ -10755,18 +10759,6 @@ void wsrep_register_binlog_handler(THD *thd, bool trx)
   DBUG_VOID_RETURN;
 }
 
-void wsrep_append_xid_string(String &xid_string, const XID* xid)
-{
-  DBUG_ASSERT(xid && !xid->is_null());
-  xid_string.reserve(xid->gtrid_length + xid->bqual_length + 9);
-  xid_string.append(STRING_WITH_LEN("'"));
-  xid_string.append(xid->data, xid->gtrid_length);
-  xid_string.append(STRING_WITH_LEN("','"));
-  xid_string.append(&xid->data[xid->gtrid_length], xid->bqual_length);
-  xid_string.append(STRING_WITH_LEN("',"));
-  xid_string.qs_append((int)xid->formatID);
-}
-
 int wsrep_write_events_for_xa_prepare(THD* thd)
 {
   DBUG_ASSERT(thd->lex->sql_command == SQLCOM_XA_PREPARE);
@@ -10777,20 +10769,23 @@ int wsrep_write_events_for_xa_prepare(THD* thd)
   IO_CACHE *file= &cache_data->cache_log;
   Log_event_writer writer(file, cache_data);
 
-  String xid_string;
-  wsrep_append_xid_string(xid_string, &thd->transaction.xid_state.xid);
+  char xid[SQL_XIDSIZE];
+  size_t xid_len = get_sql_xid(&thd->transaction.xid_state.xid, xid);
 
-  String xa_end(STRING_WITH_LEN("XA END "), &my_charset_bin);
-  xa_end.append(xid_string);
+  char buf_end[1024];
+  String xa_end(buf_end, sizeof(buf_end), &my_charset_bin);
+  xa_end.copy(STRING_WITH_LEN("XA END "), &my_charset_bin);
+  xa_end.append(xid, xid_len);
   Query_log_event end_ev(thd,
                          xa_end.c_ptr_safe(),
                          xa_end.length(),
                          TRUE, FALSE, TRUE, 0);
   end_ev.checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
 
-
-  String xa_prepare(STRING_WITH_LEN("XA PREPARE "), &my_charset_bin);
-  xa_prepare.append(xid_string);
+  char buf_prepare[1024];
+  String xa_prepare(buf_prepare, sizeof(buf_prepare), &my_charset_bin);
+  xa_prepare.copy(STRING_WITH_LEN("XA PREPARE "), &my_charset_bin);
+  xa_prepare.append(xid, xid_len);
   Query_log_event prepare_ev(thd,
                              xa_prepare.c_ptr_safe(),
                              xa_prepare.length(),
