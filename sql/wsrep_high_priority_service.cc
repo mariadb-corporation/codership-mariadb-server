@@ -378,7 +378,16 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
 {
   DBUG_ENTER("Wsrep_high_priority_service::rollback");
   m_thd->wsrep_cs().prepare_for_ordering(ws_handle, ws_meta, false);
-  int ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
+  int ret(1);
+  if (m_thd->transaction.xid_state.xa_state == XA_NOTR)
+  {
+    ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
+  }
+  else
+  {
+    m_thd->lex->xid= &m_thd->transaction.xid_state.xid;
+    ret= trans_xa_rollback(m_thd);
+  }
   m_thd->mdl_context.release_transactional_locks();
   m_thd->mdl_context.release_explicit_locks();
   DBUG_RETURN(ret);

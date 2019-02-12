@@ -2370,8 +2370,7 @@ com_multi_end:
         command == COM_STMT_CLOSE
         ))
   {
-    wsrep_override_error(thd, wsrep_current_error(thd),
-                         wsrep_current_error_status(thd));
+    wsrep_override_current_error(thd);
 
     xa_states state= thd->transaction.xid_state.xa_state;
     DBUG_ASSERT(state == XA_NOTR || state == XA_ROLLBACK_ONLY);

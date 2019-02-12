@@ -377,18 +377,6 @@ static inline void wsrep_after_command_ignore_result(THD* thd)
   wsrep_after_command_after_result(thd);
 }
 
-static inline enum wsrep::client_error wsrep_current_error(THD* thd)
-{
-  return thd->wsrep_cs().current_error();
-}
-
-static inline enum wsrep::provider::status
-wsrep_current_error_status(THD* thd)
-{
-  return thd->wsrep_cs().current_error_status();
-}
-
-
 /*
   Commit an empty transaction.
 
