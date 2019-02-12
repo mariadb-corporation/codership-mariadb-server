@@ -62,48 +62,6 @@ private:
 };
 }
 
-static rpl_group_info* wsrep_relay_group_init(THD* thd, const char* log_fname)
-{
-  Relay_log_info* rli= new Relay_log_info(false);
-
-  if (!rli->relay_log.description_event_for_exec)
-  {
-    rli->relay_log.description_event_for_exec=
-      new Format_description_log_event(4);
-  }
-
-  static LEX_CSTRING connection_name= { STRING_WITH_LEN("wsrep") };
-
-  /*
-    Master_info's constructor initializes rpl_filter by either an already
-    constructed Rpl_filter object from global 'rpl_filters' list if the
-    specified connection name is same, or it constructs a new Rpl_filter
-    object and adds it to rpl_filters. This object is later destructed by
-    Mater_info's destructor by looking it up based on connection name in
-    rpl_filters list.
-
-    However, since all Master_info objects created here would share same
-    connection name ("wsrep"), destruction of any of the existing Master_info
-    objects (in wsrep_return_from_bf_mode()) would free rpl_filter referenced
-    by any/all existing Master_info objects.
-
-    In order to avoid that, we have added a check in Master_info's destructor
-    to not free the "wsrep" rpl_filter. It will eventually be freed by
-    free_all_rpl_filters() when server terminates.
-  */
-  rli->mi= new Master_info(&connection_name, false);
-
-  struct rpl_group_info *rgi= new rpl_group_info(rli);
-  rgi->thd= rli->sql_driver_thd= thd;
-
-  if ((rgi->deferred_events_collecting= rli->mi->rpl_filter->is_on()))
-  {
-    rgi->deferred_events= new Deferred_log_events(rli);
-  }
-
-  return rgi;
-}
-
 static void wsrep_setup_uk_and_fk_checks(THD* thd)
 {
   /* Tune FK and UK checking policy. These are reset back to original
@@ -336,7 +294,7 @@ int Wsrep_high_priority_service::commit(const wsrep::ws_handle& ws_handle,
     }
     else
     {
-      thd->lex->xid->set(&m_thd->transaction.xid_state.xid);
+      thd->lex->xid= &thd->transaction.xid_state.xid;
       ret= trans_xa_commit(thd);
     }
 
@@ -504,13 +462,6 @@ int Wsrep_applier_service::apply_write_set(const wsrep::ws_meta& ws_meta,
 {
   DBUG_ENTER("Wsrep_applier_service::apply_write_set");
   THD* thd= m_thd;
-
-  // The following line is a workaround to avoid a segfault
-  // in rpl_sql_thread_info while applying log events for XA.
-  // XA TODO figure out what causes the segfault and figure
-  // out an fix.
-  thd->system_thread_info.rpl_sql_info=
-    new rpl_sql_thread_info(thd->wsrep_rgi->rli->mi->rpl_filter);
 
   thd->variables.option_bits |= OPTION_BEGIN;
   thd->variables.option_bits |= OPTION_NOT_AUTOCOMMIT;

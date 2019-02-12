@@ -5707,8 +5707,7 @@ THD::binlog_start_trans_and_stmt()
 
       if (WSREP(this) && this->transaction.xid_state.xa_state == XA_ACTIVE)
       {
-        Format_description_log_event fd_ev(4);
-        fd_ev.checksum_alg= BINLOG_CHECKSUM_ALG_OFF; //(enum_binlog_checksum_alg)binlog_checksum_options;
+        Format_description_log_event fd_ev(BINLOG_VERSION);
 
         char buf[1024];
         String xa_start(buf, sizeof(buf), &my_charset_bin);
@@ -5719,7 +5718,6 @@ THD::binlog_start_trans_and_stmt()
 
         Query_log_event qinfo(this, xa_start.c_ptr_safe(), xa_start.length(),
                               TRUE, FALSE, TRUE, 0);
-        qinfo.checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
 
         writer.write(&fd_ev);
         writer.write(&qinfo);
@@ -10769,6 +10767,9 @@ int wsrep_write_events_for_xa_prepare(THD* thd)
   IO_CACHE *file= &cache_data->cache_log;
   Log_event_writer writer(file, cache_data);
 
+  Format_description_log_event fd_ev(BINLOG_VERSION);
+  fd_ev.checksum_alg= (enum_binlog_checksum_alg) binlog_checksum_options;
+
   char xid[SQL_XIDSIZE];
   size_t xid_len = get_sql_xid(&thd->transaction.xid_state.xid, xid);
 
@@ -10780,7 +10781,6 @@ int wsrep_write_events_for_xa_prepare(THD* thd)
                          xa_end.c_ptr_safe(),
                          xa_end.length(),
                          TRUE, FALSE, TRUE, 0);
-  end_ev.checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
 
   char buf_prepare[1024];
   String xa_prepare(buf_prepare, sizeof(buf_prepare), &my_charset_bin);
@@ -10790,8 +10790,8 @@ int wsrep_write_events_for_xa_prepare(THD* thd)
                              xa_prepare.c_ptr_safe(),
                              xa_prepare.length(),
                              TRUE, FALSE, TRUE, 0);
-  prepare_ev.checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
 
+  writer.write(&fd_ev);
   writer.write(&end_ev);
   writer.write(&prepare_ev);
 
