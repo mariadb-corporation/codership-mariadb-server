@@ -14,26 +14,28 @@ SELECT @@global.wsrep_debug;
 --echo # scope
 --error ER_INCORRECT_GLOBAL_LOCAL_VAR
 SELECT @@session.wsrep_debug;
-SET @@global.wsrep_debug=OFF;
+SET @@global.wsrep_debug=0;
 SELECT @@global.wsrep_debug;
-SET @@global.wsrep_debug=ON;
+SET @@global.wsrep_debug=1;
 SELECT @@global.wsrep_debug;
 
 --echo
 --echo # valid values
-SET @@global.wsrep_debug='OFF';
+SET @@global.wsrep_debug=0;
 SELECT @@global.wsrep_debug;
-SET @@global.wsrep_debug=ON;
+SET @@global.wsrep_debug=1;
 SELECT @@global.wsrep_debug;
 SET @@global.wsrep_debug=default;
 SELECT @@global.wsrep_debug;
 
 --echo
 --echo # invalid values
---error ER_WRONG_VALUE_FOR_VAR
+--error ER_WRONG_TYPE_FOR_VAR
 SET @@global.wsrep_debug=NULL;
---error ER_WRONG_VALUE_FOR_VAR
+--error ER_WRONG_TYPE_FOR_VAR
 SET @@global.wsrep_debug='junk';
+--error ER_WRONG_TYPE_FOR_VAR
+SET @@global.wsrep_debug=ON;
 
 --echo
 --echo # restore the initial value

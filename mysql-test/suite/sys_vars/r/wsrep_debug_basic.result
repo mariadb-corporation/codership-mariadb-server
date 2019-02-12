@@ -11,21 +11,21 @@ SELECT @@global.wsrep_debug;
 # scope
 SELECT @@session.wsrep_debug;
 ERROR HY000: Variable 'wsrep_debug' is a GLOBAL variable
-SET @@global.wsrep_debug=OFF;
+SET @@global.wsrep_debug=0;
 SELECT @@global.wsrep_debug;
 @@global.wsrep_debug
 0
-SET @@global.wsrep_debug=ON;
+SET @@global.wsrep_debug=1;
 SELECT @@global.wsrep_debug;
 @@global.wsrep_debug
 1
 
 # valid values
-SET @@global.wsrep_debug='OFF';
+SET @@global.wsrep_debug=0;
 SELECT @@global.wsrep_debug;
 @@global.wsrep_debug
 0
-SET @@global.wsrep_debug=ON;
+SET @@global.wsrep_debug=1;
 SELECT @@global.wsrep_debug;
 @@global.wsrep_debug
 1
@@ -36,9 +36,11 @@ SELECT @@global.wsrep_debug;
 
 # invalid values
 SET @@global.wsrep_debug=NULL;
-ERROR 42000: Variable 'wsrep_debug' can't be set to the value of 'NULL'
+ERROR 42000: Incorrect argument type to variable 'wsrep_debug'
 SET @@global.wsrep_debug='junk';
-ERROR 42000: Variable 'wsrep_debug' can't be set to the value of 'junk'
+ERROR 42000: Incorrect argument type to variable 'wsrep_debug'
+SET @@global.wsrep_debug=ON;
+ERROR 42000: Incorrect argument type to variable 'wsrep_debug'
 
 # restore the initial value
 SET @@global.wsrep_debug = @wsrep_debug_global_saved;
