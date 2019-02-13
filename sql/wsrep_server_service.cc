@@ -190,7 +190,7 @@ void Wsrep_server_service::log_view(
         os << "Storing cluster view:\n" << view;
         WSREP_INFO("%s", os.str().c_str());
         DBUG_ASSERT(prev_view.state_id().id() != view.state_id().id() ||
-                    view.state_id().seqno() > prev_view.state_id().seqno());
+                    view.state_id().seqno().get() >= prev_view.state_id().seqno().get());
       }
 
       if (trans_begin(applier->m_thd, MYSQL_START_TRANS_OPT_READ_WRITE))
