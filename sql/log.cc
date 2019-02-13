@@ -5687,41 +5687,20 @@ THD::binlog_start_trans_and_stmt()
     Ha_trx_info *ha_info;
     ha_info= this->ha_data[binlog_hton->slot].ha_info + (mstmt_mode ? 1 : 0);
 
-    if (!ha_info->is_started())
+    if (!ha_info->is_started() && wsrep_gtid_mode
+            && this->variables.gtid_seq_no)
     {
       binlog_cache_mngr *const cache_mngr=
         (binlog_cache_mngr*) thd_get_ha_data(this, binlog_hton);
       binlog_cache_data *cache_data= cache_mngr->get_binlog_cache_data(1);
       IO_CACHE *file= &cache_data->cache_log;
       Log_event_writer writer(file, cache_data);
-
-      if (wsrep_gtid_mode && this->variables.gtid_seq_no)
-      {
         Gtid_log_event gtid_event(this, this->variables.gtid_seq_no,
                             this->variables.gtid_domain_id,
                             true, LOG_EVENT_SUPPRESS_USE_F,
                             true, 0);
-        gtid_event.server_id= this->variables.server_id;
-        writer.write(&gtid_event);
-      }
-
-      if (WSREP(this) && this->transaction.xid_state.xa_state == XA_ACTIVE)
-      {
-        Format_description_log_event fd_ev(BINLOG_VERSION);
-
-        char buf[1024];
-        String xa_start(buf, sizeof(buf), &my_charset_bin);
-        xa_start.copy(STRING_WITH_LEN("XA START "), &my_charset_bin);
-        char xid[SQL_XIDSIZE];
-        size_t xid_len = get_sql_xid(&this->transaction.xid_state.xid, xid);
-        xa_start.append(xid, xid_len);
-
-        Query_log_event qinfo(this, xa_start.c_ptr_safe(), xa_start.length(),
-                              TRUE, FALSE, TRUE, 0);
-
-        writer.write(&fd_ev);
-        writer.write(&qinfo);
-       }
+      gtid_event.server_id= this->variables.server_id;
+      writer.write(&gtid_event);
     }
 #endif
     if (mstmt_mode)
@@ -10757,44 +10736,4 @@ void wsrep_register_binlog_handler(THD *thd, bool trx)
   DBUG_VOID_RETURN;
 }
 
-int wsrep_write_events_for_xa_prepare(THD* thd)
-{
-  DBUG_ASSERT(thd->lex->sql_command == SQLCOM_XA_PREPARE);
-
-  binlog_cache_mngr *const cache_mngr=
-    (binlog_cache_mngr*) thd_get_ha_data(thd, binlog_hton);
-  binlog_cache_data *cache_data= cache_mngr->get_binlog_cache_data(1);
-  IO_CACHE *file= &cache_data->cache_log;
-  Log_event_writer writer(file, cache_data);
-
-  Format_description_log_event fd_ev(BINLOG_VERSION);
-  fd_ev.checksum_alg= (enum_binlog_checksum_alg) binlog_checksum_options;
-
-  char xid[SQL_XIDSIZE];
-  size_t xid_len = get_sql_xid(&thd->transaction.xid_state.xid, xid);
-
-  char buf_end[1024];
-  String xa_end(buf_end, sizeof(buf_end), &my_charset_bin);
-  xa_end.copy(STRING_WITH_LEN("XA END "), &my_charset_bin);
-  xa_end.append(xid, xid_len);
-  Query_log_event end_ev(thd,
-                         xa_end.c_ptr_safe(),
-                         xa_end.length(),
-                         TRUE, FALSE, TRUE, 0);
-
-  char buf_prepare[1024];
-  String xa_prepare(buf_prepare, sizeof(buf_prepare), &my_charset_bin);
-  xa_prepare.copy(STRING_WITH_LEN("XA PREPARE "), &my_charset_bin);
-  xa_prepare.append(xid, xid_len);
-  Query_log_event prepare_ev(thd,
-                             xa_prepare.c_ptr_safe(),
-                             xa_prepare.length(),
-                             TRUE, FALSE, TRUE, 0);
-
-  writer.write(&fd_ev);
-  writer.write(&end_ev);
-  writer.write(&prepare_ev);
-
-  return 0;
-}
 #endif /* WITH_WSREP */

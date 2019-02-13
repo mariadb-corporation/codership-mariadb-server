@@ -162,8 +162,6 @@ int wsrep_apply_events(THD*        thd,
 
     typ= ev->get_type_code();
 
-    WSREP_DEBUG("applying event type: %d %s", ev->get_type_code(), ev->get_type_str());
-
     switch (typ) {
     case FORMAT_DESCRIPTION_EVENT:
       wsrep_set_apply_format(thd, (Format_description_log_event*)ev);
@@ -181,13 +179,14 @@ int wsrep_apply_events(THD*        thd,
     }
 #endif /* GTID_SUPPORT */
     case QUERY_EVENT:
-      WSREP_DEBUG("query event: %s len: %d", ((Query_log_event*)ev)->query, ((Query_log_event*)ev)->q_len);
-      // Ugly hack coming next...
-      // We are going to explicitly start a transaction using
-      // XA START. Which does not like to find a thd in active
-      // multi statement transaction
       if (!strncmp(((Query_log_event*)ev)->query, "XA START", 8))
       {
+        // We are going to explicitly start a transaction using
+        // XA START. Streaming applier thd's are in active multi
+        // statement transaction by default, but trans_xa_start()
+        // will fail if find the thd already in that state.
+        // Consider introducing a specialized streaming applier
+        // which takes this into account.
         thd->variables.option_bits&= ~OPTION_BEGIN;
         thd->server_status&= ~SERVER_STATUS_IN_TRANS;
       }
@@ -235,6 +234,10 @@ int wsrep_apply_events(THD*        thd,
     event++;
 
     delete_or_keep_event_post_apply(thd->wsrep_rgi, typ, ev);
+    if (typ != GTID_EVENT)
+    {
+      wsrep_set_apply_format(thd, NULL);
+    }
   }
 
 error:

@@ -161,15 +161,37 @@ bool Wsrep_client_service::is_xa_prepare() const
   return thd->lex->sql_command == SQLCOM_XA_PREPARE;
 }
 
-int Wsrep_client_service::prepare_fragment_for_replication(wsrep::mutable_buffer& buffer)
+static int write_xa_event_helper(THD* thd,
+                                 const char* query, size_t query_len,
+                                 wsrep::mutable_buffer& buffer)
+{
+  char buf[1024];
+  String xa_stmt(buf, sizeof(buf), &my_charset_bin);
+  xa_stmt.copy(query, query_len,  &my_charset_bin);
+  char xid[SQL_XIDSIZE];
+  size_t xid_len= get_sql_xid(&thd->transaction.xid_state.xid, xid);
+  xa_stmt.append(xid, xid_len);
+
+  uchar* event_buf= NULL;
+  size_t event_buf_len= 0;
+  wsrep_to_buf_helper(thd, buf, query_len + xid_len,
+                      &event_buf, &event_buf_len);
+  buffer.push_back(reinterpret_cast<const char*>(event_buf),
+                   reinterpret_cast<const char*>(event_buf + event_buf_len));
+  my_free(event_buf);
+  return 0;
+}
+
+int Wsrep_client_service::prepare_fragment_for_replication(
+  wsrep::mutable_buffer& buffer, size_t& log_position)
 {
   DBUG_ASSERT(m_thd == current_thd);
   THD* thd= m_thd;
   DBUG_ENTER("Wsrep_client_service::prepare_fragment_for_replication");
 
-  if (thd->lex->sql_command == SQLCOM_XA_PREPARE)
+  if (is_xa() && thd->wsrep_sr().fragments_certified() == 0)
   {
-    wsrep_write_events_for_xa_prepare(thd);
+    write_xa_event_helper(thd, "XA START ", 9, buffer);
   }
 
   IO_CACHE* cache= wsrep_get_trans_cache(thd);
@@ -181,13 +203,13 @@ int Wsrep_client_service::prepare_fragment_for_replication(wsrep::mutable_buffer
   }
 
   const my_off_t saved_pos(my_b_tell(cache));
-  if (reinit_io_cache(cache, READ_CACHE, thd->wsrep_sr().bytes_certified(), 0, 0))
+  if (reinit_io_cache(cache, READ_CACHE, thd->wsrep_sr().log_position(), 0, 0))
   {
     DBUG_RETURN(1);
   }
 
   int ret= 0;
-  size_t total_length= 0;
+  size_t total_length= buffer.size();
   size_t length= my_b_bytes_in_cache(cache);
 
   if (!length)
@@ -215,6 +237,14 @@ int Wsrep_client_service::prepare_fragment_for_replication(wsrep::mutable_buffer
     while (cache->file >= 0 && (length= my_b_fill(cache)));
   }
   DBUG_ASSERT(total_length == buffer.size());
+
+  if (is_xa_prepare())
+  {
+    write_xa_event_helper(thd, "XA END ", 7, buffer);
+    write_xa_event_helper(thd, "XA PREPARE ", 11, buffer);
+  }
+
+  log_position = saved_pos;
 cleanup:
   if (reinit_io_cache(cache, WRITE_CACHE, saved_pos, 0, 0))
   {

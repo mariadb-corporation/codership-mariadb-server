@@ -963,7 +963,6 @@ bool trans_xa_commit(THD *thd)
       DEBUG_SYNC(thd, "trans_xa_commit_after_acquire_commit_lock");
 
 #ifdef WITH_WSREP
-      // XA TODO error handling
       wsrep_before_commit(thd, 1);
 #endif /* WITH_WSREP */
       res= MY_TEST(ha_commit_one_phase(thd, 1));
