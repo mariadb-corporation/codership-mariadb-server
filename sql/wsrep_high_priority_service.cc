@@ -344,7 +344,15 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
   else
   {
     m_thd->lex->xid= &m_thd->transaction.xid_state.xid;
-    ret= trans_xa_rollback(m_thd);
+    // the following may happen if XA ABORT is issued before XA PREPARE
+    // in the master.  With streaming turned on, the XA END is
+    // only sent to slaves with the XA PREPARE fragment, and the transaction may
+    // still be XA_ACTIVE when the rollback arrives.
+    // In that case, we issue the XA END here.
+    if (m_thd->transaction.xid_state.xa_state != XA_ACTIVE
+        || !trans_xa_end(m_thd)) {
+        ret= trans_xa_rollback(m_thd);
+    }
   }
   m_thd->mdl_context.release_transactional_locks();
   m_thd->mdl_context.release_explicit_locks();
