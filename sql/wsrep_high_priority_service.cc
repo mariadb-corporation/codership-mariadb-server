@@ -149,32 +149,10 @@ Wsrep_high_priority_service::~Wsrep_high_priority_service()
   thd->wsrep_applier         = m_shadow.wsrep_applier;
 }
 
-int Wsrep_high_priority_service::start_transaction(
-  const wsrep::ws_handle& ws_handle, const wsrep::ws_meta& ws_meta)
+wsrep::client_state& Wsrep_high_priority_service::client_state()
 {
-  DBUG_ENTER(" Wsrep_high_priority_service::start_transaction");
-  DBUG_RETURN(m_thd->wsrep_cs().start_transaction(ws_handle, ws_meta));
+  return m_thd->wsrep_cs();
 }
-
-int Wsrep_high_priority_service::next_fragment(const wsrep::ws_meta& ws_meta)
-{
-  DBUG_ENTER(" Wsrep_high_priority_service::next_fragment");
-  DBUG_RETURN(m_thd->wsrep_cs().next_fragment(ws_meta));
-}
-
-const wsrep::transaction& Wsrep_high_priority_service::transaction() const
-{
-  DBUG_ENTER(" Wsrep_high_priority_service::transaction");
-  DBUG_RETURN(m_thd->wsrep_trx());
-}
-
-void Wsrep_high_priority_service::adopt_transaction(const wsrep::transaction& transaction)
-{
-  DBUG_ENTER(" Wsrep_high_priority_service::adopt_transaction");
-  m_thd->wsrep_cs().adopt_transaction(transaction);
-  DBUG_VOID_RETURN;
-}
-
 
 int Wsrep_high_priority_service::append_fragment_and_commit(
   const wsrep::ws_handle& ws_handle,
@@ -182,7 +160,7 @@ int Wsrep_high_priority_service::append_fragment_and_commit(
   const wsrep::const_buffer& data)
 {
   DBUG_ENTER("Wsrep_high_priority_service::append_fragment_and_commit");
-  int ret= start_transaction(ws_handle, ws_meta);
+  int ret= m_thd->wsrep_cs().start_transaction(ws_handle, ws_meta);
   /*
     Start transaction explicitly to avoid early commit via
     trans_commit_stmt() in append_fragment()
