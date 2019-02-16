@@ -4550,7 +4550,7 @@ public:
     if (WSREP(this))
     {
       set_wsrep_next_trx_id(query_id);
-      WSREP_DEBUG("assigned new next trx id: %lu", wsrep_next_trx_id());
+      WSREP_DEBUG("assigned new next trx id: %lld", wsrep_next_trx_id().get());
     }
 #endif /* WITH_WSREP */
   }
@@ -4859,17 +4859,10 @@ public:
   const char*               wsrep_TOI_pre_query; /* a query to apply before 
                                                     the actual TOI query */
   size_t                    wsrep_TOI_pre_query_len;
-  wsrep_po_handle_t         wsrep_po_handle;
-  size_t                    wsrep_po_cnt;
-#ifdef GTID_SUPPORT
-  my_bool                   wsrep_po_in_trans;
-  rpl_sid                   wsrep_po_sid;
-#endif /* GTID_SUPPORT */
   void                      *wsrep_apply_format;
   bool                      wsrep_apply_toi; /* applier processing in TOI */
   uchar*                    wsrep_rbr_buf;
-  wsrep_gtid_t              wsrep_sync_wait_gtid;
-  //  wsrep_gtid_t              wsrep_last_written_gtid;
+  wsrep::gtid               wsrep_sync_wait_gtid;
   ulong                     wsrep_affected_rows;
   bool                      wsrep_has_ignored_error;
   bool                      wsrep_replicate_GTID;
@@ -4881,7 +4874,6 @@ public:
   */
   bool                      wsrep_ignore_table;
   
-
   /*
     Transaction id:
     * m_wsrep_next_trx_id is assigned on the first query after
@@ -4893,9 +4885,9 @@ public:
   /*
     Return effective transaction id
   */
-  wsrep_trx_id_t wsrep_trx_id() const
+  wsrep::transaction_id wsrep_trx_id() const
   {
-    return m_wsrep_client_state.transaction().id().get();
+    return m_wsrep_client_state.transaction().id();
   }
 
 
@@ -4904,18 +4896,18 @@ public:
    */
   void set_wsrep_next_trx_id(query_id_t query_id)
   {
-    m_wsrep_next_trx_id = (wsrep_trx_id_t) query_id;
+    m_wsrep_next_trx_id = wsrep::transaction_id(query_id);
   }
   /*
     Return next trx id
    */
-  wsrep_trx_id_t wsrep_next_trx_id() const
+  wsrep::transaction_id wsrep_next_trx_id() const
   {
     return m_wsrep_next_trx_id;
   }
-
 private:
-  wsrep_trx_id_t m_wsrep_next_trx_id; /* cast from query_id_t */
+  // wsrep_trx_id_t m_wsrep_next_trx_id; /* cast from query_id_t */
+  wsrep::transaction_id m_wsrep_next_trx_id;
   /* wsrep-lib */
   Wsrep_mutex m_wsrep_mutex;
   Wsrep_condition_variable m_wsrep_cond;

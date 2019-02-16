@@ -5274,15 +5274,15 @@ String *Item_temptable_rowid::val_str(String *str)
 String *Item_func_wsrep_last_written_gtid::val_str_ascii(String *str)
 {
   wsrep::gtid gtid= current_thd->wsrep_cs().last_written_gtid();
-  if (gtid_str.alloc(wsrep::gtid_c_str_len()))
+  if (gtid_str.alloc(WSREP_LIB_GTID_C_STR_LEN))
   {
-    my_error(ER_OUTOFMEMORY, wsrep::gtid_c_str_len());
+    my_error(ER_OUTOFMEMORY, WSREP_LIB_GTID_C_STR_LEN);
     null_value= true;
     return NULL;
   }
 
-  ssize_t gtid_len= gtid_print_to_c_str(gtid, (char*) gtid_str.ptr(),
-                                        wsrep::gtid_c_str_len());
+  ssize_t gtid_len= wsrep::print_to_c_str(gtid, (char*) gtid_str.ptr(),
+                                          WSREP_LIB_GTID_C_STR_LEN);
   if (gtid_len < 0)
   {
     my_error(ER_ERROR_WHEN_EXECUTING_COMMAND, MYF(0), func_name(),
@@ -5299,14 +5299,14 @@ String *Item_func_wsrep_last_seen_gtid::val_str_ascii(String *str)
   /* TODO: Should call Wsrep_server_state.instance().last_committed_gtid()
      instead. */
   wsrep::gtid gtid= Wsrep_server_state::instance().provider().last_committed_gtid();
-  if (gtid_str.alloc(wsrep::gtid_c_str_len()))
+  if (gtid_str.alloc(WSREP_LIB_GTID_C_STR_LEN))
   {
-    my_error(ER_OUTOFMEMORY, wsrep::gtid_c_str_len());
+    my_error(ER_OUTOFMEMORY, WSREP_LIB_GTID_C_STR_LEN);
     null_value= true;
     return NULL;
   }
-  ssize_t gtid_len= wsrep::gtid_print_to_c_str(gtid, (char*) gtid_str.ptr(),
-                                               wsrep::gtid_c_str_len());
+  ssize_t gtid_len= wsrep::print_to_c_str(gtid, (char*) gtid_str.ptr(),
+                                          WSREP_LIB_GTID_C_STR_LEN);
   if (gtid_len < 0)
   {
     my_error(ER_ERROR_WHEN_EXECUTING_COMMAND, MYF(0), func_name(),
@@ -5333,16 +5333,16 @@ longlong Item_func_wsrep_sync_wait_upto::val_int()
     timeout= args[1]->val_int();
   }
 
-  wsrep_gtid_t gtid;
-  int gtid_len= wsrep_gtid_scan(gtid_str->ptr(), gtid_str->length(), &gtid);
-  if (gtid_len < 0)
+  wsrep::gtid gtid;
+  int err= wsrep::scan_from_c_str(gtid_str->ptr(), gtid_str->length(),
+                                  gtid);
+  if (err < 0)
   {
     my_error(ER_WRONG_ARGUMENTS, MYF(0), func_name());
     return 0LL;
   }
 
-  if (gtid.seqno == WSREP_SEQNO_UNDEFINED &&
-      wsrep_uuid_compare(&gtid.uuid, &WSREP_UUID_UNDEFINED) == 0)
+  if (gtid.is_undefined())
   {
     return 1LL;
   }

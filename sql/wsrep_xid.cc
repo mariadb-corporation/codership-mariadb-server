@@ -21,6 +21,9 @@
 #include "sql_class.h"
 #include "wsrep_mysqld.h" // for logging macros
 
+#include "wsrep/id.hpp"
+#include "wsrep/seqno.hpp"
+
 #include <mysql/service_wsrep.h>
 
 #include <algorithm> /* std::sort() */
@@ -34,8 +37,8 @@
 #define WSREP_XID_VERSION_1 'd'
 #define WSREP_XID_VERSION_2 'e'
 #define WSREP_XID_UUID_OFFSET 8
-#define WSREP_XID_SEQNO_OFFSET (WSREP_XID_UUID_OFFSET + sizeof(wsrep_uuid_t))
-#define WSREP_XID_GTRID_LEN (WSREP_XID_SEQNO_OFFSET + sizeof(wsrep_seqno_t))
+#define WSREP_XID_SEQNO_OFFSET (WSREP_XID_UUID_OFFSET + sizeof(wsrep::id::native_type))
+#define WSREP_XID_GTRID_LEN (WSREP_XID_SEQNO_OFFSET + sizeof(wsrep::seqno::native_type))
 
 void wsrep_xid_init(XID* xid, const wsrep::gtid& wsgtid)
 {
@@ -45,7 +48,8 @@ void wsrep_xid_init(XID* xid, const wsrep::gtid& wsgtid)
   memset(xid->data, 0, sizeof(xid->data));
   memcpy(xid->data, WSREP_XID_PREFIX, WSREP_XID_PREFIX_LEN);
   xid->data[WSREP_XID_VERSION_OFFSET]= WSREP_XID_VERSION_2;
-  memcpy(xid->data + WSREP_XID_UUID_OFFSET,  wsgtid.id().data(),sizeof(wsrep::id));
+  memcpy(xid->data + WSREP_XID_UUID_OFFSET,  wsgtid.id().data(),
+         sizeof(wsrep::id));
   int8store(xid->data + WSREP_XID_SEQNO_OFFSET, wsgtid.seqno().get());
 }
 
@@ -74,7 +78,7 @@ const unsigned char* wsrep_xid_uuid(const xid_t* xid)
 
 const wsrep::id& wsrep_xid_uuid(const XID& xid)
 {
-  compile_time_assert(sizeof(wsrep::id) == sizeof(wsrep_uuid_t));
+  compile_time_assert(sizeof(wsrep::id::native_type) == 16);
   return *reinterpret_cast<const wsrep::id*>(wsrep_xid_uuid(&xid));
 }
 
@@ -108,14 +112,12 @@ static my_bool set_SE_checkpoint(THD* unused, plugin_ref plugin, void* arg)
 {
   XID* xid= static_cast<XID*>(arg);
   handlerton* hton= plugin_data(plugin, handlerton *);
-
   if (hton->set_checkpoint)
   {
-    const unsigned char* uuid= wsrep_xid_uuid(xid);
-    char uuid_str[40]= {0, };
-    wsrep_uuid_print((const wsrep_uuid_t*)uuid, uuid_str, sizeof(uuid_str));
-    WSREP_DEBUG("Set WSREPXid for InnoDB:  %s:%lld",
-                uuid_str, (long long)wsrep_xid_seqno(xid));
+    std::ostringstream oss;
+    oss << wsrep::id(wsrep_xid_uuid(xid), sizeof(wsrep::id::native_type))
+        << ":" << wsrep_xid_seqno(xid);
+    WSREP_DEBUG("Set WSREPXid for InnoDB: %s", oss.str().c_str());
     hton->set_checkpoint(hton, xid);
   }
   return FALSE;
@@ -142,12 +144,11 @@ static my_bool get_SE_checkpoint(THD* unused, plugin_ref plugin, void* arg)
   if (hton->get_checkpoint)
   {
     hton->get_checkpoint(hton, xid);
-    wsrep_uuid_t uuid;
-    memcpy(&uuid, wsrep_xid_uuid(xid), sizeof(uuid));
-    char uuid_str[40]= {0, };
-    wsrep_uuid_print(&uuid, uuid_str, sizeof(uuid_str));
-    WSREP_DEBUG("Read WSREPXid from InnoDB:  %s:%lld",
-                uuid_str, (long long)wsrep_xid_seqno(xid));
+
+    std::ostringstream oss;
+    oss << wsrep::id(wsrep_xid_uuid(xid), sizeof(wsrep::id::native_type))
+        << ":" << wsrep_xid_seqno(xid);
+    WSREP_DEBUG("Read WSREPXid from InnoDB: %s", oss.str().c_str());
   }
   return FALSE;
 }

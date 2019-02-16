@@ -185,69 +185,11 @@ bool wsrep_before_SE()
 }
 
 // Signal end of SST
-static void wsrep_sst_complete (THD*                thd,
-                                int const           rcode)
+void wsrep_sst_complete (THD*                thd,
+                         int const           rcode)
 {
   Wsrep_client_service client_service(thd, thd->wsrep_cs());
   Wsrep_server_state::instance().sst_received(client_service, rcode);
-}
-
-  /*
-  If wsrep provider is loaded, inform that the new state snapshot
-  has been received. Also update the local checkpoint.
-
-  @param thd       [IN]
-  @param uuid      [IN]               Initial state UUID
-  @param seqno     [IN]               Initial state sequence number
-  @param state     [IN]               Always NULL, also ignored by wsrep provider (?)
-  @param state_len [IN]               Always 0, also ignored by wsrep provider (?)
-*/
-void wsrep_sst_received (THD*                thd,
-                         const wsrep_uuid_t& uuid,
-                         wsrep_seqno_t const seqno,
-                         const void* const   state,
-                         size_t const        state_len)
-{
-  /*
-    To keep track of whether the local uuid:seqno should be updated. Also, note
-    that local state (uuid:seqno) is updated/checkpointed only after we get an
-    OK from wsrep provider. By doing so, the values remain consistent across
-    the server & wsrep provider.
-  */
-    /*
-      TODO: Handle backwards compatibility. WSREP API v25 does not have
-      wsrep schema.
-    */
-    /*
-      Logical SST methods (mysqldump etc) don't update InnoDB sys header.
-      Reset the SE checkpoint before recovering view in order to avoid
-      sanity check failure.
-     */
-    wsrep::gtid const sst_gtid(wsrep::id(uuid.data, sizeof(uuid.data)),
-                               wsrep::seqno(seqno));
-
-    if (!wsrep_before_SE()) {
-      wsrep_set_SE_checkpoint(wsrep::gtid::undefined());
-      wsrep_set_SE_checkpoint(sst_gtid);
-    }
-    wsrep_verify_SE_checkpoint(uuid, seqno);
-
-    /*
-      Both wsrep_init_SR() and wsrep_recover_view() may use
-      wsrep thread pool. Restore original thd context before returning.
-    */
-    if (thd) {
-      thd->store_globals();
-    }
-    else {
-      my_pthread_setspecific_ptr(THR_THD, NULL);
-    }
-
-    if (WSREP_ON)
-    {
-      int const rcode(seqno < 0 ? seqno : 0);
-      wsrep_sst_complete(thd,rcode);
-    }
 }
 
 struct sst_thread_arg
@@ -274,24 +216,18 @@ struct sst_thread_arg
   }
 };
 
-static int sst_scan_uuid_seqno (const char* str,
-                                wsrep_uuid_t* uuid, wsrep_seqno_t* seqno)
+static int sst_scan_gtid(const char* str, wsrep::gtid& gtid)
 {
-  int offt= wsrep_uuid_scan (str, strlen(str), uuid);
-  errno= 0;                                     /* Reset the errno */
-  if (offt > 0 && strlen(str) > (unsigned int)offt && ':' == str[offt])
+  if (wsrep::scan_from_c_str(str, strlen(str), gtid) > 0)
   {
-    *seqno= strtoll (str + offt + 1, NULL, 10);
-    if (*seqno != LLONG_MAX || errno != ERANGE)
-    {
-      return 0;
-    }
+    return 0;
   }
-
-  WSREP_ERROR("Failed to parse uuid:seqno pair: '%s'", str);
-  return -EINVAL;
+  else
+  {
+    WSREP_ERROR("Failed to parse uuid:seqno pair: '%s'", str);
+    return -EINVAL;
+  }
 }
-
 // get rid of trailing \n
 static char* my_fgets (char* buf, size_t buf_len, FILE* stream)
 {
@@ -408,9 +344,7 @@ static void* sst_joiner_thread (void* a)
                            * initializer thread to ensure single thread of
                            * shutdown. */
 
-    wsrep_uuid_t  ret_uuid = WSREP_UUID_UNDEFINED;
-    wsrep_seqno_t ret_seqno= WSREP_SEQNO_UNDEFINED;
-
+    wsrep::gtid ret_gtid;
     // in case of successfull receiver start, wait for SST completion/end
     char* tmp= my_fgets (out, out_len, proc.pipe());
 
@@ -437,16 +371,14 @@ static void* sst_joiner_thread (void* a)
                      "Domain ID must be set manually to keep binlog consistent",
                      out);
         }
-        err= sst_scan_uuid_seqno (out, &ret_uuid, &ret_seqno);
-
+        err= sst_scan_gtid(out, ret_gtid);
       } else {
         // Scan state ID first followed by wsrep_gtid_domain_id.
         unsigned long int domain_id;
 
         // Null-terminate the state-id.
         out[pos - out]= 0;
-        err= sst_scan_uuid_seqno (out, &ret_uuid, &ret_seqno);
-
+        err= sst_scan_gtid(out, ret_gtid);
         if (err)
         {
           goto err;
@@ -472,16 +404,9 @@ static void* sst_joiner_thread (void* a)
 
 err:
 
-    wsrep::gtid ret_gtid;
-
     if (err)
     {
       ret_gtid= wsrep::gtid::undefined();
-    }
-    else
-    {
-      ret_gtid= wsrep::gtid(wsrep::id(ret_uuid.data, sizeof(ret_uuid.data)),
-                            wsrep::seqno(ret_seqno));
     }
 
     /*
@@ -736,7 +661,7 @@ std::string wsrep_sst_prepare()
 
   if (!strcmp(wsrep_sst_method, WSREP_SST_SKIP))
   {
-    return WSREP_STATE_TRANSFER_TRIVIAL;
+    return wsrep::server_state::sst_trivial();
   }
 
   /*
@@ -946,7 +871,7 @@ static int sst_donate_mysqldump (const char*         addr,
   return ret;
 }
 
-wsrep_seqno_t wsrep_locked_seqno= WSREP_SEQNO_UNDEFINED;
+wsrep::seqno wsrep_locked_seqno;
 
 /*
   Create a file under data directory.
@@ -1088,7 +1013,7 @@ static int sst_flush_tables(THD* thd)
     */
     char content[100];
     snprintf(content, sizeof(content), "%s:%lld %d\n", wsrep_cluster_state_uuid,
-             (long long)wsrep_locked_seqno, wsrep_gtid_domain_id);
+             wsrep_locked_seqno.get(), wsrep_gtid_domain_id);
     err= sst_create_file(flush_success, content);
 
     const char base_name[]= "tables_flushed";
@@ -1171,9 +1096,7 @@ static void* sst_donor_thread (void* a)
   const size_t out_len= 128;
   char         out_buf[out_len];
 
-  wsrep_uuid_t  ret_uuid= WSREP_UUID_UNDEFINED;
-  wsrep_seqno_t ret_seqno= WSREP_SEQNO_UNDEFINED; // seqno of complete SST
-
+  wsrep::gtid ret_gtid;
   wsp::thd thd(FALSE); // we turn off wsrep_on for this THD so that it can
                        // operate with wsrep_ready == OFF
   wsp::process proc(arg->cmd, "r", arg->env);
@@ -1235,8 +1158,7 @@ wait_signal:
       }
       else if (!strncasecmp (out, magic_done, strlen(magic_done)))
       {
-        err= sst_scan_uuid_seqno (out + strlen(magic_done) + 1,
-                                  &ret_uuid, &ret_seqno);
+        err= sst_scan_gtid(out + strlen(magic_done) + 1, ret_gtid);
       }
       else
       {
@@ -1268,10 +1190,7 @@ wait_signal:
     thd.ptr->global_read_lock.unlock_global_read_lock(thd.ptr);
   }
 
-  wsrep::gtid gtid(wsrep::id(ret_uuid.data, sizeof(ret_uuid.data)),
-                   wsrep::seqno(err ? wsrep::seqno::undefined() :
-                                wsrep::seqno(ret_seqno)));
-  Wsrep_server_state::instance().sst_sent(gtid, err);
+  Wsrep_server_state::instance().sst_sent(ret_gtid, err);
   proc.wait();
 
   return NULL;
@@ -1380,14 +1299,14 @@ int wsrep_sst_donate(const std::string& msg,
   if (env.error())
   {
     WSREP_ERROR("wsrep_sst_donate_cb(): env var ctor failed: %d", -env.error());
-    return WSREP_CB_FAILURE;
+    return 1;
   }
 
   int ret;
   if ((ret= sst_append_auth_env(env, sst_auth_real)))
   {
     WSREP_ERROR("wsrep_sst_donate_cb(): appending auth env failed: %d", ret);
-    return WSREP_CB_FAILURE;
+    return 1;
   }
 
   if (data_home_dir)
@@ -1396,7 +1315,7 @@ int wsrep_sst_donate(const std::string& msg,
     {
       WSREP_ERROR("wsrep_sst_donate_cb(): appending data "
                   "directory failed: %d", ret);
-      return WSREP_CB_FAILURE;
+      return 1;
     }
   }
 

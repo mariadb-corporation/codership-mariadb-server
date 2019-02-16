@@ -156,9 +156,22 @@ void Wsrep_server_service::log_view(
   {
     global_system_variables.auto_increment_offset= view.own_index() + 1;
     global_system_variables.auto_increment_increment= view.members().size();
-    wsrep_protocol_version= view.protocol_version();
   }
+  wsrep_protocol_version= view.protocol_version();
   mysql_mutex_unlock(&LOCK_global_system_variables);
+
+  /* Protocol version check:
+     - Support rolling upgrade from 10.3 which uses protocol version 3
+     - Protocol version 4 is highest supported by 10.4 */
+  if (view.status() == wsrep::view::primary &&
+      (wsrep_protocol_version < 3 || wsrep_protocol_version > 4))
+  {
+    WSREP_ERROR("Protocol version %ld not supported",
+                wsrep_protocol_version);
+    /* This will be caught by wsrep-lib and the error will be propagated
+       to applier thread. */
+    throw wsrep::runtime_error("Protocol version not supported");
+  }
 
   /* Update wsrep status variables */
   mysql_mutex_lock(&LOCK_status);

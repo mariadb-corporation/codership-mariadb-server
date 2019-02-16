@@ -32,15 +32,15 @@ IF(WITH_WSREP)
   # Set the patch version
   SET(WSREP_PATCH_VERSION "22")
 
-  IF(NOT EXISTS "${CMAKE_SOURCE_DIR}/wsrep-lib/wsrep-API/v26/wsrep_api.h")
-    MESSAGE(FATAL_ERROR "No MariaDB wsrep-API code! Run
+  IF(NOT EXISTS "${CMAKE_SOURCE_DIR}/wsrep-lib/include/wsrep/version.hpp")
+    MESSAGE(FATAL_ERROR "No MariaDB wsrep-lib code! Run
     ${GIT_EXECUTABLE} submodule update --init --recursive
 Then restart the build.
 ")
   ENDIF()
-  # Obtain wsrep API version
-  FILE(STRINGS "${CMAKE_SOURCE_DIR}/wsrep-lib/wsrep-API/v26/wsrep_api.h" WSREP_API_VERSION
-       LIMIT_COUNT 1 REGEX "WSREP_INTERFACE_VERSION")
+  # Obtain wsrep-lib version
+  FILE(STRINGS "${CMAKE_SOURCE_DIR}/wsrep-lib/include/wsrep/version.hpp" WSREP_API_VERSION
+    LIMIT_COUNT 1 REGEX "WSREP_LIB_MAX_API_VERSION")
   STRING(REGEX MATCH "([0-9]+)" WSREP_API_VERSION "${WSREP_API_VERSION}")
 
   SET(WSREP_VERSION "${WSREP_API_VERSION}.${WSREP_PATCH_VERSION}"

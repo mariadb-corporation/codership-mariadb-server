@@ -84,6 +84,7 @@
 
 #ifdef WITH_WSREP
 #include "wsrep_trans_observer.h" /* wsrep_start_transction() */
+#include "wsrep_mysqld.h" /* wsrep_prepare_keys_for_toi() */
 #endif /* WITH_WSREP */
 
 #ifndef EMBEDDED_LIBRARY
@@ -4594,26 +4595,23 @@ bool select_create::send_eof()
 #ifdef WITH_WSREP
     if (WSREP(thd))
     {
-      if (thd->wsrep_trx_id() == WSREP_UNDEFINED_TRX_ID)
+      if (thd->wsrep_trx_id().is_undefined())
       {
         wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
       }
-      DBUG_ASSERT(thd->wsrep_trx_id() != WSREP_UNDEFINED_TRX_ID);
-      WSREP_DEBUG("CTAS key append for trx: %lu thd %llu query %lld ",
-                  thd->wsrep_trx_id(), thd->thread_id, thd->query_id);
+      DBUG_ASSERT(!thd->wsrep_trx_id().is_undefined());
+      WSREP_DEBUG("CTAS key append for trx: %lld thd %llu query %lld ",
+                  thd->wsrep_trx_id().get(), thd->thread_id, thd->query_id);
 
       /*
         append table level exclusive key for CTAS
       */
-      wsrep_key_arr_t key_arr= {0, 0};
-      wsrep_prepare_keys_for_isolation(thd,
-                                       create_table->db.str,
-                                       create_table->table_name.str,
-                                       table_list,
-                                       &key_arr);
-      int rcode= wsrep_thd_append_key(thd, key_arr.keys, key_arr.keys_len,
-                                      WSREP_SERVICE_KEY_EXCLUSIVE);
-      wsrep_keys_free(&key_arr);
+      wsrep::key_array key_arr= wsrep_prepare_keys_for_toi(
+        create_table->db.str,
+        create_table->table_name.str,
+        table_list,
+        NULL);
+      int rcode= wsrep_append_keys(thd, key_arr);
       if (rcode)
       {
         DBUG_PRINT("wsrep", ("row key failed: %d", rcode));

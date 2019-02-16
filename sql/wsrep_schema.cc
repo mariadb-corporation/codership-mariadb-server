@@ -755,7 +755,7 @@ Wsrep_view Wsrep_schema::restore_view(THD* thd, const Wsrep_id& own_id) const {
   wsrep_seqno_t view_seqno= -1;
   int my_idx= -1;
   int proto_ver= 0;
-  wsrep_cap_t capabilities= 0;
+  int capabilities= 0;
   std::vector<Wsrep_view::member> members;
 
   // we don't want causal waits for reading non-replicated private data

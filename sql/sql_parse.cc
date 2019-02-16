@@ -1597,10 +1597,11 @@ bool dispatch_command(enum enum_server_command command, THD *thd,
     thd->set_query_id(get_query_id());
   }
 #ifdef WITH_WSREP
-  if (WSREP(thd) && thd->wsrep_next_trx_id() == WSREP_UNDEFINED_TRX_ID)
+  if (WSREP(thd) && thd->wsrep_next_trx_id().is_undefined())
   {
     thd->set_wsrep_next_trx_id(thd->query_id);
-    WSREP_DEBUG("assigned new next trx id: %lu", thd->wsrep_next_trx_id());
+    WSREP_DEBUG("assigned new next trx id: %lld",
+                thd->wsrep_next_trx_id().get());
   }
 #endif /* WITH_WSREP */
 
@@ -8189,7 +8190,7 @@ void mysql_parse(THD *thd, char *rawbuf, uint length,
 #ifdef WITH_WSREP
     if (WSREP_CLIENT(thd))
     {
-      thd->wsrep_sync_wait_gtid= WSREP_GTID_UNDEFINED;
+      thd->wsrep_sync_wait_gtid= wsrep::gtid::undefined();
     }
 #endif /* WITH_WSREP */
   }

@@ -1105,7 +1105,7 @@ void Global_read_lock::unlock_global_read_lock(THD *thd)
         (wsrep_on(thd) && server_state.state() != Wsrep_server_state::s_synced))
     {
       /* TODO: maybe redundant here?: */
-      wsrep_locked_seqno= WSREP_SEQNO_UNDEFINED;
+      wsrep_locked_seqno= wsrep::seqno::undefined();
       server_state.resume();
     }
     else if (wsrep_on(thd) && server_state.state() == Wsrep_server_state::s_synced)
@@ -1179,7 +1179,7 @@ bool Global_read_lock::make_global_read_lock_block_commit(THD *thd)
   WSREP_INFO("Server paused at: %lld", paused_seqno.get());
   if (paused_seqno.get() >= 0)
   {
-    wsrep_locked_seqno= paused_seqno.get();
+    wsrep_locked_seqno= paused_seqno;
   }
 #endif /* WITH_WSREP */
   DBUG_RETURN(FALSE);

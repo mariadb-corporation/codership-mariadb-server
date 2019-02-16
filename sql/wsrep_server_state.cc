@@ -14,7 +14,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
 #include "my_global.h"
-#include "wsrep_api.h"
 #include "wsrep_server_state.h"
 #include "wsrep_binlog.h" /* init/deinit group commit */
 

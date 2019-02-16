@@ -48,8 +48,7 @@ permission notice:
 
 #include "common.h"
 #ifdef WITH_WSREP
-
-#include <wsrep_api.h>
+#include "wsrep_xid.h"
 
 /*! Name of file where Galera info is stored on recovery */
 #define XB_GALERA_INFO_FILENAME "xtrabackup_galera_info"
@@ -63,8 +62,6 @@ xb_write_galera_info(bool incremental_prepare)
 {
 	FILE*		fp;
 	XID		xid;
-	char		uuid_str[40];
-	long long	seqno;
 	MY_STAT		statinfo;
 
 	/* Do not overwrite existing an existing file to be compatible with
@@ -82,12 +79,8 @@ xb_write_galera_info(bool incremental_prepare)
 		return;
 	}
 
-	wsrep_uuid_t uuid;
-	memcpy(uuid.data, wsrep_xid_uuid(&xid), sizeof(uuid.data));
-	if (wsrep_uuid_print(&uuid, uuid_str,
-			     sizeof(uuid_str)) < 0) {
-		return;
-	}
+	const wsrep::id& uuid= wsrep_xid_uuid(xid);
+	const wsrep::seqno seqno= wsrep_xid_seqno(xid);
 
 	fp = fopen(XB_GALERA_INFO_FILENAME, "w");
 	if (fp == NULL) {
@@ -99,12 +92,14 @@ xb_write_galera_info(bool incremental_prepare)
 		exit(EXIT_FAILURE);
 	}
 
-	seqno = wsrep_xid_seqno(&xid);
+	const wsrep::gtid gtid(uuid, seqno);
+	std::ostringstream oss;
+	oss << gtid;
 
-	msg("mariabackup: Recovered WSREP position: %s:%lld\n",
-	    uuid_str, (long long) seqno);
+	msg("mariabackup: Recovered WSREP position: %s\n",
+	    oss.str().c_str());
 
-	if (fprintf(fp, "%s:%lld", uuid_str, (long long) seqno) < 0) {
+	if (fprintf(fp, "%s", oss.str().c_str()) < 0) {
 
 		die(
 		    "could not write to " XB_GALERA_INFO_FILENAME
