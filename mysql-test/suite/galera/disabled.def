@@ -37,16 +37,16 @@ galera.galera_bf_abort_group_commit : MDEV-18282 Galera test failure on galera.g
 ###################################################################
 # Tests with Result length mismatch 
 ###################################################################
-galera_account_management : MariaDB 10.0 does not support ALTER USER
-GAL-419 : MDEV-13549 Galera test failures
-MW-329 : wsrep_local_replays not stable
-MW-416 : MDEV-13549 Galera test failures
-MW-44 : MDEV-15809 Test failure on galera.MW-44
-galera_sst_mysqldump_with_key : MDEV-16890 Galera test failure
-MW-336 : nondeterministic wsrep_thread_count
-galera_binlog_stmt_autoinc : MDEV-17106 Test failure on galera.galera_binlog_stmt_autoinc
-galera_pc_ignore_sb : MDEV-17357 Test failure on galera.galera_pc_ignore_sb
-galera.GCF-1081 : MDEV-18283 Galera test failure on galera.GCF-1081
+#galera_account_management : MariaDB 10.0 does not support ALTER USER
+#GAL-419 : MDEV-13549 Galera test failures
+#MW-329 : wsrep_local_replays not stable
+#MW-416 : MDEV-13549 Galera test failures
+#MW-44 : MDEV-15809 Test failure on galera.MW-44
+#galera_sst_mysqldump_with_key : MDEV-16890 Galera test failure
+#MW-336 : nondeterministic wsrep_thread_count
+#galera_binlog_stmt_autoinc : MDEV-17106 Test failure on galera.galera_binlog_stmt_autoinc
+#galera_pc_ignore_sb : MDEV-17357 Test failure on galera.galera_pc_ignore_sb
+#galera.GCF-1081 : MDEV-18283 Galera test failure on galera.GCF-1081
 
 ####################################################################
 # Tests are ENABLED in 10.4.4 MariaDB can be removed from this file#
