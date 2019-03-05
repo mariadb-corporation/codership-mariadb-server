@@ -1,4 +1,10 @@
+connection node_2;
+connection node_1;
+connection node_1;
 SET SESSION wsrep_sync_wait = 0;
 Killing server ...
+connection node_2;
 SET SESSION wsrep_sync_wait = 0;
 Killing server ...
+connection node_1;
+connection node_2;
