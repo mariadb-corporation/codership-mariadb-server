@@ -22,7 +22,6 @@ i	c
 3	dummy_text
 5	dummy_text
 7	dummy_text
-9	dummy_text
 connection node_2;
 select * from t1;
 i	c
@@ -57,7 +56,6 @@ i	c
 4	dummy_text
 7	dummy_text
 10	dummy_text
-13	dummy_text
 connection node_2;
 select * from t1;
 i	c
@@ -65,7 +63,6 @@ i	c
 4	dummy_text
 7	dummy_text
 10	dummy_text
-13	dummy_text
 connection node_1;
 SET GLOBAL wsrep_auto_increment_control='ON';
 SET SESSION binlog_format='ROW';
@@ -105,7 +102,6 @@ i	c
 3	dummy_text
 5	dummy_text
 7	dummy_text
-9	dummy_text
 connection node_2;
 select * from t1;
 i	c
@@ -140,7 +136,6 @@ i	c
 4	dummy_text
 7	dummy_text
 10	dummy_text
-13	dummy_text
 connection node_2;
 select * from t1;
 i	c
@@ -148,7 +143,6 @@ i	c
 4	dummy_text
 7	dummy_text
 10	dummy_text
-13	dummy_text
 connection node_1;
 SET GLOBAL wsrep_auto_increment_control='ON';
 show variables like 'binlog_format';
