@@ -109,3 +109,59 @@ expect 0
 connection node_1;
 XA COMMIT 'test';
 DROP TABLE t1;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+SET SESSION wsrep_trx_fragment_size=1;
+XA START 'test';
+INSERT INTO t1 VALUES (10);
+INSERT INTO t1 VALUES (20);
+INSERT INTO t1 VALUES (30);
+INSERT INTO t1 VALUES (40);
+SELECT COUNT(*) `expect 4` FROM mysql.wsrep_streaming_log;
+expect 4
+4
+connection node_2;
+expect empty set
+SELECT * FROM t1;
+f1
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SELECT * FROM t1;
+f1
+10
+20
+30
+40
+SELECT COUNT(*) `expect 4` FROM mysql.wsrep_streaming_log;
+expect 4
+4
+connection node_1;
+XA END 'test';
+XA PREPARE 'test';
+connection node_1a;
+SELECT COUNT(*) `expect 5` FROM mysql.wsrep_streaming_log;
+expect 5
+5
+connection node_1;
+XA COMMIT 'test';
+SELECT * FROM t1;
+f1
+10
+20
+30
+40
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+expect 0
+0
+connection node_2;
+SELECT * FROM t1;
+f1
+10
+20
+30
+40
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+expect 0
+0
+connection node_1;
+SET SESSION wsrep_trx_fragment_size=0;
+DROP TABLE t1;
