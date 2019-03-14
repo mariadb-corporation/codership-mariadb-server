@@ -189,7 +189,8 @@ int Wsrep_high_priority_service::adopt_transaction(
 int Wsrep_high_priority_service::append_fragment_and_commit(
   const wsrep::ws_handle& ws_handle,
   const wsrep::ws_meta& ws_meta,
-  const wsrep::const_buffer& data)
+  const wsrep::const_buffer& data,
+  const std::string& xid)
 {
   DBUG_ENTER("Wsrep_high_priority_service::append_fragment_and_commit");
   int ret= start_transaction(ws_handle, ws_meta);
@@ -203,7 +204,8 @@ int Wsrep_high_priority_service::append_fragment_and_commit(
                                             ws_meta.transaction_id(),
                                             ws_meta.seqno(),
                                             ws_meta.flags(),
-                                            data);
+                                            data,
+                                            xid);
 
   /*
     Note: The commit code below seems to be identical to
@@ -238,12 +240,13 @@ int Wsrep_high_priority_service::append_fragment_and_commit(
   DBUG_RETURN(ret);
 }
 
-int Wsrep_high_priority_service::remove_fragments(const wsrep::ws_meta& ws_meta)
+int Wsrep_high_priority_service::remove_fragments(const wsrep::id& server_id,
+                                                  const wsrep::transaction_id& trx_id)
 {
   DBUG_ENTER("Wsrep_high_priority_service::remove_fragments");
   int ret= wsrep_schema->remove_fragments(m_thd,
-                                          ws_meta.server_id(),
-                                          ws_meta.transaction_id(),
+                                          server_id,
+                                          trx_id,
                                           m_thd->wsrep_sr().fragments());
   DBUG_RETURN(ret);
 }

@@ -41,8 +41,10 @@ public:
   int apply_write_set(const wsrep::ws_meta&, const wsrep::const_buffer&) = 0;
   int append_fragment_and_commit(const wsrep::ws_handle&,
                                  const wsrep::ws_meta&,
-                                 const wsrep::const_buffer&);
-  int remove_fragments(const wsrep::ws_meta&);
+                                 const wsrep::const_buffer&,
+                                 const std::string&);
+  int remove_fragments(const wsrep::id&,
+                       const wsrep::transaction_id&);
   int commit(const wsrep::ws_handle&, const wsrep::ws_meta&);
   int rollback(const wsrep::ws_handle&, const wsrep::ws_meta&);
   int apply_toi(const wsrep::ws_meta&, const wsrep::const_buffer&);

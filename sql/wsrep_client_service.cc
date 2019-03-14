@@ -151,7 +151,6 @@ void Wsrep_client_service::cleanup_transaction()
 
 bool Wsrep_client_service::is_xa() const
 {
-  DBUG_ASSERT(m_thd == current_thd);
   return m_thd->transaction.xid_state.xa_state != XA_NOTR;
 }
 
@@ -159,6 +158,25 @@ bool Wsrep_client_service::is_xa_prepare() const
 {
   DBUG_ASSERT(m_thd == current_thd);
   return m_thd->lex->sql_command == SQLCOM_XA_PREPARE;
+}
+
+std::string Wsrep_client_service::xid() const
+{
+  if (is_xa())
+  {
+    char xid_buf[SQL_XIDSIZE];
+    get_sql_xid(&m_thd->transaction.xid_state.xid, xid_buf);
+    return xid_buf;
+  }
+  return "";
+}
+
+int Wsrep_client_service::retrieve_trx_info_by_xid(const std::string& xid,
+                                                   wsrep::id& server_id,
+                                                   wsrep::transaction_id& trx_id,
+                                                   std::vector<wsrep::seqno>& seqnos)
+{
+  return wsrep_schema->scan_fragments_by_xid(xid, server_id, trx_id, seqnos);
 }
 
 static int write_xa_event_helper(THD* thd,

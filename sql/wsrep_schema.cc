@@ -86,6 +86,7 @@ static const std::string create_frag_table_str=
   "seqno BIGINT, "
   "flags INT NOT NULL, "
   "frag LONGBLOB NOT NULL, "
+  "xid VARCHAR(256) NOT NULL,"
   "PRIMARY KEY (node_uuid, trx_id, seqno)"
   ") ENGINE=InnoDB";
 
@@ -476,6 +477,13 @@ static int scan(TABLE* table, uint field, char* strbuf, uint strbuf_len)
   (void)table->field[field]->val_str(&str);
   strncpy(strbuf, str.c_ptr(), std::min(str.length(), strbuf_len));
   strbuf[strbuf_len - 1]= '\0';
+  return 0;
+}
+
+static int scan(TABLE* table, uint field, String& str)
+{
+  assert(field < table->s->fields);
+  (void)table->field[field]->val_str(&str);
   return 0;
 }
 
@@ -881,7 +889,8 @@ int Wsrep_schema::append_fragment(THD* thd,
                                   wsrep::transaction_id transaction_id,
                                   wsrep::seqno seqno,
                                   int flags,
-                                  const wsrep::const_buffer& data)
+                                  const wsrep::const_buffer& data,
+                                  const std::string& xid)
 {
   DBUG_ENTER("Wsrep_schema::append_fragment");
   std::ostringstream os;
@@ -905,6 +914,7 @@ int Wsrep_schema::append_fragment(THD* thd,
   Wsrep_schema_impl::store(frag_table, 2, seqno.get());
   Wsrep_schema_impl::store(frag_table, 3, flags);
   Wsrep_schema_impl::store(frag_table, 4, data.data(), data.size());
+  Wsrep_schema_impl::store(frag_table, 5, xid);
 
   int error;
   if ((error= Wsrep_schema_impl::insert(frag_table))) {
@@ -1315,8 +1325,17 @@ int Wsrep_schema::recover_sr_transactions(THD *orig_thd)
       wsrep::gtid gtid(cluster_id, seqno);
       int flags;
       Wsrep_schema_impl::scan(frag_table, 3, flags);
-      String data_str;
 
+      // TODO handle the case where XA has streaming enabled,
+      //      and might have more than one fragment (and only
+      //      one of them has PREPARE flag
+      if ((flags & WSREP_FLAG_TRX_PREPARE))
+      {
+        WSREP_DEBUG("Skip recovery of prepare fragment, flags: %d", flags);
+        continue;
+      }
+
+      String data_str;
       (void)frag_table->field[4]->val_str(&data_str);
       wsrep::const_buffer data(data_str.c_ptr_quick(), data_str.length());
       wsrep::ws_meta ws_meta(gtid,
@@ -1362,5 +1381,87 @@ int Wsrep_schema::recover_sr_transactions(THD *orig_thd)
   Wsrep_schema_impl::finish_stmt(&storage_thd);
   trans_commit(&storage_thd);
 out:
+  DBUG_RETURN(ret);
+}
+
+int Wsrep_schema::scan_fragments_by_xid(const std::string& xid,
+                                        wsrep::id& server_id,
+                                        wsrep::transaction_id& trx_id,
+                                        std::vector<wsrep::seqno>& fragments)
+{
+  DBUG_ENTER("Wsrep_schema::scan_fragments_by_xid");
+
+  int ret= 1;
+  int error= 0;
+  TABLE* frag_table= 0;
+  String xid_match;
+  xid_match.append(xid.c_str(), xid.length());
+
+  THD thd(next_thread_id(), true);
+  thd.thread_stack= (char*)&thd;
+  thd.wsrep_skip_locking= TRUE;
+  wsrep_init_thd_for_schema(&thd);
+
+  if (trans_begin(&thd, MYSQL_START_TRANS_OPT_READ_ONLY)) {
+    WSREP_ERROR("Failed to start transaction");
+    goto out;
+  }
+
+  Wsrep_schema_impl::init_stmt(&thd);
+  if (Wsrep_schema_impl::open_for_read(&thd, sr_table_str.c_str(), &frag_table) ||
+      Wsrep_schema_impl::init_for_scan(frag_table)) {
+    goto out;
+  }
+
+  while (true) {
+    if ((error= Wsrep_schema_impl::next_record(frag_table)) == 0) {
+      String frag_xid;
+      Wsrep_schema_impl::scan(frag_table, 5, frag_xid);
+      if (!stringcmp(&frag_xid, &xid_match)) {
+        WSREP_DEBUG("xid_match");
+        long long transaction_id_ll, seqno_ll;
+        Wsrep_schema_impl::scan(frag_table, 0, server_id);
+        Wsrep_schema_impl::scan(frag_table, 1, transaction_id_ll);
+        Wsrep_schema_impl::scan(frag_table, 2, seqno_ll);
+
+        wsrep::transaction_id tid(transaction_id_ll);
+        trx_id = tid;
+        WSREP_DEBUG("found seqno %lld for transaction %lld %lld",
+                    seqno_ll, transaction_id_ll, trx_id.get());
+
+        wsrep::seqno seqno(seqno_ll);
+        fragments.push_back(seqno);
+      }
+      else
+      {
+        WSREP_DEBUG("xids do not match");
+      }
+    }
+    else if (error == HA_ERR_END_OF_FILE) {
+      break;
+    }
+    else {
+      WSREP_ERROR("Frag table scan returned error: %d", error);
+      goto out;
+    }
+  }
+
+  if (Wsrep_schema_impl::end_scan(frag_table)) {
+    goto out;
+  }
+  Wsrep_schema_impl::finish_stmt(&thd);
+
+  (void)trans_commit(&thd);
+  ret= 0;
+
+out:
+  if (ret) {
+    trans_rollback_stmt(&thd);
+    if (!trans_rollback(&thd)) {
+      close_thread_tables(&thd);
+    }
+  }
+  thd.mdl_context.release_transactional_locks();
+
   DBUG_RETURN(ret);
 }

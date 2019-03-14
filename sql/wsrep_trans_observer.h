@@ -145,6 +145,20 @@ static inline int wsrep_start_trx_if_not_started(THD* thd)
 }
 
 /*
+  Restore the transaction with the given xid.
+
+  Return zero on success, non-zero on failures.
+ */
+static inline int wsrep_restore_trx_by_xid(THD* thd, XID* xid)
+{
+  char xid_buf[SQL_XIDSIZE];
+  get_sql_xid(xid, xid_buf);
+  std::string xid_string(xid_buf);
+  WSREP_DEBUG("xid_string %s", xid_string.c_str());
+  return thd->wsrep_cs().restore_prepared_transaction(xid_string);
+}
+
+/*
   Called after each row operation.
 
   Return zero on succes, non-zero on failure.

@@ -79,7 +79,8 @@ class Wsrep_schema
                       wsrep::transaction_id transaction_id,
                       wsrep::seqno seqno,
                       int flags,
-                      const wsrep::const_buffer& data);
+                      const wsrep::const_buffer& data,
+                      const std::string& xid);
   /**
      Update existing fragment meta data. The fragment must have been
      inserted before using append_fragment().
@@ -132,6 +133,11 @@ class Wsrep_schema
      @return Zero on success, non-zero on failure.
   */
   int recover_sr_transactions(THD* orig_thd);
+
+  int scan_fragments_by_xid(const std::string& xid,
+                            wsrep::id& server_id,
+                            wsrep::transaction_id& trx_id,
+                            std::vector<wsrep::seqno>& fragments);
 
  private:
   /* Non-copyable */
