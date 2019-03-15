@@ -1058,14 +1058,20 @@ bool trans_xa_rollback(THD *thd)
     {
       xa_trans_rolled_back(xs);
 #ifdef WITH_WSREP
-      wsrep_restore_trx_by_xid(thd, thd->lex->xid);
-      thd->transaction.xid_state.xa_state= XA_PREPARED;
-      res= wsrep_before_rollback(thd, true);
+      if (WSREP(thd))
+      {
+        wsrep_restore_trx_by_xid(thd, thd->lex->xid);
+        thd->transaction.xid_state.xa_state= XA_PREPARED;
+        wsrep_before_rollback(thd, true);
+      }
 #endif /* WITH_WSREP */
       ha_commit_or_rollback_by_xid(thd->lex->xid, 0);
 #ifdef WITH_WSREP
-      wsrep_after_rollback(thd, true);
-      thd->transaction.xid_state.xa_state= XA_NOTR;
+      if (WSREP(thd))
+      {
+        wsrep_after_rollback(thd, true);
+        thd->transaction.xid_state.xa_state= XA_NOTR;
+      }
 #endif /* WITH_WSREP */
       xid_cache_delete(thd, xs);
     }
