@@ -22,6 +22,7 @@
 #include "wsrep_priv.h"
 #include "wsrep_thd.h"
 #include "wsrep_xid.h"
+#include "wsrep_sst.h"
 #include <my_dir.h>
 #include <cstdio>
 #include <cstdlib>
@@ -114,35 +115,13 @@ bool wsrep_sync_wait_update (sys_var* self, THD* thd, enum_var_type var_type)
 static
 bool wsrep_start_position_verify (const char* start_str)
 {
-  size_t        start_len;
-  wsrep_uuid_t  uuid;
-  ssize_t       uuid_len;
-
-  // Check whether it has minimum acceptable length.
-  start_len= strlen (start_str);
-  if (start_len < 34)
+  wsrep::gtid gtid;
+  const ssize_t str_len= strlen(start_str);
+  if (wsrep::scan_from_c_str(start_str, str_len, gtid) != str_len)
+  {
     return true;
-
-  /*
-    Parse the input to check whether UUID length is acceptable
-    and seqno has been provided.
-  */
-  uuid_len= wsrep_uuid_scan (start_str, start_len, &uuid);
-  if (uuid_len < 0 || (start_len - uuid_len) < 2)
-    return true;
-
-  // Separator must follow the UUID.
-  if (start_str[uuid_len] != ':')
-    return true;
-
-  char* endptr;
-  wsrep_seqno_t const seqno __attribute__((unused)) // to avoid GCC warnings
-    (strtoll(&start_str[uuid_len + 1], &endptr, 10));
-
-  // Remaining string was seqno.
-  if (*endptr == '\0') return false;
-
-  return true;
+  }
+  return false;
 }
 
 
@@ -150,15 +129,20 @@ static
 bool wsrep_set_local_position(THD* thd, const char* const value,
                               size_t length, bool const sst)
 {
-  wsrep_uuid_t uuid;
-  size_t const uuid_len= wsrep_uuid_scan(value, length, &uuid);
-  wsrep_seqno_t const seqno= strtoll(value + uuid_len + 1, NULL, 10);
-
-  if (sst) {
-    wsrep_sst_received (thd, uuid, seqno, NULL, 0);
-  } else {
-    local_uuid= uuid;
-    local_seqno= seqno;
+  wsrep::gtid gtid;
+  if (wsrep::scan_from_c_str(value, length, gtid) != ssize_t(length))
+  {
+    WSREP_ERROR("Could not scan GTID from string: %s", value);
+    return true;
+  }
+  if (sst)
+  {
+    /* The position was set after receiving mysqldump SST. Reset the
+       position stored in storage engines so that wsrep-lib can pick
+       it up after signalled in wsrep_sst_complete(). */
+    wsrep_set_SE_checkpoint(wsrep::gtid::undefined());
+    wsrep_set_SE_checkpoint(gtid);
+    wsrep_sst_complete(thd, gtid.seqno().get() < 0 ? gtid.seqno().get() : 0);
   }
   return false;
 }
@@ -639,7 +623,7 @@ bool wsrep_desync_check (sys_var *self, THD* thd, set_var* var)
     }
   } else {
     ret= Wsrep_server_state::instance().provider().resync();
-    if (ret != WSREP_OK) {
+    if (ret) {
       WSREP_WARN ("SET resync failed %d for schema: %s, query: %s", ret,
                   thd->get_db(), thd->query());
       my_error (ER_CANNOT_USER, MYF(0), "'resync'", thd->query());
@@ -757,29 +741,6 @@ static SHOW_VAR wsrep_status_vars[]=
 static int show_var_cmp(const void *var1, const void *var2)
 {
   return strcasecmp(((SHOW_VAR*)var1)->name, ((SHOW_VAR*)var2)->name);
-}
-
-/*
- * Status variables stuff below
- */
-static inline void
-wsrep_assign_to_mysql (SHOW_VAR* mysql, wsrep_stats_var* wsrep_var)
-{
-  mysql->name= wsrep_var->name;
-  switch (wsrep_var->type) {
-  case WSREP_VAR_INT64:
-    mysql->value= (char*) &wsrep_var->value._int64;
-    mysql->type= SHOW_LONGLONG;
-    break;
-  case WSREP_VAR_STRING:
-    mysql->value= (char*) &wsrep_var->value._string;
-    mysql->type= SHOW_CHAR_PTR;
-    break;
-  case WSREP_VAR_DOUBLE:
-    mysql->value= (char*) &wsrep_var->value._double;
-    mysql->type= SHOW_DOUBLE;
-    break;
-  }
 }
 #endif /* UNUSED */
 

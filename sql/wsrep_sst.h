@@ -96,6 +96,14 @@ int wsrep_sst_donate(const std::string& request,
                      const wsrep::gtid& gtid,
                      bool bypass);
 
+/**
+ * Signal end of SST.
+ *
+ * @param thd Current thread
+ * @param error Error code
+ */
+void wsrep_sst_complete(THD *thd, int error);
+
 #else
 #define wsrep_SE_initialized() do { } while(0)
 #define wsrep_SE_init_grab() do { } while(0)

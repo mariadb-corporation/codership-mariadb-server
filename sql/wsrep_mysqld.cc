@@ -211,7 +211,6 @@ static PSI_file_info wsrep_files[]=
 
 my_bool wsrep_inited= 0; // initialized ?
 
-static wsrep_uuid_t node_uuid= WSREP_UUID_UNDEFINED;
 static char         cluster_uuid_str[40]= { 0, };
 
 static char provider_name[256]= { 0, };
@@ -225,7 +224,7 @@ static char provider_vendor[256]= { 0, };
 my_bool     wsrep_connected         = FALSE;
 my_bool     wsrep_ready             = FALSE;
 const char* wsrep_cluster_state_uuid= cluster_uuid_str;
-long long   wsrep_cluster_conf_id   = WSREP_SEQNO_UNDEFINED;
+long long   wsrep_cluster_conf_id   = wsrep::seqno::undefined().get();
 const char* wsrep_cluster_status    = "Disconnected";
 long        wsrep_cluster_size      = 0;
 long        wsrep_local_index       = -1;
@@ -240,9 +239,7 @@ char* wsrep_cluster_capabilities    = NULL;
 wsp::Config_state *wsrep_config_state;
 
 
-wsrep_uuid_t               local_uuid       = WSREP_UUID_UNDEFINED;
-wsrep_seqno_t              local_seqno      = WSREP_SEQNO_UNDEFINED;
-wsp::node_status           local_status;
+wsp::node_status local_status;
 
 /*
  */
@@ -272,35 +269,6 @@ static void wsrep_log_cb(wsrep::log::level level, const char *msg)
       break;
     }
   }
-}
-
-void wsrep_init_sidno(const wsrep::id& uuid)
-{
-  /*
-    Protocol versions starting from 4 use group gtid as it is.
-    For lesser protocol versions generate new Sid map entry from inverted
-    uuid.
-  */
-  rpl_gtid sid;
-  if (wsrep_protocol_version >= 4)
-  {
-    memcpy((void*)&sid, (const uchar*)uuid.data(),16);
-  }
-  else
-  {
-    wsrep_uuid_t ltid_uuid;
-    for (size_t i= 0; i < sizeof(ltid_uuid.data); ++i)
-    {
-      ltid_uuid.data[i]= ~((const uchar*)uuid.data())[i];
-    }
-    memcpy((void*)&sid, (const uchar*)ltid_uuid.data,16);
-  }
-#ifdef GTID_SUPPORT
-  global_sid_lock->wrlock();
-  wsrep_sidno= global_sid_map->add_sid(sid);
-  WSREP_INFO("Initialized wsrep sidno %d", wsrep_sidno);
-  global_sid_lock->unlock();
-#endif
 }
 
 void wsrep_init_schema()
@@ -354,63 +322,10 @@ void wsrep_recover_sr_from_storage(THD *orig_thd)
  * The result is saved in a dynamically allocated string of the form:
  * :cap1:cap2:cap3:
  */
-static void wsrep_capabilities_export(wsrep_cap_t const cap, char** str)
+static void wsrep_capabilities_export(int cap, char** str)
 {
-  static const char* names[] =
-  {
-    /* Keep in sync with wsrep/wsrep_api.h WSREP_CAP_* macros. */
-    "MULTI_MASTER",
-    "CERTIFICATION",
-    "PARALLEL_APPLYING",
-    "TRX_REPLAY",
-    "ISOLATION",
-    "PAUSE",
-    "CAUSAL_READS",
-    "CAUSAL_TRX",
-    "INCREMENTAL_WRITESET",
-    "SESSION_LOCKS",
-    "DISTRIBUTED_LOCKS",
-    "CONSISTENCY_CHECK",
-    "UNORDERED",
-    "ANNOTATION",
-    "PREORDERED",
-    "STREAMING",
-    "SNAPSHOT",
-    "NBO",
-  };
-
-  std::string s;
-  for (size_t i= 0; i < sizeof(names) / sizeof(names[0]); ++i)
-  {
-    if (cap & (1ULL << i))
-    {
-      if (s.empty())
-      {
-        s= ":";
-      }
-      s += names[i];
-      s += ":";
-    }
-  }
-
-  /* A read from the string pointed to by *str may be started at any time,
-   * so it must never point to free(3)d memory or non '\0' terminated string. */
-
-  char* const previous= *str;
-
-  *str= strdup(s.c_str());
-
-  if (previous != NULL)
-  {
-    free(previous);
-  }
-}
-
-/* Verifies that SE position is consistent with the group position
- * and initializes other variables */
-void wsrep_verify_SE_checkpoint(const wsrep_uuid_t& uuid,
-                                wsrep_seqno_t const seqno)
-{
+  std::string cap_str= wsrep::provider::capability::str(cap);
+  *str= strdup(cap_str.c_str());
 }
 
 /*
@@ -662,7 +577,6 @@ int wsrep_init_server()
 
 void wsrep_init_globals()
 {
-  wsrep_init_sidno(Wsrep_server_state::instance().connected_gtid().id());
   wsrep_init_schema();
   if (WSREP_ON)
   {
@@ -891,16 +805,6 @@ void wsrep_thr_deinit()
 
 void wsrep_recover()
 {
-  char uuid_str[40];
-
-  if (wsrep_uuid_compare(&local_uuid, &WSREP_UUID_UNDEFINED) == 0 &&
-      local_seqno == -2)
-  {
-    wsrep_uuid_print(&local_uuid, uuid_str, sizeof(uuid_str));
-    WSREP_INFO("Position %s:%lld given at startup, skipping position recovery",
-               uuid_str, (long long)local_seqno);
-    return;
-  }
   wsrep::gtid gtid= wsrep_get_SE_checkpoint();
   std::ostringstream oss;
   oss << gtid;
@@ -927,8 +831,6 @@ void wsrep_stop_replication(THD *thd)
  
   /* wait until appliers have stopped */
   wsrep_wait_appliers_close(thd);
-
-  node_uuid= WSREP_UUID_UNDEFINED;
 }
 
 void wsrep_shutdown_replication()
@@ -945,7 +847,6 @@ void wsrep_shutdown_replication()
 
   /* wait until appliers have stopped */
   wsrep_wait_appliers_close(NULL);
-  node_uuid= WSREP_UUID_UNDEFINED;
 
   /* Undocking the thread specific data. */
   my_pthread_setspecific_ptr(THR_THD, NULL);
@@ -1071,16 +972,14 @@ bool wsrep_sync_wait (THD* thd, uint mask)
 
 enum wsrep::provider::status
 wsrep_sync_wait_upto (THD*          thd,
-                      wsrep_gtid_t* upto,
+                      const wsrep::gtid* upto,
                       int           timeout)
 {
   DBUG_ASSERT(upto);
   enum wsrep::provider::status ret;
   if (upto)
   {
-    wsrep::gtid upto_gtid(wsrep::id(upto->uuid.data, sizeof(upto->uuid.data)),
-                          wsrep::seqno(upto->seqno));
-    ret= Wsrep_server_state::instance().wait_for_gtid(upto_gtid, timeout);
+    ret= Wsrep_server_state::instance().wait_for_gtid(*upto, timeout);
   }
   else
   {
@@ -1088,177 +987,6 @@ wsrep_sync_wait_upto (THD*          thd,
   }
   WSREP_DEBUG("wsrep_sync_wait_upto: %d", ret);
   return ret;
-}
-
-void wsrep_keys_free(wsrep_key_arr_t* key_arr)
-{
-    for (size_t i= 0; i < key_arr->keys_len; ++i)
-    {
-        my_free((void*)key_arr->keys[i].key_parts);
-    }
-    my_free(key_arr->keys);
-    key_arr->keys= 0;
-    key_arr->keys_len= 0;
-}
-
-/*!
- * @param db      Database string
- * @param table   Table string
- * @param key     Array of wsrep_key_t
- * @param key_len In: number of elements in key array, Out: number of
- *                elements populated
- *
- * @return true if preparation was successful, otherwise false.
- */
-
-static bool wsrep_prepare_key_for_isolation(const char* db,
-                                           const char* table,
-                                           wsrep_buf_t* key,
-                                           size_t* key_len)
-{
-  if (*key_len < 2) return false;
-
-  switch (wsrep_protocol_version)
-  {
-  case 0:
-    *key_len= 0;
-    break;
-  case 1:
-  case 2:
-  case 3:
-  case 4:
-  {
-    *key_len= 0;
-    if (db)
-    {
-      key[*key_len].ptr= db;
-      key[*key_len].len= strlen(db);
-      ++(*key_len);
-      if (table)
-      {
-        key[*key_len].ptr= table;
-        key[*key_len].len= strlen(table);
-        ++(*key_len);
-      }
-    }
-    break;
-  }
-  default:
-    assert(0);
-    WSREP_ERROR("Unsupported protocol version: %ld", wsrep_protocol_version);
-    unireg_abort(1);
-    return false;
-  }
-
-    return true;
-}
-
-static bool wsrep_prepare_key_for_isolation(const char* db,
-                                            const char* table,
-                                            wsrep_key_arr_t* ka)
-{
-  wsrep_key_t* tmp;
-  tmp= (wsrep_key_t*)my_realloc(ka->keys,
-                                (ka->keys_len + 1) * sizeof(wsrep_key_t),
-                                MYF(MY_ALLOW_ZERO_PTR));
-  if (!tmp)
-  {
-    WSREP_ERROR("Can't allocate memory for key_array");
-    return false;
-  }
-  ka->keys= tmp;
-  if (!(ka->keys[ka->keys_len].key_parts= (wsrep_buf_t*)
-        my_malloc(sizeof(wsrep_buf_t)*2, MYF(0))))
-  {
-    WSREP_ERROR("Can't allocate memory for key_parts");
-    return false;
-  }
-  ka->keys[ka->keys_len].key_parts_num= 2;
-  ++ka->keys_len;
-  if (!wsrep_prepare_key_for_isolation(db, table,
-                                       (wsrep_buf_t*)ka->keys[ka->keys_len - 1].key_parts,
-                                       &ka->keys[ka->keys_len - 1].key_parts_num))
-  {
-    WSREP_ERROR("Preparing keys for isolation failed");
-    return false;
-  }
-
-  return true;
-}
-
-static bool wsrep_prepare_keys_for_alter_add_fk(const char* child_table_db,
-                                                Alter_info* alter_info,
-                                                wsrep_key_arr_t* ka)
-{
-  Key *key;
-  List_iterator<Key> key_iterator(alter_info->key_list);
-  while ((key= key_iterator++))
-  {
-    if (key->type == Key::FOREIGN_KEY)
-    {
-      Foreign_key *fk_key= (Foreign_key *)key;
-      const char *db_name= fk_key->ref_db.str;
-      const char *table_name= fk_key->ref_table.str;
-      if (!db_name)
-      {
-        db_name= child_table_db;
-      }
-      if (!wsrep_prepare_key_for_isolation(db_name, table_name, ka))
-      {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-static bool wsrep_prepare_keys_for_isolation(THD*              thd,
-                                             const char*       db,
-                                             const char*       table,
-                                             const TABLE_LIST* table_list,
-                                             Alter_info*       alter_info,
-                                             wsrep_key_arr_t*  ka)
-{
-  ka->keys= 0;
-  ka->keys_len= 0;
-
-  if (db || table)
-  {
-    if (!wsrep_prepare_key_for_isolation(db, table, ka))
-      goto err;
-  }
-
-  for (const TABLE_LIST* table= table_list; table; table= table->next_global)
-  {
-    if (!wsrep_prepare_key_for_isolation(table->db.str, table->table_name.str, ka))
-      goto err;
-  }
-
-  if (alter_info && (alter_info->flags & (ALTER_ADD_FOREIGN_KEY)))
-  {
-    if (!wsrep_prepare_keys_for_alter_add_fk(table_list->db.str, alter_info, ka))
-      goto err;
-  }
-  return false;
-
-err:
-    wsrep_keys_free(ka);
-    return true;
-}
-
-/*
- * Prepare key list from db/table and table_list
- *
- * Return zero in case of success, 1 in case of failure.
- */
-
-bool wsrep_prepare_keys_for_isolation(THD*              thd,
-                                      const char*       db,
-                                      const char*       table,
-                                      const TABLE_LIST* table_list,
-                                      wsrep_key_arr_t*  ka)
-{
-  return wsrep_prepare_keys_for_isolation(thd, db, table, table_list, NULL, ka);
 }
 
 bool wsrep_prepare_key(const uchar* cache_key, size_t cache_key_len,
@@ -1871,7 +1599,7 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
                  ret,
                  (thd->db.str ? thd->db.str : "(null)"),
                  WSREP_QUERY(thd));
-      my_error(ER_ERROR_DURING_COMMIT, MYF(0), WSREP_SIZE_EXCEEDED);
+      wsrep_override_error(thd, cs.current_error(), cs.current_error_status());
       break;
     default:
       WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
@@ -1965,7 +1693,7 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
     WSREP_INFO("thread: %lld  schema: %s  query: %s has been aborted due to multi-master conflict",
                (longlong) thd->thread_id, thd->get_db(), thd->query());
     mysql_mutex_unlock(&thd->LOCK_thd_data);
-    return WSREP_TRX_FAIL;
+    return -1;
   }
   mysql_mutex_unlock(&thd->LOCK_thd_data);
 
@@ -2381,17 +2109,9 @@ void wsrep_wait_appliers_close(THD *thd)
 }
 
 void
-wsrep_last_committed_id(wsrep_gtid_t* gtid)
+wsrep_last_committed_id(wsrep::gtid* gtid)
 {
-  wsrep::gtid ret= Wsrep_server_state::instance().last_committed_gtid();
-  memcpy(gtid->uuid.data, ret.id().data(), sizeof(gtid->uuid.data));
-  gtid->seqno= ret.seqno().get();
-}
-
-void
-wsrep_node_uuid(wsrep_uuid_t& uuid)
-{
-  uuid= node_uuid;
+  *gtid= Wsrep_server_state::instance().last_committed_gtid();
 }
 
 int wsrep_must_ignore_error(THD* thd)

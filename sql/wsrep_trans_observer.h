@@ -124,10 +124,10 @@ static inline size_t wsrep_fragments_certified_for_stmt(THD* thd)
     return thd->wsrep_trx().fragments_certified_for_statement();
 }
 
-static inline int wsrep_start_transaction(THD* thd, wsrep_trx_id_t trx_id)
+static inline int wsrep_start_transaction(THD* thd, wsrep::transaction_id trx_id)
 {
   return (thd->wsrep_cs().state() != wsrep::client_state::s_none  ?
-          thd->wsrep_cs().start_transaction(wsrep::transaction_id(trx_id)) :
+          thd->wsrep_cs().start_transaction(trx_id) :
           0);
 }
 
@@ -135,13 +135,18 @@ static inline int wsrep_start_transaction(THD* thd, wsrep_trx_id_t trx_id)
 static inline int wsrep_start_trx_if_not_started(THD* thd)
 {
   int ret= 0;
-  DBUG_ASSERT(thd->wsrep_next_trx_id() != WSREP_UNDEFINED_TRX_ID);
+  DBUG_ASSERT(!thd->wsrep_next_trx_id().is_undefined());
   DBUG_ASSERT(thd->wsrep_cs().mode() == Wsrep_client_state::m_local);
   if (thd->wsrep_trx().active() == false)
   {
     ret= wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
   }
   return ret;
+}
+
+static inline int wsrep_append_keys(THD* thd, const wsrep::key_array& keys)
+{
+  return thd->wsrep_cs().append_keys(keys);
 }
 
 /*

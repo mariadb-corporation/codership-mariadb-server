@@ -1807,7 +1807,7 @@ public:
 };
 #ifdef WITH_WSREP
 
-#include "wsrep_api.h"
+#include "wsrep/gtid.hpp"
 
 class Item_func_wsrep_last_written_gtid: public Item_str_ascii_func
 {
@@ -1818,7 +1818,7 @@ public:
   String *val_str_ascii(String *);
   bool fix_length_and_dec()
   {
-    max_length= WSREP_GTID_STR_LEN;
+    max_length= WSREP_LIB_GTID_C_STR_LEN;
     maybe_null= true;
     return FALSE;
   }
@@ -1835,7 +1835,7 @@ public:
   String *val_str_ascii(String *);
   bool fix_length_and_dec()
   {
-    max_length= WSREP_GTID_STR_LEN;
+    max_length= WSREP_LIB_GTID_C_STR_LEN;
     maybe_null= true;
     return FALSE;
   }

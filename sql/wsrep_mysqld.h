@@ -36,7 +36,6 @@ typedef struct st_mysql_show_var SHOW_VAR;
 
 #include "wsrep/provider.hpp"
 #include "wsrep/streaming_context.hpp"
-#include "wsrep_api.h"
 #include <vector>
 #include "wsrep_server_state.h"
 
@@ -204,13 +203,14 @@ extern void wsrep_shutdown_replication();
 extern bool wsrep_must_sync_wait (THD* thd, uint mask= WSREP_SYNC_WAIT_BEFORE_READ);
 extern bool wsrep_sync_wait (THD* thd, uint mask= WSREP_SYNC_WAIT_BEFORE_READ);
 extern enum wsrep::provider::status
-wsrep_sync_wait_upto (THD* thd, wsrep_gtid_t* upto, int timeout);
-extern void wsrep_last_committed_id (wsrep_gtid_t* gtid);
+wsrep_sync_wait_upto (THD* thd, const wsrep::gtid* upto, int timeout);
+extern void wsrep_last_committed_id (wsrep::gtid* gtid);
 extern int  wsrep_check_opts();
 extern void wsrep_prepend_PATH (const char* path);
 
 /* Other global variables */
-extern wsrep_seqno_t wsrep_locked_seqno;
+extern wsrep::seqno wsrep_locked_seqno;
+#define WSREP_NONE wsrep::provider::none()
 #define WSREP_ON                         \
   ((global_system_variables.wsrep_on) && \
    wsrep_provider                     && \
@@ -356,14 +356,13 @@ int wsrep_create_event_query(THD *thd, uchar** buf, size_t* buf_len);
 
 bool wsrep_stmt_rollback_is_safe(THD* thd);
 
-void wsrep_init_sidno(const wsrep_uuid_t&);
 bool wsrep_node_is_donor();
 bool wsrep_node_is_synced();
 
 void wsrep_init_SR();
-void wsrep_verify_SE_checkpoint(const wsrep_uuid_t& uuid, wsrep_seqno_t seqno);
-int wsrep_replay_from_SR_store(THD*, const wsrep_trx_meta_t&);
-void wsrep_node_uuid(wsrep_uuid_t&);
+// void wsrep_verify_SE_checkpoint(const wsrep_uuid_t& uuid, wsrep_seqno_t seqno);
+// int wsrep_replay_from_SR_store(THD*, const wsrep_trx_meta_t&);
+// void wsrep_node_uuid(wsrep_uuid_t&);
 
 class Log_event;
 int wsrep_ignored_error_code(Log_event* ev, int error);
@@ -371,17 +370,21 @@ int wsrep_must_ignore_error(THD* thd);
 
 bool wsrep_replicate_GTID(THD* thd);
 
-typedef struct wsrep_key_arr
-{
-    wsrep_key_t* keys;
-    size_t       keys_len;
-} wsrep_key_arr_t;
-bool wsrep_prepare_keys_for_isolation(THD*              thd,
-                                      const char*       db,
-                                      const char*       table,
-                                      const TABLE_LIST* table_list,
-                                      wsrep_key_arr_t*  ka);
-void wsrep_keys_free(wsrep_key_arr_t* key_arr);
+/**
+  Prepare keys for TOI operation. The TOI keys prepared are currently
+  always of exclusive type.
+
+  @param db Current database or NULL
+  @param table Current table or NULL
+  @param table_list Table list or NULL
+  @param alter_info Alter info or NULL
+
+  @return Key array
+*/
+wsrep::key_array wsrep_prepare_keys_for_toi(const char* db,
+                                            const char* table,
+                                            const TABLE_LIST* table_list,
+                                            Alter_info* alter_info);
 
 extern void
 wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,

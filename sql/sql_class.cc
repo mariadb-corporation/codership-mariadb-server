@@ -661,19 +661,17 @@ THD::THD(my_thread_id id, bool is_wsrep_applier, bool skip_global_sys_var_lock)
    wsrep_mysql_replicated(0),
    wsrep_TOI_pre_query(NULL),
    wsrep_TOI_pre_query_len(0),
-   wsrep_po_handle(WSREP_PO_INITIALIZER),
-   wsrep_po_cnt(0),
    wsrep_apply_format(0),
    wsrep_apply_toi(false),
    wsrep_rbr_buf(NULL),
-   wsrep_sync_wait_gtid(WSREP_GTID_UNDEFINED),
+   wsrep_sync_wait_gtid(),
    wsrep_affected_rows(0),
    wsrep_has_ignored_error(false),
    wsrep_replicate_GTID(false),
    wsrep_ignore_table(false),
 
 /* wsrep-lib */
-   m_wsrep_next_trx_id(WSREP_UNDEFINED_TRX_ID),
+   m_wsrep_next_trx_id(),
    m_wsrep_mutex(LOCK_thd_data),
    m_wsrep_cond(COND_wsrep_thd),
    m_wsrep_client_service(this, m_wsrep_client_state),
@@ -1275,7 +1273,7 @@ void THD::init(bool skip_lock)
   wsrep_TOI_pre_query_len = 0;
   wsrep_rbr_buf           = NULL;
   wsrep_affected_rows     = 0;
-  m_wsrep_next_trx_id     = WSREP_UNDEFINED_TRX_ID;
+  m_wsrep_next_trx_id     = wsrep::transaction_id::undefined();
   wsrep_replicate_GTID    = false;
 #endif /* WITH_WSREP */
 
@@ -5556,7 +5554,8 @@ void THD::set_query_and_id(char *query_arg, uint32 query_length_arg,
   query_id= new_query_id;
 #ifdef WITH_WSREP
   set_wsrep_next_trx_id(query_id);
-  WSREP_DEBUG("assigned new next query and  trx id: %lu", wsrep_next_trx_id());
+  WSREP_DEBUG("assigned new next query and  trx id: %lld",
+              wsrep_next_trx_id().get());
 #endif /* WITH_WSREP */
 }
 

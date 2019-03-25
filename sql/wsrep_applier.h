@@ -19,6 +19,7 @@
 #include <my_config.h>
 
 #include "sql_class.h" // THD class
+#include "mysql/service_wsrep.h"
 
 int wsrep_apply_events(THD*        thd,
                        Relay_log_info* rli,
@@ -61,13 +62,5 @@ private:
 class Format_description_log_event;
 void wsrep_set_apply_format(THD*, Format_description_log_event*);
 Format_description_log_event* wsrep_get_apply_format(THD* thd);
-int wsrep_apply(void*                   ctx,
-                uint32_t                flags,
-                const wsrep_buf_t*      buf,
-                const wsrep_trx_meta_t* meta,
-                wsrep_apply_error&      err);
-
-wsrep_cb_status_t wsrep_unordered_cb(void*              ctx,
-                                     const wsrep_buf_t* data);
 
 #endif /* WSREP_APPLIER_H */

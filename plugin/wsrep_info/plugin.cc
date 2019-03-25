@@ -55,6 +55,11 @@
 /* Application protocol version */
 #define COLUMN_WSREP_STATUS_PROTO_VERSION 7
 
+/* String lengths from wsrep_api.h v26 */
+#define WSREP_MEMBER_NAME_LEN 32
+#define WSREP_INCOMING_LEN 256
+#define WSREP_UUID_STR_LEN 36
+
 
 static ST_FIELD_INFO wsrep_memb_fields[]=
 {

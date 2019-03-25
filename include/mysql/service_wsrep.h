@@ -41,12 +41,26 @@ enum Wsrep_service_key_type
 #endif
 
 struct xid_t;
-struct wsrep_ws_handle;
-struct wsrep_buf;
+
+/* Data buffer type use to pass data via service calls */
+typedef struct wsrep_buf
+{
+    const void* ptr; /*!< Pointer to data buffer */
+    size_t      len; /*!< Length of buffer */
+} wsrep_buf_t;
+
+/* Key struct used to pass keys via service calls */
+typedef struct wsrep_key
+{
+    const wsrep_buf_t* key_parts;     /*!< Array of key parts  */
+    size_t             key_parts_num; /*!< Number of key parts */
+} wsrep_key_t;
 
 /* Must match to definition in sql/mysqld.h */
 typedef int64 query_id_t;
 
+/* Must match to native type used in wsrep/seqno.hpp */
+typedef long long wsrep_seqno_t;
 
 extern struct wsrep_service_st {
   my_bool                     (*get_wsrep_recovery_func)();

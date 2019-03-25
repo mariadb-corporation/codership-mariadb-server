@@ -17,7 +17,6 @@ this program; if not, write to the Free Software Foundation, Inc.,
 
 *****************************************************************************/
 #ifdef WITH_WSREP
-#include "wsrep_api.h"
 #include <mysql/service_wsrep.h>
 #endif /* WITH_WSREP */
 
