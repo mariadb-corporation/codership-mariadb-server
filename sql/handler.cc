@@ -2026,7 +2026,7 @@ static char* xid_to_str(char *buf, XID *xid)
 static my_xid wsrep_order_and_check_continuity(XID *list, int len)
 {
   wsrep_sort_xid_array(list, len);
-  wsrep::gtid cur_position= wsrep_get_SE_checkpoint();
+  wsrep::gtid cur_position= wsrep_get_SE_checkpoint<wsrep::gtid>();
   long long cur_seqno= cur_position.seqno().get();
   for (int i= 0; i < len; ++i)
   {
