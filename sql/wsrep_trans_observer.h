@@ -21,6 +21,7 @@
 #include "wsrep_applier.h" /* wsrep_apply_error */
 #include "wsrep_xid.h"
 #include "wsrep_thd.h"
+#include "wsrep_high_priority_service.h"
 
 #include "my_dbug.h"
 
@@ -145,17 +146,46 @@ static inline int wsrep_start_trx_if_not_started(THD* thd)
 }
 
 /*
-  Restore the transaction with the given xid.
+  Helper method to determine if a transaction must terminate
+  a prepared XA by XID (possibly on behalf of another node).
+
+  Return true if the caller must call wsrep_commit_or_rollback_by_xid,
+  false otherwise.
+ */
+static inline bool wsrep_must_commit_or_rollback_by_xid(THD* thd)
+{
+  bool ret= false;
+  if (!thd->wsrep_applier)
+  {
+    char xid_buf[SQL_XIDSIZE];
+    const uint xid_len(get_sql_xid(thd->lex->xid, xid_buf));
+    const std::string xid_string(xid_buf, xid_len);
+    Wsrep_server_state& server_state(Wsrep_server_state::instance());
+    wsrep::high_priority_service* sa(
+      server_state.find_streaming_applier(xid_string));
+    if (sa)
+    {
+      ret= (sa->transaction().state() == wsrep::transaction::s_prepared);
+    }
+  }
+  return ret;
+}
+
+/*
+  Commits or rolls back transaction with the given xid.
+  This is used in the case where prepared XA transaction
+  is terminated on behalf of another node which failed or
+  went non-Primary.
 
   Return zero on success, non-zero on failures.
  */
-static inline int wsrep_restore_trx_by_xid(THD* thd, XID* xid)
+static inline int wsrep_commit_or_rollback_by_xid(THD* thd,
+                                                  bool commit)
 {
   char xid_buf[SQL_XIDSIZE];
-  get_sql_xid(xid, xid_buf);
-  std::string xid_string(xid_buf);
-  WSREP_DEBUG("xid_string %s", xid_string.c_str());
-  return thd->wsrep_cs().restore_prepared_transaction(xid_string);
+  const uint xid_len(get_sql_xid(thd->lex->xid, xid_buf));
+  const std::string xid_string(xid_buf, xid_len);
+  return thd->wsrep_cs().commit_or_rollback_by_xid(xid_string, commit);
 }
 
 /*

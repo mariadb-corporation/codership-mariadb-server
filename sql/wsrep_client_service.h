@@ -57,10 +57,6 @@ public:
   bool is_xa() const;
   bool is_xa_prepare() const;
   std::string xid() const;
-  int retrieve_trx_info_by_xid(const std::string& xid,
-                               wsrep::id&,
-                               wsrep::transaction_id&,
-                               std::vector<wsrep::seqno>&);
 private:
   friend class Wsrep_server_service;
   THD* m_thd;

@@ -913,6 +913,13 @@ bool trans_xa_commit(THD *thd)
       my_error(ER_OUT_OF_RESOURCES, MYF(0));
       DBUG_RETURN(TRUE);
     }
+#ifdef WITH_WSREP
+    if (WSREP(thd) && wsrep_must_commit_or_rollback_by_xid(thd))
+    {
+      res= wsrep_commit_or_rollback_by_xid(thd, true);
+      DBUG_RETURN(res);
+    }
+#endif /* WITH_WSREP */
 
     XID_STATE *xs= xid_cache_search(thd, thd->lex->xid);
     res= !xs;
@@ -922,18 +929,12 @@ bool trans_xa_commit(THD *thd)
     {
       res= xa_trans_rolled_back(xs);
 #ifdef WITH_WSREP
-      if (WSREP(thd))
-      {
-        wsrep_restore_trx_by_xid(thd, thd->lex->xid);
-      }
       const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, 1);
       if (run_wsrep_hooks)
       {
-        thd->transaction.xid_state.xa_state= XA_PREPARED;
         res= wsrep_before_commit(thd, true);
         if (res)
         {
-          thd->transaction.xid_state.xa_state= XA_NOTR;
           DBUG_RETURN(res);
         }
       }
@@ -1050,6 +1051,13 @@ bool trans_xa_rollback(THD *thd)
       my_error(ER_OUT_OF_RESOURCES, MYF(0));
       DBUG_RETURN(TRUE);
     }
+#ifdef WITH_WSREP
+    if (WSREP(thd) && wsrep_must_commit_or_rollback_by_xid(thd))
+    {
+      res= wsrep_commit_or_rollback_by_xid(thd, false);
+      DBUG_RETURN(res);
+    }
+#endif /* WITH_WSREP */
 
     XID_STATE *xs= xid_cache_search(thd, thd->lex->xid);
     if (!xs)
@@ -1058,19 +1066,22 @@ bool trans_xa_rollback(THD *thd)
     {
       xa_trans_rolled_back(xs);
 #ifdef WITH_WSREP
-      if (WSREP(thd))
+      const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, 1);
+      if (run_wsrep_hooks)
       {
-        wsrep_restore_trx_by_xid(thd, thd->lex->xid);
-        thd->transaction.xid_state.xa_state= XA_PREPARED;
-        wsrep_before_rollback(thd, true);
+        res= wsrep_before_rollback(thd, true);
+        if (res)
+        {
+          DBUG_RETURN(TRUE);
+        }
+
       }
 #endif /* WITH_WSREP */
       ha_commit_or_rollback_by_xid(thd->lex->xid, 0);
 #ifdef WITH_WSREP
-      if (WSREP(thd))
+      if (run_wsrep_hooks)
       {
         wsrep_after_rollback(thd, true);
-        thd->transaction.xid_state.xa_state= XA_NOTR;
       }
 #endif /* WITH_WSREP */
       xid_cache_delete(thd, xs);

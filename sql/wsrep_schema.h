@@ -134,11 +134,6 @@ class Wsrep_schema
   */
   int recover_sr_transactions(THD* orig_thd);
 
-  int scan_fragments_by_xid(const std::string& xid,
-                            wsrep::id& server_id,
-                            wsrep::transaction_id& trx_id,
-                            std::vector<wsrep::seqno>& fragments);
-
  private:
   /* Non-copyable */
   Wsrep_schema(const Wsrep_schema&);

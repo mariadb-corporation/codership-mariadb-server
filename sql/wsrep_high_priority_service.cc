@@ -240,13 +240,12 @@ int Wsrep_high_priority_service::append_fragment_and_commit(
   DBUG_RETURN(ret);
 }
 
-int Wsrep_high_priority_service::remove_fragments(const wsrep::id& server_id,
-                                                  const wsrep::transaction_id& trx_id)
+int Wsrep_high_priority_service::remove_fragments(const wsrep::ws_meta& ws_meta)
 {
   DBUG_ENTER("Wsrep_high_priority_service::remove_fragments");
   int ret= wsrep_schema->remove_fragments(m_thd,
-                                          server_id,
-                                          trx_id,
+                                          ws_meta.server_id(),
+                                          ws_meta.transaction_id(),
                                           m_thd->wsrep_sr().fragments());
   DBUG_RETURN(ret);
 }
@@ -255,35 +254,36 @@ int Wsrep_high_priority_service::commit(const wsrep::ws_handle& ws_handle,
                                         const wsrep::ws_meta& ws_meta)
 {
   DBUG_ENTER("Wsrep_high_priority_service::commit");
-  THD* thd= m_thd;
-  DBUG_ASSERT(thd->wsrep_trx().active());
-  thd->wsrep_cs().prepare_for_ordering(ws_handle, ws_meta, true);
-  thd_proc_info(thd, "committing");
+  DBUG_ASSERT(m_thd->wsrep_trx().active());
+  DBUG_ASSERT(m_thd->wsrep_trx().is_xa() ==
+              (m_thd->transaction.xid_state.xa_state == XA_PREPARED));
 
-  DBUG_ASSERT(thd->wsrep_trx().is_xa() ==
-              (thd->transaction.xid_state.xa_state == XA_PREPARED));
-
+  m_thd->wsrep_cs().prepare_for_ordering(ws_handle, ws_meta, true);
+  thd_proc_info(m_thd, "committing");
 
   const bool is_ordered= !ws_meta.seqno().is_undefined();
   int ret;
-  if (thd->wsrep_trx().is_xa())
+  if (m_thd->wsrep_trx().is_xa())
   {
-    thd->lex->xid= &thd->transaction.xid_state.xid;
-    ret= trans_xa_commit(thd);
+    if (!m_thd->transaction.xid_state.xid.is_null())
+    {
+      m_thd->lex->xid= &m_thd->transaction.xid_state.xid;
+    }
+    ret= trans_xa_commit(m_thd);
   }
   else
   {
-    ret= trans_commit(thd);
+    ret= trans_commit(m_thd);
   }
 
   if (ret == 0)
   {
-    m_rgi->cleanup_context(thd, 0);
+    m_rgi->cleanup_context(m_thd, 0);
   }
 
   m_thd->mdl_context.release_transactional_locks();
 
-  thd_proc_info(thd, "wsrep applier committed");
+  thd_proc_info(m_thd, "wsrep applier committed");
 
   if (!is_ordered)
   {
@@ -299,13 +299,13 @@ int Wsrep_high_priority_service::commit(const wsrep::ws_handle& ws_handle,
 
       This is a workaround for CTAS with empty result set.
     */
-    WSREP_DEBUG("Commit not finished for applier %llu", thd->thread_id);
+    WSREP_DEBUG("Commit not finished for applier %llu", m_thd->thread_id);
     ret= ret || m_thd->wsrep_cs().before_commit() ||
       m_thd->wsrep_cs().ordered_commit() ||
       m_thd->wsrep_cs().after_commit();
   }
 
-  thd->lex->sql_command= SQLCOM_END;
+  m_thd->lex->sql_command= SQLCOM_END;
 
   must_exit_= check_exit_status();
   DBUG_RETURN(ret);
@@ -323,7 +323,10 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
   }
   else
   {
-    m_thd->lex->xid= &m_thd->transaction.xid_state.xid;
+    if (!m_thd->transaction.xid_state.xid.is_null())
+    {
+      m_thd->lex->xid= &m_thd->transaction.xid_state.xid;
+    }
     // the following may happen if XA ABORT is issued before XA PREPARE
     // in the master.  With streaming turned on, the XA END is
     // only sent to slaves with the XA PREPARE fragment, and the transaction may

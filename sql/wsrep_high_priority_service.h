@@ -43,8 +43,7 @@ public:
                                  const wsrep::ws_meta&,
                                  const wsrep::const_buffer&,
                                  const std::string&);
-  int remove_fragments(const wsrep::id&,
-                       const wsrep::transaction_id&);
+  int remove_fragments(const wsrep::ws_meta&);
   int commit(const wsrep::ws_handle&, const wsrep::ws_meta&);
   int rollback(const wsrep::ws_handle&, const wsrep::ws_meta&);
   int apply_toi(const wsrep::ws_meta&, const wsrep::const_buffer&);
@@ -85,6 +84,57 @@ public:
   void after_apply();
   bool is_replaying() const { return false; }
   bool check_exit_status() const;
+};
+
+class Wsrep_prepared_applier_service : public Wsrep_applier_service
+{
+public:
+  Wsrep_prepared_applier_service(THD* thd, XID* xid)
+    : Wsrep_applier_service(thd)
+  {
+    m_xid.set(xid);
+    m_thd->transaction.xid_state.xid.set(xid);
+  }
+  ~Wsrep_prepared_applier_service() { };
+  int start_transaction(const wsrep::ws_handle& ws_handle,
+                        const wsrep::ws_meta& ws_meta)
+  {
+    DBUG_ENTER("Wsrep_prepared_applier_service::start_transaction");
+    DBUG_RETURN(m_thd->wsrep_cs().start_transaction(ws_handle, ws_meta));
+  }
+  int apply_write_set(const wsrep::ws_meta& ws_meta,
+                      const wsrep::const_buffer& data)
+  {
+    DBUG_ENTER("Wsrep_prepared_applier_service::apply_write_set");
+    if (!wsrep::commits_transaction(ws_meta.flags()))
+    {
+      m_thd->wsrep_cs().fragment_applied(ws_meta.seqno());
+    }
+    if (wsrep::prepares_transaction(ws_meta.flags()))
+    {
+      m_thd->transaction.xid_state.xa_state= XA_PREPARED;
+      m_thd->wsrep_cs().restore_prepared_transaction();
+    }
+    DBUG_RETURN(0);
+  }
+  int commit(const wsrep::ws_handle& ws_handle, const wsrep::ws_meta& ws_meta)
+  {
+    DBUG_ENTER("Wsrep_prepared_applier_service::commit");
+    DBUG_ASSERT(m_thd->transaction.xid_state.xa_state == XA_PREPARED);
+    m_thd->lex->xid= &m_xid;
+    m_thd->transaction.xid_state.xid.null();
+    DBUG_RETURN(Wsrep_applier_service::commit(ws_handle, ws_meta));
+  }
+  int rollback(const wsrep::ws_handle& ws_handle, const wsrep::ws_meta& ws_meta)
+  {
+    DBUG_ENTER("Wsrep_prepared_applier_service::rollback");
+    DBUG_ASSERT(m_thd->transaction.xid_state.xa_state == XA_PREPARED);
+    m_thd->lex->xid= &m_xid;
+    m_thd->transaction.xid_state.xid.null();
+    DBUG_RETURN(Wsrep_applier_service::rollback(ws_handle, ws_meta));
+  }
+private:
+  XID m_xid;
 };
 
 class Wsrep_replayer_service : public Wsrep_high_priority_service
