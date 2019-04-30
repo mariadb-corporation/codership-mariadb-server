@@ -7,27 +7,60 @@ SET GLOBAL wsrep_on = OFF;
 CREATE TABLE t1 (f1 INTEGER);
 SET GLOBAL wsrep_on = ON;
 DROP TABLE t1;
+connection node_2;
+SHOW TABLES;
+Tables_in_test
+connection node_1;
 SET GLOBAL wsrep_on = OFF;
 CREATE SCHEMA s1;
 SET GLOBAL wsrep_on = ON;
 DROP SCHEMA s1;
+connection node_2;
+SHOW SCHEMAS;
+Database
+information_schema
+mtr
+mysql
+performance_schema
+test
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER);
 SET GLOBAL wsrep_on = OFF;
 CREATE INDEX idx1 ON t1 (f1);
 SET GLOBAL wsrep_on = ON;
 DROP INDEX idx1 ON t1;
+connection node_2;
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f1` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
 DROP TABLE t1;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER);
 SET GLOBAL wsrep_on = OFF;
 CREATE INDEX idx1 ON t1 (f1);
 SET GLOBAL wsrep_on = ON;
 ALTER TABLE t1 DROP INDEX idx1;
+connection node_2;
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f1` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
 DROP TABLE t1;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER);
 SET GLOBAL wsrep_on = OFF;
 ALTER TABLE t1 ADD COLUMN f2 INTEGER;
 SET GLOBAL wsrep_on = ON;
 ALTER TABLE t1 DROP COLUMN f2;
+connection node_2;
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f1` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
 DROP TABLE t1;
 connection node_2;
 SET GLOBAL wsrep_ignore_apply_errors = 2;
@@ -37,7 +70,6 @@ SET GLOBAL wsrep_on = OFF;
 INSERT INTO t1 VALUES (1);
 SET GLOBAL wsrep_on = ON;
 DELETE FROM t1 WHERE f1 = 1;
-connection node_1;
 SELECT COUNT(*) = 0 FROM t1;
 COUNT(*) = 0
 1
@@ -57,7 +89,6 @@ INSERT INTO t1 VALUES (3);
 DELETE FROM t1 WHERE f1 = 1;
 DELETE FROM t1 WHERE f1 = 2;
 COMMIT;
-connection node_1;
 SELECT COUNT(*) = 1 FROM t1;
 COUNT(*) = 1
 1
@@ -175,6 +206,8 @@ connection node_1;
 CREATE TABLE t1 (f1 INTEGER, f2 INTEGER);
 DROP TABLE t1;
 connection node_2;
+SELECT * FROM t1;
+ERROR 42S02: Table 'test.t1' doesn't exist
 SET GLOBAL wsrep_ignore_apply_errors = 7;
 CALL mtr.add_suppression("Can't find record in 't.*'");
 CALL mtr.add_suppression("Slave SQL: Could not execute Delete_rows event");
