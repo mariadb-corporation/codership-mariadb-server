@@ -201,16 +201,6 @@ bool trx_rseg_read_wsrep_checkpoint(XID& xid)
 	     rseg_id++, mtr.commit()) {
 		mtr.start();
 		const buf_block_t* sys = trx_sysf_get(&mtr, false);
-		if (rseg_id == 0) {
-			found = trx_rseg_init_wsrep_xid(sys->frame, xid);
-			ut_ad(!found || xid.formatID == 1);
-			if (found) {
-				max_xid_seqno = wsrep_xid_seqno(&xid);
-				memcpy(wsrep_uuid, wsrep_xid_uuid(&xid),
-				       sizeof wsrep_uuid);
-			}
-		}
-
 		const uint32_t page_no = trx_sysf_rseg_get_page_no(
 			sys, rseg_id);
 
@@ -239,6 +229,24 @@ bool trx_rseg_read_wsrep_checkpoint(XID& xid)
 	}
 
 	return found;
+}
+
+/** Clear WSREP XID in system header.
+For upgrading from versions prior to 10.3.5 */
+static void
+trx_rseg_clear_wsrep_sys_header_checkpoint()
+{
+	mtr_t mtr;
+	mtr.start();
+	const buf_block_t* sys = trx_sysf_get(&mtr);
+	ut_ad(mach_read_from_4(sys->frame + TRX_SYS + TRX_SYS_WSREP_XID_INFO
+			       + TRX_SYS_WSREP_XID_MAGIC_N_FLD)
+	      == TRX_SYS_WSREP_XID_MAGIC_N);
+	mlog_write_ulint(sys->frame + TRX_SYS + TRX_SYS_WSREP_XID_INFO
+			 + TRX_SYS_WSREP_XID_MAGIC_N_FLD,
+			 0,
+			 MLOG_4BYTES, &mtr);
+	mtr.commit();
 }
 #endif /* WITH_WSREP */
 
@@ -542,6 +550,9 @@ trx_rseg_array_init()
 	trx_sys.recovered_binlog_offset = 0;
 #ifdef WITH_WSREP
 	trx_sys.recovered_wsrep_xid.null();
+	XID wsrep_sys_xid;
+	wsrep_sys_xid.null();
+	bool wsrep_xid_in_rseg_found = false;
 #endif
 
 	for (ulint rseg_id = 0; rseg_id < TRX_SYS_N_RSEGS; rseg_id++) {
@@ -556,6 +567,9 @@ trx_rseg_array_init()
 					TRX_SYS + TRX_SYS_TRX_ID_STORE
 					+ sys->frame);
 				trx_rseg_init_binlog_info(sys->frame);
+#ifdef WITH_WSREP
+				wsrep_sys_xid.set(&trx_sys.recovered_wsrep_xid);
+#endif
 			}
 
 			const uint32_t	page_no = trx_sysf_rseg_get_page_no(
@@ -571,11 +585,40 @@ trx_rseg_array_init()
 				ut_ad(!trx_sys.rseg_array[rseg_id]);
 				trx_sys.rseg_array[rseg_id] = rseg;
 				trx_rseg_mem_restore(rseg, max_trx_id, &mtr);
+#ifdef WITH_WSREP
+				if (!wsrep_sys_xid.is_null() &&
+				    !wsrep_sys_xid.eq(&trx_sys.recovered_wsrep_xid)) {
+					wsrep_xid_in_rseg_found = true;
+#ifdef UNIV_DEBUG
+					if (!memcmp(wsrep_xid_uuid(&wsrep_sys_xid),
+						    wsrep_xid_uuid(&trx_sys.recovered_wsrep_xid),
+						    sizeof wsrep_uuid)) {
+						ut_ad(wsrep_xid_seqno(&wsrep_sys_xid) <=
+						      wsrep_xid_seqno(&trx_sys.recovered_wsrep_xid));
+					}
+#endif
+				}
+#endif
 			}
 		}
 
 		mtr.commit();
 	}
+
+#ifdef WITH_WSREP
+	if (!wsrep_sys_xid.is_null()) {
+		/* Upgrade from a version prior to 10.3.5,
+		where WSREP XID was stored in sys header.
+		If no rollback segment has a WSREP XID set,
+		we must copy the XID found in sys header to
+		rollback segments. Finally, clear the WSREP
+		XID persisted in system header. */
+		if (!wsrep_xid_in_rseg_found) {
+			trx_rseg_update_wsrep_checkpoint(&wsrep_sys_xid);
+		}
+		trx_rseg_clear_wsrep_sys_header_checkpoint();
+	}
+#endif
 
 	trx_sys.init_max_trx_id(max_trx_id + 1);
 }
