@@ -1,0 +1,65 @@
+--let $galera_shards= 2
+--let $galera_shard_size= 2
+
+--source include/galera_spider_init.inc
+
+# setup tables
+# -------------------
+--source include/create_test_tables.inc
+
+# basic sharded insert and select
+# ----------------------
+--connection spider_1
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SET LOCAL spider_internal_xa=1;
+
+INSERT INTO hashpart values (1,'a'), (2,'b'), (3, 'y'), (4, 'z');
+INSERT INTO rangepart values (1,'a'), (2,'b'), (3, 'y'), (4, 'z');
+
+--connection spider_2
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SET LOCAL spider_internal_xa=1;
+
+SELECT * FROM hashpart;
+SELECT * FROM rangepart;
+
+--connection node_1_1
+SELECT * FROM hashpart;
+SELECT * FROM rangepart;
+
+--connection node_1_2
+SELECT * FROM hashpart;
+SELECT * FROM rangepart;
+
+--connection node_2_1
+SELECT * FROM hashpart;
+SELECT * FROM rangepart;
+
+--connection node_2_2
+SELECT * FROM hashpart;
+SELECT * FROM rangepart;
+
+# concurrent non-conflicting updates
+# ---------------------------------
+--connection spider_1
+BEGIN;
+UPDATE hashpart SET val='1' where (id=1 OR id=2);
+
+--connection spider_2
+BEGIN;
+UPDATE hashpart SET val='2' where (id=3 OR id=4);
+COMMIT;
+
+--connection spider_1
+COMMIT;
+SELECT * FROM hashpart;
+
+--connection spider_2
+COMMIT;
+SELECT * FROM hashpart;
+
+# cleanup tables
+# ----------------------
+--source include/drop_test_tables.inc
+
+--source include/galera_spider_end.inc

@@ -1,0 +1,149 @@
+connection node_2_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id));
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val));
+connection node_1_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id));
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val));
+connection spider_2;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "hashpart"'
+               PARTITION BY KEY (id)
+(
+PARTITION p1 COMMENT = 'srv "node_1_2"',
+PARTITION p2 COMMENT = 'srv "node_2_2"'
+               );
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "rangepart"'
+               PARTITION BY range columns (val)
+(
+PARTITION p1 VALUES LESS THAN ('l') COMMENT = 'srv "node_1_2"',
+PARTITION p2 VALUES LESS THAN (maxvalue) COMMENT = 'srv "node_2_2"'
+               );
+connection spider_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "hashpart"'
+               PARTITION BY KEY (id)
+(
+PARTITION p1 COMMENT = 'srv "node_1_1"',
+PARTITION p2 COMMENT = 'srv "node_2_1"'
+               );
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "rangepart"'
+               PARTITION BY range columns (val)
+(
+PARTITION p1 VALUES LESS THAN ('l') COMMENT = 'srv "node_1_1"',
+PARTITION p2 VALUES LESS THAN (maxvalue) COMMENT = 'srv "node_2_1"'
+               );
+connection node_1_1;
+connection spider_1;
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SET LOCAL spider_internal_xa=1;
+INSERT INTO hashpart values (1,'a'), (2,'b'), (3, 'y'), (4, 'z');
+INSERT INTO rangepart values (1,'a'), (2,'b'), (3, 'y'), (4, 'z');
+connection spider_2;
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SET LOCAL spider_internal_xa=1;
+SELECT * FROM hashpart;
+id	val
+1	a
+3	y
+2	b
+4	z
+SELECT * FROM rangepart;
+id	val
+1	a
+2	b
+3	y
+4	z
+connection node_1_1;
+SELECT * FROM hashpart;
+id	val
+1	a
+3	y
+SELECT * FROM rangepart;
+id	val
+1	a
+2	b
+connection node_1_2;
+SELECT * FROM hashpart;
+id	val
+1	a
+3	y
+SELECT * FROM rangepart;
+id	val
+1	a
+2	b
+connection node_2_1;
+SELECT * FROM hashpart;
+id	val
+2	b
+4	z
+SELECT * FROM rangepart;
+id	val
+3	y
+4	z
+connection node_2_2;
+SELECT * FROM hashpart;
+id	val
+2	b
+4	z
+SELECT * FROM rangepart;
+id	val
+3	y
+4	z
+connection spider_1;
+BEGIN;
+UPDATE hashpart SET val='1' where (id=1 OR id=2);
+connection spider_2;
+BEGIN;
+UPDATE hashpart SET val='2' where (id=3 OR id=4);
+COMMIT;
+connection spider_1;
+COMMIT;
+SELECT * FROM hashpart;
+id	val
+1	1
+3	2
+2	1
+4	2
+connection spider_2;
+COMMIT;
+SELECT * FROM hashpart;
+id	val
+1	1
+3	2
+2	1
+4	2
+connection node_2_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection node_1_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection spider_2;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection spider_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection node_1_1;
