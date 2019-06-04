@@ -1,0 +1,116 @@
+--let $galera_shards= 2
+--let $galera_shard_size= 2
+
+--source include/galera_spider_init.inc
+
+# setup tables
+# -------------------
+--source include/create_test_tables.inc
+
+# enable Spider's internal XA
+# ------------------
+--connection spider_1
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+--connection spider_2
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+
+# BF abort happens on statement in shard 1
+# ----------------------------
+
+--connection spider_1
+INSERT INTO hashpart values (1,'0'), (2,'0');
+BEGIN;
+UPDATE hashpart SET val='1' WHERE id=1;
+UPDATE hashpart SET val='1' WHERE id=2;
+
+--connection spider_2
+UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1
+
+--connection spider_1
+--error 1614 # deadlock error
+INSERT INTO hashpart values (3, '1');
+
+# TODO: the following should have no effect after the rollback
+INSERT INTO hashpart values (9,'9');
+
+# TODO: Spider doesn't rollback the transaction, which is in line with how XA handles errors.
+# But from the client's POV, this is a "normal" transaction, *is* rolled back on deadlock.
+ROLLBACK;
+SELECT * FROM hashpart;
+
+SELECT * FROM mysql.spider_xa_member;
+SELECT * FROM mysql.spider_xa;
+SELECT * FROM mysql.spider_xa_failed_log;
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa;
+TRUNCATE hashpart;
+
+
+# BF abort happens on statement in shard 2
+# ----------------------------
+
+--connection spider_1
+INSERT INTO hashpart values (1,'0'), (2,'0');
+BEGIN;
+UPDATE hashpart SET val='1' WHERE id=1;
+UPDATE hashpart SET val='1' WHERE id=2;
+
+--connection spider_2
+UPDATE hashpart set val='2' where id=2;  # trigger BF abort on shard 2
+
+--connection spider_1
+--error 1614
+INSERT INTO hashpart values (4, '1');
+
+# TODO: the following should have no effect after the rollback
+INSERT INTO hashpart values (9,'9');
+
+ROLLBACK;
+SELECT * FROM hashpart;
+
+SELECT * FROM mysql.spider_xa_member;
+SELECT * FROM mysql.spider_xa;
+SELECT * FROM mysql.spider_xa_failed_log;
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa;
+TRUNCATE hashpart;
+
+
+# User tries to COMMIT after a BF abort
+# ----------------------------
+
+--connection spider_1
+INSERT INTO hashpart values (1,'0'), (2,'0');
+BEGIN;
+UPDATE hashpart SET val='1' WHERE id=1;
+UPDATE hashpart SET val='1' WHERE id=2;
+
+--connection spider_2
+UPDATE hashpart set val='2' where id=2;  # trigger BF abort on shard 2
+
+--connection spider_1
+--error 1614
+INSERT INTO hashpart values (4, '1');
+
+# TODO: the following should have no effect after the rollback
+INSERT INTO hashpart values (9,'9');
+
+# TODO: expect the correct error.
+COMMIT;
+SELECT * FROM hashpart;
+
+SELECT * FROM mysql.spider_xa_member;
+SELECT * FROM mysql.spider_xa;
+SELECT * FROM mysql.spider_xa_failed_log;
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa;
+TRUNCATE hashpart;
+
+
+# cleanup tables
+# ----------------------
+--source include/drop_test_tables.inc
+
+--source include/galera_spider_end.inc
