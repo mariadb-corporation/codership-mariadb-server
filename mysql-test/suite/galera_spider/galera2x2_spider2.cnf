@@ -10,6 +10,7 @@ default-storage-engine=innodb
 wsrep_gtid_mode=1
 gtid_ignore_duplicates
 auto_increment_increment=3
+general-log
 
 #slave_transaction_retry_errors="1158,1159,1160,1161,2013,12701"
 

@@ -35,6 +35,7 @@ sub which($) { return `sh -c "command -v $_[0]"` }
 
 push @::global_suppressions,
   (
+     qr(WSREP: handlerton rollback failed, .* SQL COMMIT), # TODO: this warning seems out of place, remove if it changes
      qr(WSREP: wsrep_sst_receive_address is set to '127.0.0.1),
      qr(WSREP: Could not open saved state file for reading: .*),
      qr(WSREP: Could not open state file for reading: .*),
