@@ -1,0 +1,86 @@
+--let $galera_shards= 2
+--let $galera_shard_size= 2
+
+--source include/galera_spider_init.inc
+
+# setup tables
+# -------------------
+--source include/create_test_tables.inc
+
+# enable Spider's internal XA
+# ------------------
+--connection spider_1
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+--connection spider_2
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+
+# BF abort after replicated fragments
+# ----------------------------
+
+--connection spider_1
+INSERT INTO hashpart values (1,'0'), (2,'0'), (3, '0');
+
+select SPIDER_DIRECT_SQL('SET SESSION wsrep_trx_fragment_size = 1', '', 'srv "node_1_1"');
+select SPIDER_DIRECT_SQL('SET SESSION wsrep_trx_fragment_size = 1', '', 'srv "node_2_1"');
+
+BEGIN;
+# replicated fragments in both shards
+UPDATE hashpart SET val='1' WHERE id=1;
+UPDATE hashpart SET val='1' WHERE id=2;
+
+# check fragments were replicated
+--connection node_1_1
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+--connection node_1_2
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+--connection node_2_1
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+--connection node_2_2
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+
+--connection spider_1
+# make a change that is not yet replicated, so we can bf abort the transaction
+select SPIDER_DIRECT_SQL('SET SESSION wsrep_trx_fragment_size = 0', '', 'srv "node_1_1"');
+UPDATE hashpart SET val='1' WHERE id=3;
+
+--connection spider_2
+UPDATE hashpart set val='2' where id=3;  # trigger BF abort on shard 1
+
+# check fragments on shard 1 are gone
+--connection node_1_1
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+--connection node_1_2
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+--connection node_2_1
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+--connection node_2_2
+SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
+
+--connection spider_1
+# TODO: expect correct error
+--error 1180
+COMMIT;
+
+# check fragments on shard 2 are gone
+--connection node_2_1
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+--connection node_2_2
+SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
+
+--connection spider_1
+SELECT * FROM hashpart;
+
+SELECT * FROM mysql.spider_xa_member;
+SELECT * FROM mysql.spider_xa;
+SELECT * FROM mysql.spider_xa_failed_log;
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa;
+TRUNCATE hashpart;
+
+# cleanup tables
+# ----------------------
+--source include/drop_test_tables.inc
+
+--source include/galera_spider_end.inc
