@@ -1,0 +1,3 @@
+bf_abort_xa_end_explicit_xa: spider explicit XA is broken in 10.4
+bf_abort_xa_prepare_explicit_xa: spider explicit XA is broken in 10.4
+bf_abort_dml_explicit_xa: spider explicit XA is broken in 10.4

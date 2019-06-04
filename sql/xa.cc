@@ -500,6 +500,7 @@ bool trans_xa_end(THD *thd)
 bool trans_xa_prepare(THD *thd)
 {
   DBUG_ENTER("trans_xa_prepare");
+  DEBUG_SYNC(thd, "before_trans_xa_prepare");
 
   if (!thd->transaction.xid_state.is_explicit_XA() ||
       thd->transaction.xid_state.xid_cache_element->xa_state != XA_IDLE)
