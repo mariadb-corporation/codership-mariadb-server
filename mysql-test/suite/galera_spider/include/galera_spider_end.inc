@@ -31,6 +31,7 @@ while ($n)
 {
     --connection spider_$n
     --source include/remove_spider.inc
+    --source include/drop_servers.inc
     --disconnect spider_$n
 
     --dec $n
