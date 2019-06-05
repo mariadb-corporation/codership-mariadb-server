@@ -60,7 +60,7 @@ INSERT INTO t1 VALUES (1, 'node_2');
 --error ER_XA_RBDEADLOCK
 --reap
 
---connection node_1
+XA ROLLBACK 'test';
 SELECT * FROM t1;
 
 --connection node_2

@@ -177,10 +177,16 @@ static inline void wsrep_override_error(THD* thd,
     wsrep_override_error(thd, ER_ERROR_DURING_COMMIT, status);
     break;
   case wsrep::e_deadlock_error:
-    if (thd->transaction.xid_state.is_explicit_XA())
+    switch (thd->lex->sql_command)
+    {
+    case SQLCOM_XA_END:
+    case SQLCOM_XA_PREPARE:
       wsrep_override_error(thd, ER_XA_RBDEADLOCK);
-    else
+      break;
+    default:
       wsrep_override_error(thd, ER_LOCK_DEADLOCK);
+      break;
+    }
     break;
   case wsrep::e_interrupted_error:
     wsrep_override_error(thd, ER_QUERY_INTERRUPTED);

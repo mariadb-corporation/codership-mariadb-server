@@ -18,8 +18,12 @@ INSERT INTO t1 VALUES (1, 'node2');
 SELECT * FROM t1;
 
 --connection node_1
---error ER_XA_RBDEADLOCK
+--error ER_LOCK_DEADLOCK
 SELECT * FROM t1;
+
+--error ER_XA_RBDEADLOCK
+XA END 'test';
+XA ROLLBACK 'test';
 
 --echo expect (1, node2)
 SELECT * FROM t1;
@@ -48,6 +52,7 @@ SELECT * FROM t1;
 --connection node_1
 --error ER_XA_RBDEADLOCK
 XA END 'test';
+XA ROLLBACK 'test';
 
 --echo expect (1, node2)
 SELECT * FROM t1;
@@ -77,6 +82,7 @@ SELECT * FROM t1;
 --connection node_1
 --error ER_XA_RBDEADLOCK
 XA PREPARE 'test';
+XA ROLLBACK 'test';
 
 --echo expect (1, node2)
 SELECT * FROM t1;

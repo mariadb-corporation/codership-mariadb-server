@@ -1299,9 +1299,15 @@ bool do_command(THD *thd)
     thd->store_globals();
     WSREP_LOG_THD(thd, "enter found BF aborted");
     DBUG_ASSERT(!thd->mdl_context.has_locks());
-    /* We let COM_QUIT and COM_STMT_CLOSE to execute even if wsrep aborted. */
+    /*
+       We let COM_QUIT and COM_STMT_CLOSE to execute even if wsrep aborted.
+       XA statements need to go through as well, so that the transaction
+       transitions to XA_ROLLLBACK_ONLY state, and is explicitly rolled
+       back by the client.
+    */
     if (command != COM_STMT_CLOSE &&
-        command != COM_QUIT)
+        command != COM_QUIT &&
+        !thd->transaction.xid_state.is_explicit_XA())
     {
       wsrep_override_error(thd, ER_LOCK_DEADLOCK);
 
@@ -2385,6 +2391,10 @@ dispatch_end:
         ))
   {
     wsrep_override_current_error(thd);
+    if (thd->transaction.xid_state.is_explicit_XA())
+    {
+      thd->wsrep_cs().reset_error();
+    }
     WSREP_LOG_THD(thd, "leave");
   }
   if (WSREP(thd))

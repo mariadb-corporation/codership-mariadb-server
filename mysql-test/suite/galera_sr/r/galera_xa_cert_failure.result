@@ -28,7 +28,7 @@ SET GLOBAL wsrep_provider_options = 'signal=after_replicate_sync';
 SET GLOBAL wsrep_provider_options = 'dbug=';
 connection node_1;
 ERROR XA102: XA_RBDEADLOCK: Transaction branch was rolled back: deadlock was detected
-connection node_1;
+XA ROLLBACK 'test';
 SELECT * FROM t1;
 f1	f2
 1	node_2

@@ -1217,13 +1217,7 @@ static int prepare_or_error(handlerton *ht, THD *thd, bool all)
   {
     if (thd->transaction.xid_state.is_explicit_XA())
     {
-      /*
-        If XA is BF aborted here, then the following rollback
-        is going to clear the xa_state. So must we must set
-        the error here because it may be specific to XA
-        (i.e. ER_XA_RBDEADLOCK vs ER_LOCK_DEADLOCK)
-      */
-      wsrep_override_current_error(thd);
+      thd->transaction.xid_state.set_error(ER_LOCK_DEADLOCK);
     }
     return(1);
   }

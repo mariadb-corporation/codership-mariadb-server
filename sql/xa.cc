@@ -502,6 +502,12 @@ bool trans_xa_prepare(THD *thd)
     my_error(ER_XAER_NOTA, MYF(0));
   else if (ha_prepare(thd))
   {
+#ifdef WITH_WSREP
+    /* Galera may BF abort or fail certification on XA PREPARE */
+    if (wsrep_current_error(thd) == wsrep::e_deadlock_error &&
+        xa_trans_rolled_back(thd->transaction.xid_state.xid_cache_element))
+      DBUG_RETURN(TRUE);
+#endif /* WITH_WSREP */
     xid_cache_delete(thd, &thd->transaction.xid_state);
     my_error(ER_XA_RBROLLBACK, MYF(0));
   }

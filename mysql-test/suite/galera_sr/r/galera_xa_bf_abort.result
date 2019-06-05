@@ -12,7 +12,10 @@ f1	f2
 1	node2
 connection node_1;
 SELECT * FROM t1;
+ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
+XA END 'test';
 ERROR XA102: XA_RBDEADLOCK: Transaction branch was rolled back: deadlock was detected
+XA ROLLBACK 'test';
 expect (1, node2)
 SELECT * FROM t1;
 f1	f2
@@ -34,6 +37,7 @@ f1	f2
 connection node_1;
 XA END 'test';
 ERROR XA102: XA_RBDEADLOCK: Transaction branch was rolled back: deadlock was detected
+XA ROLLBACK 'test';
 expect (1, node2)
 SELECT * FROM t1;
 f1	f2
@@ -56,6 +60,7 @@ f1	f2
 connection node_1;
 XA PREPARE 'test';
 ERROR XA102: XA_RBDEADLOCK: Transaction branch was rolled back: deadlock was detected
+XA ROLLBACK 'test';
 expect (1, node2)
 SELECT * FROM t1;
 f1	f2
