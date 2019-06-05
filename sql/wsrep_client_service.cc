@@ -381,13 +381,12 @@ void Wsrep_client_service::debug_crash(const char* crash_point)
 int Wsrep_client_service::bf_rollback()
 {
   DBUG_ASSERT(m_thd == current_thd);
-  DBUG_ENTER("Wsrep_client_service::rollback");
+  DBUG_ENTER("Wsrep_client_service::bf_rollback");
   int ret(1);
   if (is_xa())
   {
-    m_thd->lex->xid= m_thd->transaction.xid_state.get_xid();
-    ret= wsrep_trans_xa_end_and_rollback(m_thd);
-    wsrep_override_error(m_thd, ER_XA_RBDEADLOCK);
+    m_thd->transaction.xid_state.set_error(ER_LOCK_DEADLOCK);
+    ret= ha_rollback_trans(m_thd, true);
   }
   else
   {
