@@ -31,13 +31,16 @@ XA END 'test';
 UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1
 
 --connection spider_1
-# TODO: what error should be returned here?
 --error 1180
 XA PREPARE 'test';
+# spider rollbacks the transaction on prepare error
+--error 1397 # XAER_NOTA
 XA ROLLBACK 'test';
+--echo # expect entry for shard 1
 SELECT * FROM mysql.spider_xa_member;
+--echo # expect one entry for the XA
 SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;
@@ -49,7 +52,7 @@ TRUNCATE hashpart;
 
 --connection spider_1
 INSERT INTO hashpart values (1,'0'), (2,'0');
-XA START 'test'
+XA START 'test';
 UPDATE hashpart SET val='1' WHERE id=1;
 UPDATE hashpart SET val='1' WHERE id=2;
 XA END 'test';
@@ -61,10 +64,13 @@ UPDATE hashpart set val='2' where id=2;  # trigger BF abort on shard 2
 # TODO: what error should be returned here?
 --error 1180
 XA PREPARE 'test';
+--error 1397 # XAER_NOTA
 XA ROLLBACK 'test';
+--echo # expect two entries, one for each shard
 SELECT * FROM mysql.spider_xa_member;
+--echo # expect one entry for the XA
 SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;

@@ -29,12 +29,15 @@ UPDATE hashpart SET val='1' WHERE id=2;
 UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1
 
 --connection spider_1
-# TODO: expect the correct error
---error 1180
+--error 1180 # TODO: improve spider's error - "ERROR HY000: Got error 1614 "Unknown error 1614" during COMMIT"
 COMMIT;
+SELECT * FROM hashpart;
+
+--echo # expect entry for shard 1
 SELECT * FROM mysql.spider_xa_member;
+--echo # expect entry for the failed XA transaction
 SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;
@@ -53,12 +56,15 @@ UPDATE hashpart SET val='1' WHERE id=2;
 UPDATE hashpart set val='2' where id=2;  # trigger BF abort on shard 2
 
 --connection spider_1
-# TODO: expect the correct error
 --error 1180
 COMMIT;
+SELECT * FROM hashpart;
+
+--echo # expect entries for both participant shards
 SELECT * FROM mysql.spider_xa_member;
+--echo # expect entry for the failed XA
 SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;

@@ -26,7 +26,7 @@ select SPIDER_DIRECT_SQL('SET SESSION wsrep_trx_fragment_size = 1', '', 'srv "no
 select SPIDER_DIRECT_SQL('SET SESSION wsrep_trx_fragment_size = 1', '', 'srv "node_2_1"');
 
 BEGIN;
-# replicated fragments in both shards
+# replicate fragments in both shards
 UPDATE hashpart SET val='1' WHERE id=1;
 UPDATE hashpart SET val='1' WHERE id=2;
 
@@ -59,7 +59,6 @@ SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
 SELECT COUNT(*) `expect 1` FROM mysql.wsrep_streaming_log;
 
 --connection spider_1
-# TODO: expect correct error
 --error 1180
 COMMIT;
 

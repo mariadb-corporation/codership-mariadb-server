@@ -32,7 +32,7 @@ UPDATE hashpart SET val='1' WHERE id=2;
 UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1
 
 --connection spider_1
---error 1614 # deadlock error
+--error 1213 # deadlock error
 INSERT INTO hashpart values (3, '1');
 
 # TODO: the following should have no effect
@@ -44,9 +44,9 @@ XA END 'test';
 XA ROLLBACK 'test';
 SELECT * FROM hashpart;
 
-SELECT * FROM mysql.spider_xa_member;
-SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_member;
+SELECT count(*) `expect 0` FROM mysql.spider_xa;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;
 TRUNCATE hashpart;
@@ -66,7 +66,7 @@ UPDATE hashpart SET val='1' WHERE id=2;
 UPDATE hashpart set val='2' where id=2;  # trigger BF abort on shard 2
 
 --connection spider_1
---error 1614
+--error 1213
 INSERT INTO hashpart values (4, '1');
 
 # TODO: the following should have no effect after the rollback
@@ -76,15 +76,15 @@ XA END 'test';
 XA ROLLBACK 'test';
 SELECT * FROM hashpart;
 
-SELECT * FROM mysql.spider_xa_member;
-SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_member;
+SELECT count(*) `expect 0` FROM mysql.spider_xa;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;
 TRUNCATE hashpart;
 
 
-# User tries to XA COMMIT after a BF abort
+# User tries to XA PREPARE after a BF abort
 # ----------------------------
 
 --connection spider_1
@@ -98,20 +98,24 @@ UPDATE hashpart SET val='1' WHERE id=2;
 UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1
 
 --connection spider_1
---error 1614 # deadlock error
+--error 1213 # deadlock error
 INSERT INTO hashpart values (3, '1');
 
 # TODO: the following should have no effect
 INSERT INTO hashpart values (9,'9');
 
 XA END 'test';
-# TODO: expect the correct error
+--error 1180
+XA PREPARE 'test';
+--error 1397 # XA is gone after the prepare
 XA COMMIT 'test';
 SELECT * FROM hashpart;
 
+--echo # expect entry for shard 1
 SELECT * FROM mysql.spider_xa_member;
+--echo # expect entry for the XA transaction
 SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;
 TRUNCATE hashpart;
