@@ -1,0 +1,66 @@
+--let $galera_shards= 2
+--let $galera_shard_size= 2
+
+--source include/galera_spider_init.inc
+
+# setup tables
+# -------------------
+--source include/create_test_tables.inc
+
+# Spider's internal XA
+# ------------------
+--connection spider_1
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+--connection spider_2
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+
+
+# Trigger a BF abort on COMMIT: entry for the XA will remain in spider_xa table
+# ----------------------------
+
+--connection spider_1
+INSERT INTO hashpart values (1,'0'), (2,'0');
+BEGIN;
+UPDATE hashpart SET val='1' WHERE id=1;
+UPDATE hashpart SET val='1' WHERE id=2;
+
+--connection spider_2
+UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1
+
+--connection spider_1
+--error 1180
+COMMIT;
+SELECT * FROM hashpart;
+
+--echo # expect entry for shard 1
+SELECT * FROM mysql.spider_xa_member;
+--echo # expect entry for the failed XA transaction
+SELECT * FROM mysql.spider_xa;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
+
+# New transaction fails
+# -----------------------------
+BEGIN;
+UPDATE hashpart SET val='3' WHERE id=1;
+UPDATE hashpart SET val='3' WHERE id=2;
+--error 12605 # xid already exists
+COMMIT;
+
+# Clearing spider tables makes the problem go away
+# --------------------
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa;
+TRUNCATE hashpart;
+
+BEGIN;
+UPDATE hashpart SET val='3' WHERE id=1;
+UPDATE hashpart SET val='3' WHERE id=2;
+COMMIT;
+
+# cleanup tables
+# ----------------------
+--source include/drop_test_tables.inc
+
+--source include/galera_spider_end.inc
