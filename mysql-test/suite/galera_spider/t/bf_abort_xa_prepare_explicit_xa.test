@@ -37,9 +37,9 @@ XA PREPARE 'test';
 --error 1397 # XAER_NOTA
 XA ROLLBACK 'test';
 --echo # expect entry for shard 1
-SELECT * FROM mysql.spider_xa_member;
+SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
 --echo # expect one entry for the XA
-SELECT * FROM mysql.spider_xa;
+SELECT status FROM mysql.spider_xa;
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
@@ -67,9 +67,9 @@ XA PREPARE 'test';
 --error 1397 # XAER_NOTA
 XA ROLLBACK 'test';
 --echo # expect two entries, one for each shard
-SELECT * FROM mysql.spider_xa_member;
+SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
 --echo # expect one entry for the XA
-SELECT * FROM mysql.spider_xa;
+SELECT status FROM mysql.spider_xa;
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;

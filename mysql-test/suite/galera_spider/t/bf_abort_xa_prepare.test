@@ -37,10 +37,10 @@ UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1, which AL
 --reap
 SELECT * FROM hashpart;
 --echo # expect entry for shard 1 to remain in the table
-SELECT * FROM mysql.spider_xa_member;
+SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
 --echo # expect entry for the XA transaction
-SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT status FROM mysql.spider_xa;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;
@@ -69,10 +69,10 @@ UPDATE hashpart set val='2' where id=2;  # trigger BF abort on shard 2, which AL
 --reap
 SELECT * FROM hashpart;
 --echo # expect entries from both participant shards to remain in the table
-SELECT * FROM mysql.spider_xa_member;
+SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
 --echo # expect entry for the XA transaction
-SELECT * FROM mysql.spider_xa;
-SELECT * FROM mysql.spider_xa_failed_log;
+SELECT status FROM mysql.spider_xa;
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
 TRUNCATE mysql.spider_xa;

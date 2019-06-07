@@ -1,0 +1,153 @@
+connection node_2_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id));
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val));
+connection node_1_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id));
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val));
+connection spider_2;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "hashpart"'
+               PARTITION BY KEY (id)
+(
+PARTITION p1 COMMENT = 'srv "node_1_2"',
+PARTITION p2 COMMENT = 'srv "node_2_2"'
+               );
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "rangepart"'
+               PARTITION BY range columns (val)
+(
+PARTITION p1 VALUES LESS THAN ('l') COMMENT = 'srv "node_1_2"',
+PARTITION p2 VALUES LESS THAN (maxvalue) COMMENT = 'srv "node_2_2"'
+               );
+connection spider_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "hashpart"'
+               PARTITION BY KEY (id)
+(
+PARTITION p1 COMMENT = 'srv "node_1_1"',
+PARTITION p2 COMMENT = 'srv "node_2_1"'
+               );
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "rangepart"'
+               PARTITION BY range columns (val)
+(
+PARTITION p1 VALUES LESS THAN ('l') COMMENT = 'srv "node_1_1"',
+PARTITION p2 VALUES LESS THAN (maxvalue) COMMENT = 'srv "node_2_1"'
+               );
+connection node_1_1;
+connection spider_1;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+connection spider_2;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+connection spider_1;
+INSERT INTO hashpart values (1,'0'), (2,'0');
+BEGIN;
+UPDATE hashpart SET val='1' WHERE id=1;
+UPDATE hashpart SET val='1' WHERE id=2;
+connection spider_2;
+UPDATE hashpart set val='2' where id=1;
+connection spider_1;
+COMMIT;
+ERROR HY000: Got error 1614 "Unknown error 1614" during COMMIT
+SELECT * FROM hashpart;
+id	val
+1	2
+2	0
+# expect entry for shard 1
+SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
+scheme	socket	host	port
+mysql		127.0.0.1	16000
+# expect entry for the failed XA transaction
+SELECT status FROM mysql.spider_xa;
+status
+NOT YET
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
+expect 0
+0
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa;
+TRUNCATE hashpart;
+connection spider_1;
+INSERT INTO hashpart values (1,'0'), (2,'0');
+BEGIN;
+UPDATE hashpart SET val='1' WHERE id=1;
+UPDATE hashpart SET val='1' WHERE id=2;
+connection spider_2;
+UPDATE hashpart set val='2' where id=2;
+connection spider_1;
+COMMIT;
+ERROR HY000: Got error 1614 "Unknown error 1614" during COMMIT
+SELECT * FROM hashpart;
+id	val
+1	0
+2	2
+# expect entries for both participant shards
+SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
+scheme	socket	host	port
+mysql		127.0.0.1	16000
+mysql		127.0.0.1	16002
+# expect entry for the failed XA
+SELECT status FROM mysql.spider_xa;
+status
+NOT YET
+SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
+expect 0
+0
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa;
+TRUNCATE hashpart;
+connection node_2_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection node_1_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection spider_2;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection spider_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection node_1_1;
+disconnect spider_2;
+connection spider_1;
+DROP FUNCTION spider_direct_sql;
+DROP FUNCTION spider_bg_direct_sql;
+DROP FUNCTION spider_ping_table;
+DROP FUNCTION spider_copy_tables;
+DROP FUNCTION spider_flush_table_mon_cache;
+UNINSTALL PLUGIN spider;
+Warnings:
+Warning	1620	Plugin is busy and will be uninstalled on shutdown
+DROP TABLE IF EXISTS mysql.spider_xa;
+DROP TABLE IF EXISTS mysql.spider_xa_member;
+DROP TABLE IF EXISTS mysql.spider_xa_failed_log;
+DROP TABLE IF EXISTS mysql.spider_tables;
+DROP TABLE IF EXISTS mysql.spider_link_mon_servers;
+DROP TABLE IF EXISTS mysql.spider_link_failed_log;
+DROP TABLE IF EXISTS mysql.spider_table_position_for_recovery;
+DROP TABLE IF EXISTS mysql.spider_table_sts;
+DROP TABLE IF EXISTS mysql.spider_table_crd;
+disconnect spider_1;
