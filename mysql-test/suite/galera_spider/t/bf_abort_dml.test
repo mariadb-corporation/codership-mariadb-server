@@ -105,7 +105,7 @@ COMMIT;
 SELECT * FROM hashpart;
 
 --echo # expect entries for both participant shards
-SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
+SELECT count(*) `expect 2` FROM mysql.spider_xa_member;
 --echo # expect entry for the failed XA
 SELECT status FROM mysql.spider_xa;
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;

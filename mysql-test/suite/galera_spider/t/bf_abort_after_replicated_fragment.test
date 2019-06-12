@@ -71,7 +71,8 @@ SELECT COUNT(*) `expect 0` FROM mysql.wsrep_streaming_log;
 --connection spider_1
 SELECT * FROM hashpart;
 
-SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
+# expect entry for shard 1 to remain
+SELECT count(*) `expect 1` FROM mysql.spider_xa_member;
 SELECT status FROM mysql.spider_xa;
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 TRUNCATE mysql.spider_xa_member;

@@ -76,9 +76,9 @@ id	val
 1	2
 2	0
 # expect entry for shard 1
-SELECT scheme, socket, host, port FROM mysql.spider_xa_member;
-scheme	socket	host	port
-mysql		127.0.0.1	16000
+SELECT count(*) `expect 1` FROM mysql.spider_xa_member;
+expect 1
+1
 # expect entry for the failed XA transaction
 SELECT status FROM mysql.spider_xa;
 status
