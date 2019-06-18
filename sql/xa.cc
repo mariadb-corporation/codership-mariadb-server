@@ -599,6 +599,7 @@ bool trans_xa_commit(THD *thd)
 {
   bool res= TRUE;
   DBUG_ENTER("trans_xa_commit");
+  DEBUG_SYNC(thd, "before_xa_commit");
 
   if (!thd->transaction.xid_state.is_explicit_XA() ||
       !thd->transaction.xid_state.xid_cache_element->xid.eq(thd->lex->xid))

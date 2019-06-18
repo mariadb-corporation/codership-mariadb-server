@@ -1,0 +1,248 @@
+connection node_2_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id));
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val));
+connection node_1_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id));
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val));
+connection spider_2;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "hashpart"'
+               PARTITION BY KEY (id)
+(
+PARTITION p1 COMMENT = 'srv "node_1_2"',
+PARTITION p2 COMMENT = 'srv "node_2_2"'
+               );
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "rangepart"'
+               PARTITION BY range columns (val)
+(
+PARTITION p1 VALUES LESS THAN ('l') COMMENT = 'srv "node_1_2"',
+PARTITION p2 VALUES LESS THAN (maxvalue) COMMENT = 'srv "node_2_2"'
+               );
+connection spider_1;
+CREATE TABLE hashpart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "hashpart"'
+               PARTITION BY KEY (id)
+(
+PARTITION p1 COMMENT = 'srv "node_1_1"',
+PARTITION p2 COMMENT = 'srv "node_2_1"'
+               );
+CREATE TABLE rangepart (id int(10) unsigned NOT NULL AUTO_INCREMENT,
+val varchar(50) NOT NULL,
+PRIMARY KEY(id, val))
+ENGINE=spider
+COMMENT='wrapper "mysql", table "rangepart"'
+               PARTITION BY range columns (val)
+(
+PARTITION p1 VALUES LESS THAN ('l') COMMENT = 'srv "node_1_1"',
+PARTITION p2 VALUES LESS THAN (maxvalue) COMMENT = 'srv "node_2_1"'
+               );
+connection node_1_1;
+connection spider_1;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+connection spider_2;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+connection spider_2;
+BEGIN;
+INSERT INTO hashpart VALUES (1, '1'), (2, '1');
+select SPIDER_DIRECT_SQL('SET DEBUG_SYNC= "before_xa_commit SIGNAL at_prepared WAIT_FOR done"', '', 'srv "node_2_2"');
+SPIDER_DIRECT_SQL('SET DEBUG_SYNC= "before_xa_commit SIGNAL at_prepared WAIT_FOR done"', '', 'srv "node_2_2"')
+1
+COMMIT;;
+connection node_2_1;
+connection node_2_2;
+SET DEBUG_SYNC= 'now WAIT_FOR at_prepared';
+SET SESSION wsrep_sync_wait = 0;
+Killing server ...
+connection node_2_1;
+SET SESSION wsrep_sync_wait = 0;
+connection node_2_2;
+Performing --wsrep-recover ...
+# restart
+SET SESSION wsrep_sync_wait = 15;
+connection node_2_1;
+SET SESSION wsrep_sync_wait = 15;
+connection spider_2;
+ERROR 08S01: Got an error reading communication packets
+connection node_1_1;
+# commit succeeds on shard 1
+SELECT * FROM hashpart;
+id	val
+1	1
+connection node_2_1;
+# but not on shard 2
+SELECT * FROM hashpart;
+id	val
+connection spider_2;
+SELECT status `expect COMMIT` FROM mysql.spider_xa;
+expect COMMIT
+COMMIT
+SELECT status `expect COMMIT` FROM mysql.spider_xa_failed_log;
+expect COMMIT
+COMMIT
+SELECT count(*) `expect 2` FROM mysql.spider_xa_member;
+expect 2
+2
+connection node_2_2;
+# expect the XA to be prepared
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	XXX	XXX	XXX
+# commiting it
+# expect XA to be commited
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+connection node_2_1;
+SELECT * FROM hashpart;
+id	val
+2	1
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+connection spider_1;
+# the two inserted rows should be here
+SELECT * FROM hashpart;
+id	val
+1	1
+2	1
+connection spider_2;
+# the two inserted rows should be here
+SELECT * FROM hashpart;
+id	val
+1	1
+2	1
+TRUNCATE hashpart;
+connection spider_1;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=0;
+connection spider_2;
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=0;
+connection spider_2;
+XA START 'test';
+INSERT INTO hashpart VALUES (1, '1'), (2, '1');
+XA END 'test';
+XA PREPARE 'test';
+connection node_2_1;
+connection node_2_2;
+SET SESSION wsrep_sync_wait = 0;
+Killing server ...
+connection node_2_1;
+SET SESSION wsrep_sync_wait = 0;
+connection node_2_2;
+Performing --wsrep-recover ...
+# restart
+SET SESSION wsrep_sync_wait = 15;
+connection node_2_1;
+SET SESSION wsrep_sync_wait = 15;
+connection spider_2;
+XA COMMIT 'test';
+ERROR 08S01: Got an error reading communication packets
+connection node_1_1;
+# commit succeeds on shard 1
+SELECT * FROM hashpart;
+id	val
+1	1
+connection node_2_1;
+# but not on shard 2
+SELECT * FROM hashpart;
+id	val
+connection spider_2;
+XA COMMIT 'test';
+ERROR XAE04: XAER_NOTA: Unknown XID
+SELECT status `expect COMMIT` FROM mysql.spider_xa;
+expect COMMIT
+COMMIT
+COMMIT
+SELECT status `expect COMMIT` FROM mysql.spider_xa_failed_log;
+expect COMMIT
+COMMIT
+COMMIT
+SELECT count(*) `expect 2` FROM mysql.spider_xa_member;
+expect 2
+4
+connection node_2_2;
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	4	0	test
+XA COMMIT 'test';
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+connection node_2_1;
+SELECT * FROM hashpart;
+id	val
+2	1
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+connection spider_1;
+# the two inserted rows should be here
+SELECT * FROM hashpart;
+id	val
+1	1
+2	1
+connection spider_2;
+# the two inserted rows should be here
+SELECT * FROM hashpart;
+id	val
+1	1
+2	1
+TRUNCATE mysql.spider_xa;
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa_failed_log;
+connection node_2_1;
+call mtr.add_suppression('Found 1 prepared XA transactions');
+call mtr.add_suppression('Discovered discontinuity in recovered wsrep transaction XIDs.');
+connection node_2_2;
+call mtr.add_suppression('Found 1 prepared XA transactions');
+call mtr.add_suppression('Discovered discontinuity in recovered wsrep transaction XIDs.');
+connection node_2_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection node_1_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection spider_2;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection spider_1;
+DROP TABLE hashpart;
+DROP TABLE rangepart;
+connection node_1_1;
+disconnect spider_2;
+connection spider_1;
+DROP FUNCTION spider_direct_sql;
+DROP FUNCTION spider_bg_direct_sql;
+DROP FUNCTION spider_ping_table;
+DROP FUNCTION spider_copy_tables;
+DROP FUNCTION spider_flush_table_mon_cache;
+UNINSTALL PLUGIN spider;
+Warnings:
+Warning	1620	Plugin is busy and will be uninstalled on shutdown
+DROP TABLE IF EXISTS mysql.spider_xa;
+DROP TABLE IF EXISTS mysql.spider_xa_member;
+DROP TABLE IF EXISTS mysql.spider_xa_failed_log;
+DROP TABLE IF EXISTS mysql.spider_tables;
+DROP TABLE IF EXISTS mysql.spider_link_mon_servers;
+DROP TABLE IF EXISTS mysql.spider_link_failed_log;
+DROP TABLE IF EXISTS mysql.spider_table_position_for_recovery;
+DROP TABLE IF EXISTS mysql.spider_table_sts;
+DROP TABLE IF EXISTS mysql.spider_table_crd;
+disconnect spider_1;

@@ -1,0 +1,230 @@
+--let $galera_shards= 2
+--let $galera_shard_size= 2
+
+--source include/galera_spider_init.inc
+
+# setup tables
+# -------------------
+--source include/create_test_tables.inc
+
+# Internal XA failure on commit
+# ------------------
+--connection spider_1
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+--connection spider_2
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=1;
+
+# do multi-shard XA transaction up to PREPARE
+--connection spider_2
+BEGIN;
+INSERT INTO hashpart VALUES (1, '1'), (2, '1');
+# proceed until actual xa commit on shard 2
+select SPIDER_DIRECT_SQL('SET DEBUG_SYNC= "before_xa_commit SIGNAL at_prepared WAIT_FOR done"', '', 'srv "node_2_2"');
+--send COMMIT;
+
+--connection node_2_1
+--disable_query_log
+--disable_result_log
+--let $wsrep_provider_options_orig = `SELECT @@wsrep_provider_options`
+SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
+--enable_query_log
+--enable_result_log
+
+# kill and recover node from shard 2 we're connected to
+--connection node_2_2
+SET DEBUG_SYNC= 'now WAIT_FOR at_prepared';
+SET SESSION wsrep_sync_wait = 0;
+--source include/kill_galera.inc
+
+--connection node_2_1
+SET SESSION wsrep_sync_wait = 0;
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--connection node_2_2
+--let $galera_wsrep_recover_server_id=4
+--source suite/galera/include/galera_wsrep_recover.inc
+--let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.4.expect
+--source include/start_mysqld.inc
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+SET SESSION wsrep_sync_wait = 15;
+
+--connection node_2_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+SET SESSION wsrep_sync_wait = 15;
+--disable_query_log
+--disable_result_log
+--eval SET GLOBAL wsrep_provider_options = '$wsrep_provider_options_orig';
+--enable_result_log
+--enable_query_log
+
+# after the node is recovered, try to COMMIT the XA in spider
+--connection spider_2
+--error 1158 # error reading communication packets due to broken connection
+--reap
+
+--connection node_1_1
+--echo # commit succeeds on shard 1
+SELECT * FROM hashpart;
+
+--connection node_2_1
+--echo # but not on shard 2
+SELECT * FROM hashpart;
+
+# spider left entries in its system tables
+--connection spider_2
+SELECT status `expect COMMIT` FROM mysql.spider_xa;
+# entry for the shard which failed the commit
+SELECT status `expect COMMIT` FROM mysql.spider_xa_failed_log;
+# entry for each RM in the failed xa
+SELECT count(*) `expect 2` FROM mysql.spider_xa_member;
+
+# we should still be able to commit the transaction directly in shard 2
+--connection node_2_2
+--echo # expect the XA to be prepared
+# replace generated values (non-deterministic)
+--replace_column 2 XXX 3 XXX 4 XXX
+XA RECOVER;
+--echo # commiting it
+# get generated XID for commit
+--disable_query_log
+--disable_result_log
+--let $xid = query_get_value("XA RECOVER FORMAT='SQL'", data, 1)
+--eval XA COMMIT $xid
+--enable_result_log
+--enable_query_log
+--echo # expect XA to be commited
+XA RECOVER;
+
+--connection node_2_1
+SELECT * FROM hashpart; # TODO: just to trigger sync wait, remove if not needed
+XA RECOVER;
+
+--connection spider_1
+--echo # the two inserted rows should be here
+SELECT * FROM hashpart;
+
+--connection spider_2
+--echo # the two inserted rows should be here
+SELECT * FROM hashpart;
+
+TRUNCATE hashpart;
+
+# Explicit XA failure on commit
+# ------------------
+--connection spider_1
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=0;
+--connection spider_2
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SET LOCAL spider_internal_xa=0;
+
+# do multi-shard XA transaction up to PREPARE
+--connection spider_2
+XA START 'test';
+INSERT INTO hashpart VALUES (1, '1'), (2, '1');
+XA END 'test';
+XA PREPARE 'test';
+
+--connection node_2_1
+--disable_query_log
+--disable_result_log
+SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
+--enable_result_log
+--enable_query_log
+
+
+# kill and recover node from shard 2 we're connected to
+--connection node_2_2
+SET SESSION wsrep_sync_wait = 0;
+--source include/kill_galera.inc
+
+--connection node_2_1
+SET SESSION wsrep_sync_wait = 0;
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--connection node_2_2
+--let $galera_wsrep_recover_server_id=4
+--source suite/galera/include/galera_wsrep_recover.inc
+--let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.4.expect
+--source include/start_mysqld.inc
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+SET SESSION wsrep_sync_wait = 15;
+
+--connection node_2_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+SET SESSION wsrep_sync_wait = 15;
+--disable_query_log
+--disable_result_log
+--eval SET GLOBAL wsrep_provider_options = '$wsrep_provider_options_orig';
+--enable_result_log
+--enable_query_log
+
+# after the node is recovered, try to COMMIT the XA in spider
+--connection spider_2
+--error 1158 # error reading communication packets due to broken connection
+XA COMMIT 'test';
+
+--connection node_1_1
+--echo # commit succeeds on shard 1
+SELECT * FROM hashpart;
+
+--connection node_2_1
+--echo # but not on shard 2
+SELECT * FROM hashpart;
+
+# spider's XA is gone, but it left entries in its system tables
+--connection spider_2
+--error 1397
+XA COMMIT 'test';
+SELECT status `expect COMMIT` FROM mysql.spider_xa;
+# entry for the shard which failed the commit
+SELECT status `expect COMMIT` FROM mysql.spider_xa_failed_log;
+# entry for each RM in the failed xa
+SELECT count(*) `expect 2` FROM mysql.spider_xa_member;
+
+# we should still be able to commit the transaction directly in shard 2
+--connection node_2_2
+# get generated XID for commit
+XA RECOVER;
+XA COMMIT 'test';
+XA RECOVER;
+
+--connection node_2_1
+SELECT * FROM hashpart; # TODO: just to trigger sync wait, remove if not needed
+XA RECOVER;
+
+--connection spider_1
+--echo # the two inserted rows should be here
+SELECT * FROM hashpart;
+
+--connection spider_2
+--echo # the two inserted rows should be here
+SELECT * FROM hashpart;
+
+# cleanup
+# ----------------------
+TRUNCATE mysql.spider_xa;
+TRUNCATE mysql.spider_xa_member;
+TRUNCATE mysql.spider_xa_failed_log;
+
+--connection node_2_1
+call mtr.add_suppression('Found 1 prepared XA transactions');
+call mtr.add_suppression('Discovered discontinuity in recovered wsrep transaction XIDs.');
+--connection node_2_2
+call mtr.add_suppression('Found 1 prepared XA transactions');
+call mtr.add_suppression('Discovered discontinuity in recovered wsrep transaction XIDs.');
+
+--source include/drop_test_tables.inc
+
+--source include/galera_spider_end.inc
+
+
+
