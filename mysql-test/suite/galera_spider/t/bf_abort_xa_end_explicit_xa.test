@@ -31,11 +31,17 @@ UPDATE hashpart SET val='1' WHERE id=2;
 UPDATE hashpart set val='2' where id=1;  # trigger BF abort on shard 1
 
 --connection spider_1
-# XA END is not passed to spider, BF abort is not detected here
+# XA END is not passed to spider, BF abort is detected on XA PREPARE
 XA END 'test';
+--error 1180
+XA PREPARE 'test';
+# spider rollbacks the transaction on prepare error
+--error 1397 # XAER_NOTA
 XA ROLLBACK 'test';
-SELECT count(*) `expect 0` FROM mysql.spider_xa_member;
-SELECT count(*) `expect 0` FROM mysql.spider_xa;
+--echo # expect entry for shard 1
+SELECT count(*) `expect 1` FROM mysql.spider_xa_member;
+--echo # expect one entry for the XA
+SELECT status FROM mysql.spider_xa;
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;
@@ -55,11 +61,16 @@ UPDATE hashpart SET val='1' WHERE id=2;
 UPDATE hashpart set val='2' where id=2;  # trigger BF abort on shard 2
 
 --connection spider_1
-# XA END not passed to spider. BF abort not detected
+# XA END is not passed to spider, BF abort is detected on XA PREPARE
 XA END 'test';
+--error 1180
+XA PREPARE 'test';
+--error 1397 # XAER_NOTA
 XA ROLLBACK 'test';
-SELECT count(*) `expect 0` FROM mysql.spider_xa_member;
-SELECT count(*) `expect 0` FROM mysql.spider_xa;
+--echo # expect two entries, one for each shard
+SELECT count(*) `expect 2` FROM mysql.spider_xa_member;
+--echo # expect one entry for the XA
+SELECT status FROM mysql.spider_xa;
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 
 TRUNCATE mysql.spider_xa_member;

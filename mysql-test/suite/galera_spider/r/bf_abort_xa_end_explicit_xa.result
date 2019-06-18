@@ -70,15 +70,18 @@ connection spider_2;
 UPDATE hashpart set val='2' where id=1;
 connection spider_1;
 XA END 'test';
+XA PREPARE 'test';
+ERROR HY000: Got error 1614 "Unknown error 1614" during COMMIT
 XA ROLLBACK 'test';
-Warnings:
-Warning	1614	XA_RBDEADLOCK: Transaction branch was rolled back: deadlock was detected
-SELECT count(*) `expect 0` FROM mysql.spider_xa_member;
-expect 0
-0
-SELECT count(*) `expect 0` FROM mysql.spider_xa;
-expect 0
-0
+ERROR XAE04: XAER_NOTA: Unknown XID
+# expect entry for shard 1
+SELECT count(*) `expect 1` FROM mysql.spider_xa_member;
+expect 1
+1
+# expect one entry for the XA
+SELECT status FROM mysql.spider_xa;
+status
+NOT YET
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 expect 0
 0
@@ -94,15 +97,18 @@ connection spider_2;
 UPDATE hashpart set val='2' where id=2;
 connection spider_1;
 XA END 'test';
+XA PREPARE 'test';
+ERROR HY000: Got error 1614 "Unknown error 1614" during COMMIT
 XA ROLLBACK 'test';
-Warnings:
-Warning	1614	XA_RBDEADLOCK: Transaction branch was rolled back: deadlock was detected
-SELECT count(*) `expect 0` FROM mysql.spider_xa_member;
-expect 0
-0
-SELECT count(*) `expect 0` FROM mysql.spider_xa;
-expect 0
-0
+ERROR XAE04: XAER_NOTA: Unknown XID
+# expect two entries, one for each shard
+SELECT count(*) `expect 2` FROM mysql.spider_xa_member;
+expect 2
+2
+# expect one entry for the XA
+SELECT status FROM mysql.spider_xa;
+status
+NOT YET
 SELECT count(*) `expect 0` FROM mysql.spider_xa_failed_log;
 expect 0
 0
