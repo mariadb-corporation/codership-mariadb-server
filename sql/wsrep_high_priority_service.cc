@@ -520,6 +520,20 @@ int Wsrep_applier_service::apply_write_set(const wsrep::ws_meta& ws_meta,
   DBUG_RETURN(ret);
 }
 
+int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta&,
+                                           const wsrep::const_buffer&)
+{
+  DBUG_ENTER("Wsrep_applier_service::apply_nbo_begin");
+  DBUG_ASSERT(0); /* Not implemented yet. */
+  int ret= 0;
+  /*
+    - Allocate a new THD and launch worker thread for NBO
+    - If thread creation is successful, wait for signal from worker thread.
+      Else delete THD and return error.
+   */
+  DBUG_RETURN(ret);
+}
+
 void Wsrep_applier_service::after_apply()
 {
   DBUG_ENTER("Wsrep_applier_service::after_apply");
