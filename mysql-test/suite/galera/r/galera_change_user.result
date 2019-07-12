@@ -1,0 +1,8 @@
+connection node_2;
+connection node_1;
+connection node_1;
+CREATE USER user1;
+connect node_1a, 127.0.0.1, root, , test, $MYPORT_NODE_1;
+disconnect node_1a;
+connection node_1;
+DROP USER user1;
