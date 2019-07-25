@@ -23,7 +23,9 @@
 #include <sql_audit.h>
 #include <debug_sync.h>
 #include <threadpool.h>
-
+#ifdef WITH_WSREP
+#include "wsrep_trans_observer.h"
+#endif /* WITH_WSREP */
 
 /* Threadpool parameters */
 
@@ -275,6 +277,9 @@ static THD* threadpool_add_connection(CONNECT *connect, void *scheduler_data)
 
   thd->skip_wait_timeout= true;
   set_thd_idle(thd);
+#ifdef WITH_WSREP
+  wsrep_open(thd);
+#endif /* WITH_WSREP */
   return thd;
 
 end:
@@ -288,6 +293,12 @@ static void threadpool_remove_connection(THD *thd)
   thread_attach(thd);
   thd->event_scheduler.data= 0;
   thd->net.reading_or_writing = 0;
+#ifdef WITH_WSREP
+  /* Keep wsrep close after clearing thd->event_scheduler.data,
+     as close may cause rollback, which in turn may hit tp_wait
+     calls. */
+  wsrep_close(thd);
+#endif /* WITH_WSREP */
   end_connection(thd);
   close_connection(thd, 0);
   unlink_thd(thd);
@@ -323,6 +334,11 @@ static void handle_wait_timeout(THD *thd)
 */
 static int threadpool_process_request(THD *thd)
 {
+#ifdef WITH_WSREP
+  /* Wait until possible background rollback has finished before
+     attaching the thd. */
+  wsrep_wait_rollback_complete_and_acquire_ownership(thd);
+#endif /* WITH_WSREP */
   int retval= 0;
   thread_attach(thd);
 
@@ -377,6 +393,14 @@ static int threadpool_process_request(THD *thd)
   }
 
 end:
+#ifdef WITH_WSREP
+  if (retval && thd->wsrep_cs().state() == wsrep::client_state::s_exec)
+  {
+    /* Clear the wsrep client state for if there was an error before
+       the command could be succesfully read from network. */
+    wsrep_after_command_ignore_result(thd);
+  }
+#endif /* WITH_WSREP */
   return retval;
 }
 
