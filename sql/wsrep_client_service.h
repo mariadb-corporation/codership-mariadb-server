@@ -54,9 +54,6 @@ public:
   void debug_sync(const char*);
   void debug_crash(const char*);
   int bf_rollback();
-  bool is_xa() const;
-  bool is_xa_prepare() const;
-  std::string xid() const;
 private:
   friend class Wsrep_server_service;
   THD* m_thd;

@@ -446,6 +446,12 @@ bool trans_xa_start(THD *thd)
       trans_rollback(thd);
       DBUG_RETURN(true);
     }
+#ifdef WITH_WSREP
+    if (WSREP(thd))
+    {
+      wsrep_assign_xid(thd);
+    }
+#endif /* WITH_WSREP */
     DBUG_RETURN(FALSE);
   }
 
@@ -519,6 +525,30 @@ bool trans_xa_prepare(THD *thd)
 }
 
 
+#ifdef WITH_WSREP
+static int wsrep_ha_commit_or_rollback_by_xid(THD *thd, bool commit)
+{
+  const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, TRUE);
+  if (run_wsrep_hooks)
+  {
+    const int res= commit ?
+      wsrep_before_commit(thd, TRUE) :
+      wsrep_before_rollback(thd, TRUE);
+    if (res)
+      return res;
+  }
+  ha_commit_or_rollback_by_xid(thd->lex->xid, commit);
+  if (run_wsrep_hooks)
+  {
+    commit ?
+      wsrep_after_commit(thd, TRUE) :
+      wsrep_after_rollback(thd, TRUE);
+  }
+  return FALSE;
+}
+#endif /* WITH_WSREP */
+
+
 /**
   Commit and terminate the a XA transaction.
 
@@ -553,22 +583,10 @@ bool trans_xa_commit(THD *thd)
     {
       res= xa_trans_rolled_back(xs);
 #ifdef WITH_WSREP
-      const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, TRUE);
-      if (run_wsrep_hooks)
-      {
-        res= wsrep_before_commit(thd, TRUE);
-        if (res)
-        {
-          DBUG_RETURN(res);
-        }
-      }
-#endif /* WITH_WSREP */
+      if (wsrep_ha_commit_or_rollback_by_xid(thd, !res))
+        DBUG_RETURN(TRUE);
+#else
       ha_commit_or_rollback_by_xid(thd->lex->xid, !res);
-#ifdef WITH_WSREP
-      if (run_wsrep_hooks)
-      {
-        wsrep_after_commit(thd, TRUE);
-      }
 #endif /* WITH_WSREP */
       xid_cache_delete(thd, xs);
     }
@@ -688,22 +706,10 @@ bool trans_xa_rollback(THD *thd)
     {
       xa_trans_rolled_back(xs);
 #ifdef WITH_WSREP
-      const bool run_wsrep_hooks= wsrep_run_commit_hook(thd, TRUE);
-      if (run_wsrep_hooks)
-      {
-        bool res= wsrep_before_rollback(thd, TRUE);
-        if (res)
-        {
-          DBUG_RETURN(TRUE);
-        }
-      }
-#endif /* WITH_WSREP */
+      if (wsrep_ha_commit_or_rollback_by_xid(thd, 0))
+        DBUG_RETURN(TRUE);
+#else
       ha_commit_or_rollback_by_xid(thd->lex->xid, 0);
-#ifdef WITH_WSREP
-      if (run_wsrep_hooks)
-      {
-        wsrep_after_rollback(thd, TRUE);
-      }
 #endif /* WITH_WSREP */
       xid_cache_delete(thd, xs);
     }
@@ -949,7 +955,7 @@ bool wsrep_trans_xa_attach(THD *thd, XID *xid)
   {
     thd->transaction.xid_state.xid_cache_element= xs;
     thd->transaction.xid_state.xid_cache_element->acquired_to_recovered();
-    ret= thd->wsrep_cs().restore_prepared_transaction();
+    wsrep_restore_prepared_transaction(thd, xid);
   }
   return ret;
 }
@@ -984,7 +990,8 @@ struct xid_finder_arg
   const std::string &xid_match;
 };
 
-static my_bool xid_cache_finder(XID_cache_element *xs, struct xid_finder_arg* arg)
+static my_bool xid_cache_finder(XID_cache_element *xs,
+                                struct xid_finder_arg *arg)
 {
   char buf[SQL_XIDSIZE];
   const uint len(get_sql_xid(&xs->xid, buf));

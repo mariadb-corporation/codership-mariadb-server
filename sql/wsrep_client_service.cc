@@ -149,28 +149,6 @@ void Wsrep_client_service::cleanup_transaction()
   m_thd->wsrep_affected_rows= 0;
 }
 
-bool Wsrep_client_service::is_xa() const
-{
-  return m_thd->transaction.xid_state.is_explicit_XA();
-}
-
-bool Wsrep_client_service::is_xa_prepare() const
-{
-  DBUG_ASSERT(m_thd == current_thd);
-  return m_thd->lex->sql_command == SQLCOM_XA_PREPARE;
-}
-
-std::string Wsrep_client_service::xid() const
-{
-  if (is_xa())
-  {
-    std::string xid;
-    wsrep_get_sql_xid(m_thd->transaction.xid_state.get_xid(), xid);
-    return xid;
-  }
-  return "";
-}
-
 static int write_xa_event_helper(THD* thd,
                                  const char* query,
                                  size_t query_len,
@@ -197,7 +175,8 @@ int Wsrep_client_service::prepare_fragment_for_replication(
   THD* thd= m_thd;
   DBUG_ENTER("Wsrep_client_service::prepare_fragment_for_replication");
 
-  if (is_xa() && thd->wsrep_sr().fragments_certified() == 0)
+  if (thd->wsrep_trx().is_xa() &&
+      thd->wsrep_sr().fragments_certified() == 0)
   {
     write_xa_event_helper(thd, STRING_WITH_LEN("XA START "), buffer);
   }
@@ -246,7 +225,8 @@ int Wsrep_client_service::prepare_fragment_for_replication(
   }
   DBUG_ASSERT(total_length == buffer.size());
 
-  if (is_xa_prepare())
+  if (thd->wsrep_trx().is_xa() &&
+      m_thd->lex->sql_command == SQLCOM_XA_PREPARE)
   {
     write_xa_event_helper(thd, STRING_WITH_LEN("XA END "), buffer);
     write_xa_event_helper(thd, STRING_WITH_LEN("XA PREPARE "), buffer);
@@ -383,7 +363,7 @@ int Wsrep_client_service::bf_rollback()
   DBUG_ASSERT(m_thd == current_thd);
   DBUG_ENTER("Wsrep_client_service::bf_rollback");
   int ret(1);
-  if (is_xa())
+  if (m_thd->wsrep_trx().is_xa())
   {
     m_thd->transaction.xid_state.set_error(ER_LOCK_DEADLOCK);
     ret= ha_rollback_trans(m_thd, true);

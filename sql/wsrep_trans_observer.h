@@ -152,6 +152,20 @@ static inline int wsrep_start_trx_if_not_started(THD* thd)
   return ret;
 }
 
+static inline void wsrep_assign_xid(THD* thd)
+{
+  std::string xid;
+  wsrep_get_sql_xid(thd->lex->xid, xid);
+  thd->wsrep_cs().assign_xid(xid);
+}
+
+static inline bool wsrep_restore_prepared_transaction(THD* thd, XID* xid)
+{
+  std::string xid_string;
+  wsrep_get_sql_xid(xid, xid_string);
+  return thd->wsrep_cs().restore_xid(xid_string);
+}
+
 /*
   Helper method to determine if a transaction must terminate
   a prepared XA by XID (possibly on behalf of another node).

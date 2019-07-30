@@ -263,7 +263,7 @@ int Wsrep_high_priority_service::commit(const wsrep::ws_handle& ws_handle,
   int ret;
   if (m_thd->wsrep_trx().state() == wsrep::transaction::s_prepared)
   {
-    if (m_thd->wsrep_trx().is_xa())
+    if (m_thd->transaction.xid_state.is_explicit_XA())
     {
       m_thd->lex->xid= m_thd->transaction.xid_state.get_xid();
     }
@@ -318,7 +318,7 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
   if (m_thd->wsrep_trx().is_xa() ||
       m_thd->wsrep_trx().state() == wsrep::transaction::s_prepared)
   {
-    if (m_thd->wsrep_trx().is_xa())
+    if (m_thd->transaction.xid_state.is_explicit_XA())
     {
       m_thd->lex->xid= m_thd->transaction.xid_state.get_xid();
     }
