@@ -5916,7 +5916,9 @@ wsrep_error_label:
   res= true;
 
 finish:
-
+#ifdef WITH_WSREP
+  wsrep_nbo_phase_two_begin(thd);
+#endif /* WITH_WSREP */
   thd->reset_query_timer();
   DBUG_ASSERT(!thd->in_active_multi_stmt_transaction() ||
                thd->in_multi_stmt_transaction_mode());

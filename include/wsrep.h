@@ -34,7 +34,7 @@
     goto wsrep_error_label;
 
 #define WSREP_TO_ISOLATION_END                                          \
-  if ((WSREP(thd) && wsrep_thd_is_local_toi(thd)) ||                    \
+  if ((WSREP(thd) && (wsrep_thd_is_local_toi(thd) || wsrep_thd_is_nbo(thd))) || \
       wsrep_thd_is_in_rsu(thd))                                         \
     wsrep_to_isolation_end(thd);
 

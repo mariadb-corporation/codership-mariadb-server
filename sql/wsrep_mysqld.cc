@@ -1698,6 +1698,45 @@ static bool wsrep_can_run_in_toi(THD *thd, const char *db, const char *table,
   }
 }
 
+bool wsrep_thd_is_nbo(THD *thd)
+{
+  return (thd->wsrep_cs().mode() == wsrep::client_state::m_nbo);
+}
+
+/*
+  Decide if statement should run in NBO
+
+  The statement must be able to run in TOI in order to be candidate
+  for NBO.
+ */
+static bool wsrep_can_run_in_nbo(THD *thd, const char *db, const char *table,
+                                 const TABLE_LIST *table_list)
+{
+  if (!wsrep_can_run_in_toi(thd, db, table, table_list))
+  {
+    return false;
+  }
+  switch (thd->lex->sql_command)
+  {
+  case SQLCOM_ALTER_TABLE:
+  case SQLCOM_CREATE_INDEX:
+  case SQLCOM_DROP_INDEX:
+    switch (thd->lex->alter_info.requested_lock)
+    {
+    case Alter_info::ALTER_TABLE_LOCK_SHARED:
+    case Alter_info::ALTER_TABLE_LOCK_EXCLUSIVE:
+      return true;
+    default:
+      return false;
+    }
+  case SQLCOM_OPTIMIZE:
+    return true;
+  default:
+    break;
+  }
+  return false;
+}
+
 #if UNUSED /* 323f269d4099 (Jan Lindström     2018-07-19) */
 static const char* wsrep_get_query_or_msg(const THD* thd)
 {
@@ -1973,6 +2012,147 @@ static void wsrep_RSU_end(THD *thd)
   thd->variables.wsrep_on= 1;
 }
 
+int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
+                    const TABLE_LIST *table_list,
+                    Alter_info *alter_info)
+{
+  DBUG_ASSERT(thd->variables.wsrep_OSU_method == WSREP_OSU_NBO);
+  WSREP_DEBUG("NBO begin");
+  if (!wsrep_can_run_in_nbo(thd, db, table, table_list))
+  {
+    WSREP_DEBUG("Cannot run DDL in NBO %s", WSREP_QUERY(thd));
+    return 1;
+  }
+
+  uchar *buf= 0;
+  size_t buf_len= 0;
+  int buf_err;
+  int rc;
+
+  buf_err = wsrep_TOI_event_buf(thd, &buf, &buf_len);
+  if (buf_err) {
+    WSREP_ERROR("Failed to create TOI event buf: %d", buf_err);
+    my_message(ER_UNKNOWN_ERROR,
+               "WSREP replication failed to prepare TOI event buffer. "
+               "Check your query.",
+               MYF(0));
+    return -1;
+  }
+  struct wsrep_buf buff= { buf, buf_len };
+
+  wsrep::key_array key_array=
+    wsrep_prepare_keys_for_toi(db, table, table_list, alter_info);
+
+  if (thd->has_read_only_protection())
+  {
+    /* non replicated DDL, affecting temporary tables only */
+    WSREP_DEBUG("TO isolation skipped, sql: %s."
+                "Only temporary tables affected.",
+                WSREP_QUERY(thd));
+    if (buf) my_free(buf);
+    return -1;
+  }
+
+  thd_proc_info(thd, "acquiring total order isolation for NBO phase one");
+
+  wsrep::client_state& cs(thd->wsrep_cs());
+  int ret= cs.begin_nbo_phase_one(key_array,
+                                  wsrep::const_buffer(buff.ptr, buff.len));
+
+  if (ret)
+  {
+    DBUG_ASSERT(cs.current_error());
+    WSREP_DEBUG("begin_nbo_phase_one() failed for %llu: %s, seqno: %lld",
+                thd->thread_id, WSREP_QUERY(thd),
+                cs.toi_meta().seqno().get());
+    switch (cs.current_error())
+    {
+    case wsrep::e_size_exceeded_error:
+      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+                 "Maximum size exceeded.",
+                 ret,
+                 (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
+      my_error(ER_ERROR_DURING_COMMIT, MYF(0), WSREP_SIZE_EXCEEDED);
+      break;
+    case wsrep::e_deadlock_error:
+      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+                 "Deadlock error.",
+                 ret,
+                 (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
+      my_error(ER_LOCK_DEADLOCK, MYF(0));
+      break;
+    default:
+      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+                 "Check wsrep connection state and retry the query.",
+                 ret,
+                 (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
+      if (!thd->is_error())
+      {
+        my_error(ER_LOCK_DEADLOCK, MYF(0), "WSREP replication failed. Check "
+                 "your wsrep connection state and retry the query.");
+      }
+    }
+    rc= -1;
+  }
+  else
+  {
+    rc= 0;
+  }
+
+  if (buf) my_free(buf);
+  if (rc) wsrep_TOI_begin_failed(thd, NULL);
+
+  return rc;
+}
+
+void wsrep_nbo_phase_one_end(THD *thd)
+{
+  DBUG_ENTER("wsrep_nbo_phase_one_end");
+  if (wsrep_thd_is_nbo(thd))
+  {
+    wsrep::client_state& cs(thd->wsrep_cs());
+    cs.end_nbo_phase_one();
+  }
+  DBUG_VOID_RETURN;
+}
+
+int wsrep_nbo_phase_two_begin(THD *thd)
+{
+  DBUG_ENTER("wsrep_nbo_phase_two_begin");
+  int ret= 0;
+  if (wsrep_thd_is_nbo(thd))
+  {
+    wsrep::client_state& cs(thd->wsrep_cs());
+    ret= cs.begin_nbo_phase_two();
+  }
+  DBUG_RETURN(ret);
+}
+
+void wsrep_NBO_end(THD *thd)
+{
+  DBUG_ASSERT(wsrep_thd_is_nbo(thd));
+  wsrep::client_state& cs(thd->wsrep_cs());
+  if (wsrep_thd_is_nbo(thd))
+  {
+    wsrep_set_SE_checkpoint(cs.toi_meta().gtid());
+    int ret= cs.end_nbo_phase_two();
+
+    if (!ret)
+    {
+      WSREP_DEBUG("NBO END: %lld", cs.toi_meta().seqno().get());
+    }
+    else
+    {
+      WSREP_WARN("NBO phase two end failed for: %d, schema: %s, sql: %s",
+                 ret, (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
+    }
+  }
+}
+
 int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
                              const TABLE_LIST* table_list,
                              Alter_info* alter_info)
@@ -2032,6 +2212,9 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
     case WSREP_OSU_RSU:
       ret= wsrep_RSU_begin(thd, db_, table_);
       break;
+    case WSREP_OSU_NBO:
+      ret= wsrep_NBO_begin(thd, db_, table_, table_list, alter_info);
+      break;
     default:
       WSREP_ERROR("Unsupported OSU method: %lu",
                   thd->variables.wsrep_OSU_method);
@@ -2056,8 +2239,13 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
 void wsrep_to_isolation_end(THD *thd)
 {
   DBUG_ASSERT(wsrep_thd_is_local_toi(thd) ||
+              wsrep_thd_is_nbo(thd) ||
               wsrep_thd_is_in_rsu(thd));
-  if (wsrep_thd_is_local_toi(thd))
+  if (wsrep_thd_is_nbo(thd))
+  {
+    wsrep_NBO_end(thd);
+  }
+  else if (wsrep_thd_is_local_toi(thd))
   {
     DBUG_ASSERT(thd->variables.wsrep_OSU_method == WSREP_OSU_TOI);
     wsrep_TOI_end(thd);

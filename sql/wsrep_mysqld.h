@@ -108,6 +108,7 @@ enum enum_wsrep_reject_types {
 enum enum_wsrep_OSU_method {
     WSREP_OSU_TOI,
     WSREP_OSU_RSU,
+    WSREP_OSU_NBO,
     WSREP_OSU_NONE,
 };
 
@@ -210,6 +211,11 @@ wsrep_sync_wait_upto (THD* thd, wsrep_gtid_t* upto, int timeout);
 extern void wsrep_last_committed_id (wsrep_gtid_t* gtid);
 extern int  wsrep_check_opts();
 extern void wsrep_prepend_PATH (const char* path);
+
+bool wsrep_thd_is_nbo(THD *thd);
+
+void wsrep_nbo_phase_one_end(THD *thd);
+int wsrep_nbo_phase_two_begin(THD *thd);
 
 /* Other global variables */
 extern wsrep_seqno_t wsrep_locked_seqno;

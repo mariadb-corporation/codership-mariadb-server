@@ -9841,7 +9841,6 @@ do_continue:;
     {
       DBUG_RETURN(true);
     }
-
     // In-place execution of ALTER TABLE for partitioning.
     DBUG_RETURN(fast_alter_partition_table(thd, table, alter_info,
                                            create_info, table_list,
@@ -10176,6 +10175,10 @@ do_continue:;
                                             true);
   if (!new_table)
     goto err_new_table_cleanup;
+
+#ifdef WITH_WSREP
+    wsrep_nbo_phase_one_end(thd);
+#endif /* WITH_WSREP */
 
   if (table->s->tmp_table != NO_TMP_TABLE)
   {
