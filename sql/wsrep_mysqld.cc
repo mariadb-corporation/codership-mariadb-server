@@ -2113,8 +2113,16 @@ void wsrep_nbo_phase_one_end(THD *thd)
   DBUG_ENTER("wsrep_nbo_phase_one_end");
   if (wsrep_thd_is_nbo(thd))
   {
-    wsrep::client_state& cs(thd->wsrep_cs());
-    cs.end_nbo_phase_one();
+    if (thd->wsrep_nbo_notify_ctx)
+    {
+      thd->wsrep_nbo_notify_ctx->notify(0);
+      thd->wsrep_nbo_notify_ctx= 0;
+    }
+    else
+    {
+      wsrep::client_state& cs(thd->wsrep_cs());
+      cs.end_nbo_phase_one();
+    }
   }
   DBUG_VOID_RETURN;
 }
@@ -2125,6 +2133,12 @@ int wsrep_nbo_phase_two_begin(THD *thd)
   int ret= 0;
   if (wsrep_thd_is_nbo(thd))
   {
+    if (thd->wsrep_nbo_notify_ctx)
+    {
+      thd->wsrep_nbo_notify_ctx->notify(0);
+      thd->wsrep_nbo_notify_ctx= 0;
+      /* todo assert error */
+    }
     wsrep::client_state& cs(thd->wsrep_cs());
     ret= cs.begin_nbo_phase_two();
   }

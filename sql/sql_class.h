@@ -4858,7 +4858,7 @@ public:
   ulong                     wsrep_affected_rows;
   bool                      wsrep_has_ignored_error;
   bool                      wsrep_replicate_GTID;
-
+  Wsrep_nbo_notify_context* wsrep_nbo_notify_ctx;
   /*
     When enabled, do not replicate/binlog updates from the current table that's
     being processed. At the moment, it is used to keep mysql.gtid_slave_pos

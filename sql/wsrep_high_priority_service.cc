@@ -520,12 +520,100 @@ int Wsrep_applier_service::apply_write_set(const wsrep::ws_meta& ws_meta,
   DBUG_RETURN(ret);
 }
 
-int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta&,
-                                           const wsrep::const_buffer&)
+struct Wsrep_apply_nbo_args
+{
+  THD *thd;
+  wsrep::ws_meta ws_meta;
+  wsrep::const_buffer data;
+  Wsrep_nbo_notify_context* notify;
+};
+
+static void* process_apply_nbo(void *args_ptr)
+{
+  Wsrep_apply_nbo_args* args= static_cast<Wsrep_apply_nbo_args*>(args_ptr);
+  /* Make private copy of the data, buffer from provider is not guaranteed
+     to stay valid when the applier continues in apply_nbo_begin(). */
+  wsrep::mutable_buffer data;
+  data.push_back(static_cast<const char*>(args->data.ptr()),
+                 static_cast<const char*>(args->data.ptr()) + args->data.size());
+  my_thread_init();
+
+  THD *thd= args->thd;
+  thd->thread_stack= (char*)&thd;
+  thd->store_globals();
+  thd->security_ctx->skip_grants();
+  thd->real_id= pthread_self();
+  thd->net.vio= 0;
+  thd->clear_error();
+  thd->variables.tx_isolation= ISO_READ_COMMITTED;
+  thd->tx_isolation          = ISO_READ_COMMITTED;
+
+  /* From trans_begin() */
+  thd->variables.option_bits|= OPTION_BEGIN;
+  thd->server_status|= SERVER_STATUS_IN_TRANS;
+  thd->wsrep_rgi= wsrep_relay_group_init(thd, "wsrep_relay");
+  thd->wsrep_rgi->thd= thd;
+  thd->system_thread_info.rpl_sql_info=
+    new rpl_sql_thread_info(thd->wsrep_rgi->rli->mi->rpl_filter);
+  thd->prior_thr_create_utime= thd->start_utime= microsecond_interval_timer();
+  thd->set_command(COM_SLEEP);
+  thd->reset_for_next_command(true);
+
+  thd->wsrep_nbo_notify_ctx= args->notify;
+  wsrep_open(thd);
+  wsrep_before_command(thd);
+  thd->wsrep_cs().enter_nbo_mode(args->ws_meta);
+
+  int ret= wsrep_apply_events(thd, thd->wsrep_rgi->rli,
+                              data.data(), data.size());
+  if (ret != 0 || thd->wsrep_has_ignored_error)
+  {
+    wsrep_dump_rbr_buf_with_header(thd, data.data(), data.size());
+    thd->wsrep_has_ignored_error= false;
+    /* todo: error voting */
+  }
+  trans_commit(thd);
+
+  thd->close_temporary_tables();
+  thd->lex->sql_command= SQLCOM_END;
+
+  wsrep_after_command_ignore_result(thd);
+  wsrep_close(thd);
+  if (thd->wsrep_nbo_notify_ctx)
+  {
+    thd->wsrep_nbo_notify_ctx->notify(0);
+    thd->wsrep_nbo_notify_ctx= 0;
+  }
+  delete thd;
+
+  my_thread_end();
+
+  return 0;
+}
+
+int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
+                                           const wsrep::const_buffer& data)
 {
   DBUG_ENTER("Wsrep_applier_service::apply_nbo_begin");
-  DBUG_ASSERT(0); /* Not implemented yet. */
   int ret= 0;
+
+  THD *thd= new THD(next_thread_id(), false);
+  /* Disable general logging on applier threads */
+  thd->variables.option_bits |= OPTION_LOG_OFF;
+  /* Enable binlogging if opt_log_slave_updates is set */
+  if (opt_log_slave_updates)
+    thd->variables.option_bits|= OPTION_BIN_LOG;
+  else
+    thd->variables.option_bits&= ~(OPTION_BIN_LOG);
+
+  Wsrep_nbo_notify_context notify_ctx(thd->LOCK_thd_data,
+                                  thd->COND_wsrep_thd);
+  Wsrep_apply_nbo_args* args= new Wsrep_apply_nbo_args{
+    thd, ws_meta, data, &notify_ctx};
+  pthread_t th;
+  pthread_create(&th, NULL, &process_apply_nbo, args);
+  pthread_detach(th);
+  notify_ctx.wait();
   /*
     - Allocate a new THD and launch worker thread for NBO
     - If thread creation is successful, wait for signal from worker thread.

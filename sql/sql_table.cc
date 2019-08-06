@@ -9377,7 +9377,6 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
 {
   bool engine_changed;
   DBUG_ENTER("mysql_alter_table");
-
   /*
     Check if we attempt to alter mysql.slow_log or
     mysql.general_log table and return an error if
@@ -10177,7 +10176,7 @@ do_continue:;
     goto err_new_table_cleanup;
 
 #ifdef WITH_WSREP
-    wsrep_nbo_phase_one_end(thd);
+  wsrep_nbo_phase_one_end(thd);
 #endif /* WITH_WSREP */
 
   if (table->s->tmp_table != NO_TMP_TABLE)
