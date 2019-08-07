@@ -2021,7 +2021,10 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
   if (!wsrep_can_run_in_nbo(thd, db, table, table_list))
   {
     WSREP_DEBUG("Cannot run DDL in NBO %s", WSREP_QUERY(thd));
-    return 1;
+    my_message(ER_NOT_SUPPORTED_YET,
+               "wsrep_OSU_method NBO not supported for query",
+               MYF(0));
+    return -1;
   }
 
   uchar *buf= 0;
@@ -2133,11 +2136,11 @@ int wsrep_nbo_phase_two_begin(THD *thd)
   int ret= 0;
   if (wsrep_thd_is_nbo(thd))
   {
-    if (thd->wsrep_nbo_notify_ctx)
+    /* Statement failed before phase one end. Start phase one
+       here. Todo: error handling/voting.*/
+    if (!wsrep_thd_is_toi(thd))
     {
-      thd->wsrep_nbo_notify_ctx->notify(0);
-      thd->wsrep_nbo_notify_ctx= 0;
-      /* todo assert error */
+      wsrep_nbo_phase_one_end(thd);
     }
     wsrep::client_state& cs(thd->wsrep_cs());
     ret= cs.begin_nbo_phase_two();
