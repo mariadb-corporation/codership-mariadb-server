@@ -89,7 +89,16 @@ Wsrep_server_service::streaming_applier_service(
   init_service_thd(thd, orig_cs.m_thd->thread_stack);
   WSREP_DEBUG("Created streaming applier service in local context with "
               "thread id %llu", thd->thread_id);
-  return new Wsrep_applier_service(thd);
+  if (orig_cs.m_thd->wsrep_cs().current_error() &&
+      orig_cs.m_thd->wsrep_trx().state() == wsrep::transaction::s_prepared)
+  {
+    XID* xid= orig_cs.m_thd->transaction.xid_state.get_xid();
+    return new Wsrep_prepared_applier_service(thd, xid);
+  }
+  else
+  {
+    return new Wsrep_applier_service(thd);
+  }
 }
 
 wsrep::high_priority_service*

@@ -137,6 +137,13 @@ public:
     m_thd->transaction.xid_state.xid_cache_element= 0;
     DBUG_RETURN(Wsrep_applier_service::rollback(ws_handle, ws_meta));
   }
+  int adopt_transaction(const wsrep::transaction& transaction)
+  {
+    DBUG_ENTER("Wsrep_prepared_applier_service::adopt_transaction");
+    m_thd->wsrep_cs().adopt_transaction(transaction);
+    int ret= wsrep_trans_xa_attach(m_thd, &m_xid);
+    DBUG_RETURN(ret);
+  }
 private:
   XID m_xid;
 };

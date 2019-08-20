@@ -546,6 +546,42 @@ static int wsrep_ha_commit_or_rollback_by_xid(THD *thd, bool commit)
   }
   return FALSE;
 }
+
+
+/*
+  This function is very similar to trans_xa_detach().
+  It should be replaced whit trans_xa_detach() when
+  completed (i.e. when the `#ifdef 1` is removed from
+  there). Also, wsrep_trans_xa_detach() is not quite
+  working as expected, currently there is a workaround
+  in test galera_xa_failed_commit, see comment there.
+ */
+static bool wsrep_trans_xa_detach(THD *thd)
+{
+  DBUG_ASSERT(thd->transaction.xid_state.is_explicit_XA());
+  if (thd->transaction.xid_state.xid_cache_element->xa_state != XA_PREPARED)
+    return ha_rollback_trans(thd, true);
+
+  thd->transaction.xid_state.xid_cache_element->acquired_to_recovered();
+  wsrep_before_rollback(thd, true);
+
+  thd->transaction.xid_state.xid_cache_element= 0;
+  thd->transaction.cleanup();
+
+  Ha_trx_info *ha_info, *ha_info_next;
+  for (ha_info= thd->transaction.all.ha_list;
+       ha_info;
+       ha_info= ha_info_next)
+  {
+    ha_info_next= ha_info->next();
+    ha_info->reset(); /* keep it conveniently zero-filled */
+  }
+
+  thd->transaction.all.ha_list= 0;
+
+  wsrep_after_rollback(thd, TRUE);
+  return false;
+}
 #endif /* WITH_WSREP */
 
 
@@ -638,6 +674,7 @@ bool trans_xa_commit(THD *thd)
         res= wsrep_before_commit(thd, TRUE);
         if (res)
         {
+          wsrep_trans_xa_detach(thd);
           DBUG_RETURN(TRUE);
         }
       }
@@ -951,11 +988,13 @@ bool wsrep_trans_xa_attach(THD *thd, XID *xid)
 {
   bool ret= true;
   DBUG_ASSERT(!thd->transaction.xid_state.is_explicit_XA());
+  if (thd->fix_xid_hash_pins())
+    return ret;
   if (auto xs= xid_cache_search(thd, xid))
   {
     thd->transaction.xid_state.xid_cache_element= xs;
     thd->transaction.xid_state.xid_cache_element->acquired_to_recovered();
-    wsrep_restore_prepared_transaction(thd, xid);
+    ret= wsrep_restore_prepared_transaction(thd, xid);
   }
   return ret;
 }
