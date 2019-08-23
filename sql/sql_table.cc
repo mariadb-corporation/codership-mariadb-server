@@ -7665,6 +7665,19 @@ static bool mysql_inplace_alter_table(THD *thd,
   DEBUG_SYNC(thd, "alter_table_inplace_after_lock_upgrade");
   THD_STAGE_INFO(thd, stage_alter_inplace_prepare);
 
+#ifdef WITH_WSREP
+  wsrep_nbo_phase_one_end(thd);
+
+  DBUG_EXECUTE_IF("sync.alter_locked_tables_inplace",
+                  {
+                    const char act[]=
+                      "now "
+                      "wait_for signal.alter_locked_tables_inplace";
+                    DBUG_ASSERT(!debug_sync_set_action(thd,
+                                                       STRING_WITH_LEN(act)));
+                  };);
+#endif  /* WITH_WSREP */
+
   switch (inplace_supported) {
   case HA_ALTER_ERROR:
   case HA_ALTER_INPLACE_NOT_SUPPORTED:

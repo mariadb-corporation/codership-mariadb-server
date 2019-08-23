@@ -27,8 +27,10 @@ ALTER IGNORE TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
 
 SELECT COUNT(*) = 5 FROM t1;
 
---connection node_1
+--connection node_2
 SELECT COUNT(*) = 5 FROM t1;
 
 SET SESSION wsrep_OSU_method=TOI;
 DROP TABLE t1;
+
+CALL mtr.add_suppression("WSREP: Event 1 Query apply failed: 1, seqno -1");
