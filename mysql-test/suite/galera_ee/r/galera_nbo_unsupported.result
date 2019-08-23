@@ -1,3 +1,5 @@
+connection node_2;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 SET SESSION wsrep_osu_method='NBO';
 CREATE TABLE t2 (f1 INTEGER);

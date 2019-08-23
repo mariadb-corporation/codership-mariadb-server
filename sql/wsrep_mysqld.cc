@@ -2118,12 +2118,14 @@ void wsrep_nbo_phase_one_end(THD *thd)
   {
     if (thd->wsrep_nbo_notify_ctx)
     {
+      // todo: should we have a more explicit condition here?
+      // something closer to "if NBO_worker", for ex.
       thd->wsrep_nbo_notify_ctx->notify(0);
       thd->wsrep_nbo_notify_ctx= 0;
-    }
-    else
+    } else
     {
       wsrep::client_state& cs(thd->wsrep_cs());
+      DBUG_ASSERT(cs.in_toi());
       cs.end_nbo_phase_one();
     }
   }
@@ -2136,13 +2138,13 @@ int wsrep_nbo_phase_two_begin(THD *thd)
   int ret= 0;
   if (wsrep_thd_is_nbo(thd))
   {
+    wsrep::client_state& cs(thd->wsrep_cs());
     /* Statement failed before phase one end. Start phase one
        here. Todo: error handling/voting.*/
-    if (!wsrep_thd_is_toi(thd))
+    if (cs.in_toi())
     {
       wsrep_nbo_phase_one_end(thd);
     }
-    wsrep::client_state& cs(thd->wsrep_cs());
     ret= cs.begin_nbo_phase_two();
   }
   DBUG_RETURN(ret);

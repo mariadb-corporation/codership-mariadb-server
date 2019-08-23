@@ -10177,6 +10177,20 @@ do_continue:;
 
 #ifdef WITH_WSREP
   wsrep_nbo_phase_one_end(thd);
+
+  /*
+    wsrep_nbo_phase_one_end signals the applier for the release of
+    the commit monitor, the sync point thus happens after it's released
+  */
+  DBUG_EXECUTE_IF("sync.alter_locked_tables",
+                  {
+                    const char act[]=
+                      "now "
+                      "wait_for signal.alter_locked_tables";
+                    DBUG_ASSERT(!debug_sync_set_action(thd,
+                                                       STRING_WITH_LEN(act)));
+                  };);
+
 #endif /* WITH_WSREP */
 
   if (table->s->tmp_table != NO_TMP_TABLE)

@@ -12,7 +12,7 @@ CREATE TABLE t2 (f1 INTEGER) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1);
 
 --connection node_2
-SET GLOBAL debug = 'd,sync.alter_locked_tables';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
@@ -45,7 +45,7 @@ INSERT INTO t1 VALUES (3);
 # Unblock the ALTER and confirm that it executed on all nodes
 --connection node_2
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables';
-SET GLOBAL debug = '';
+SET GLOBAL debug_dbug = '';
 
 --let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';
 --source include/wait_condition.inc
@@ -65,3 +65,6 @@ SET SESSION wsrep_OSU_method=TOI;
 
 DROP TABLE t1;
 DROP TABLE t2;
+
+--connection node_2
+SET DEBUG_SYNC= 'RESET';

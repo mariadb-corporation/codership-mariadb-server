@@ -536,7 +536,7 @@ static void* process_apply_nbo(void *args_ptr)
   wsrep::mutable_buffer data;
   data.push_back(static_cast<const char*>(args->data.ptr()),
                  static_cast<const char*>(args->data.ptr()) + args->data.size());
-  my_thread_init();
+  my_thread_init(); // todo: check for error?
 
   THD *thd= args->thd;
   thd->thread_stack= (char*)&thd;
@@ -547,6 +547,11 @@ static void* process_apply_nbo(void *args_ptr)
   thd->clear_error();
   thd->variables.tx_isolation= ISO_READ_COMMITTED;
   thd->tx_isolation          = ISO_READ_COMMITTED;
+
+  server_threads.insert(thd);
+  mysql_thread_set_psi_id(thd->thread_id);
+  thd->system_thread= SYSTEM_THREAD_SLAVE_SQL;
+  thd_proc_info(thd, "wsrep NBO worker");
 
   /* From trans_begin() */
   thd->variables.option_bits|= OPTION_BEGIN;
@@ -584,6 +589,7 @@ static void* process_apply_nbo(void *args_ptr)
     thd->wsrep_nbo_notify_ctx->notify(0);
     thd->wsrep_nbo_notify_ctx= 0;
   }
+  server_threads.erase(thd);
   delete thd;
 
   my_thread_end();
@@ -597,6 +603,11 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   DBUG_ENTER("Wsrep_applier_service::apply_nbo_begin");
   int ret= 0;
 
+  /*
+    - Allocate a new THD and launch worker thread for NBO
+    - If thread creation is successful, wait for signal from worker thread.
+      Else delete THD and return error.
+   */
   THD *thd= new THD(next_thread_id(), false);
   /* Disable general logging on applier threads */
   thd->variables.option_bits |= OPTION_LOG_OFF;
@@ -614,11 +625,6 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   pthread_create(&th, NULL, &process_apply_nbo, args);
   pthread_detach(th);
   notify_ctx.wait();
-  /*
-    - Allocate a new THD and launch worker thread for NBO
-    - If thread creation is successful, wait for signal from worker thread.
-      Else delete THD and return error.
-   */
   DBUG_RETURN(ret);
 }
 
