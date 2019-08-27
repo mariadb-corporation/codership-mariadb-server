@@ -1,12 +1,24 @@
+connection node_2;
+connection node_1;
+connection node_2;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;;
+connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connection node_1a;
 SET SESSION wsrep_sync_wait = 0;
+connection node_2;
+connection node_1a;
 include/assert_grep.inc [Master should report that it can not donate SST]
 include/assert_grep.inc [Slave should report that it could not join]
-SET GLOBAL debug = '';
+connection node_1a;
+SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC='now SIGNAL signal.alter_locked_tables_inplace';
+connection node_1;
+connection node_2;
+# restart
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -14,10 +26,15 @@ t1	CREATE TABLE `t1` (
   `f2` int(11) DEFAULT NULL,
   PRIMARY KEY (`f1`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1
+connection node_1;
 SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
+connection node_1a;
+SET DEBUG_SYNC= 'RESET';
+connection node_1;
 CALL mtr.add_suppression("Non-blocking operation in progress, cannot donate SST");
 CALL mtr.add_suppression("Resource temporarily unavailable");
+connection node_2;
 CALL mtr.add_suppression("Resource temporarily unavailable");
 CALL mtr.add_suppression("Will never receive state");
 CALL mtr.add_suppression("terminated unexpectedly");

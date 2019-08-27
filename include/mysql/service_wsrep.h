@@ -186,6 +186,8 @@ extern "C" my_bool wsrep_thd_is_toi(const MYSQL_THD thd);
 extern "C" my_bool wsrep_thd_is_local_toi(const MYSQL_THD thd);
 /* Return true if thd is in RSU mode */
 extern "C" my_bool wsrep_thd_is_in_rsu(const MYSQL_THD thd);
+/* Return true if thd is in NBO mode */
+extern "C" my_bool wsrep_thd_is_nbo(const THD *thd);
 /* Return true if thd is in BF mode, either high_priority or TOI */
 extern "C" my_bool wsrep_thd_is_BF(const MYSQL_THD thd, my_bool sync);
 /* Return true if thd is streaming */

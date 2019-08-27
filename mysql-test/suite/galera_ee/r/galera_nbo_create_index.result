@@ -1,3 +1,5 @@
+connection node_2;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1),(1);
 SET SESSION wsrep_osu_method=NBO;
@@ -13,6 +15,7 @@ t1	CREATE TABLE `t1` (
   `f1` int(11) NOT NULL,
   KEY `i1` (`f1`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1
+connection node_2;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -22,12 +25,14 @@ t1	CREATE TABLE `t1` (
 SELECT COUNT(*) = 3 FROM t1;
 COUNT(*) = 3
 1
+connection node_1;
 DROP INDEX i1 ON t1 LOCK=EXCLUSIVE;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `f1` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1
+connection node_2;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (

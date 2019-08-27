@@ -106,6 +106,11 @@ extern "C" my_bool wsrep_thd_is_toi(const THD *thd)
   return thd->wsrep_cs().mode() == wsrep::client_state::m_toi;
 }
 
+extern "C" my_bool wsrep_thd_is_nbo(const THD *thd)
+{
+  return thd->wsrep_cs().mode() == wsrep::client_state::m_nbo;
+}
+
 extern "C" my_bool wsrep_thd_is_local_toi(const THD *thd)
 {
   return thd->wsrep_cs().mode() == wsrep::client_state::m_toi &&
@@ -124,7 +129,9 @@ extern "C" my_bool wsrep_thd_is_BF(const THD *thd, my_bool sync)
   if (thd && WSREP(thd))
   {
     if (sync) mysql_mutex_lock(&thd->LOCK_thd_data);
-    status = (wsrep_thd_is_applying(thd) || wsrep_thd_is_toi(thd));
+    status = (wsrep_thd_is_applying(thd) ||
+              wsrep_thd_is_toi(thd) ||
+              wsrep_thd_is_nbo(thd));
     if (sync) mysql_mutex_unlock(&thd->LOCK_thd_data);
   }
   return status;

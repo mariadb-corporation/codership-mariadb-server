@@ -7,13 +7,13 @@
 --source include/have_debug_sync.inc
 
 --connection node_2
-# At the start, we only have 2 applier threads, 1 standard applier and 
+# At the start, we 3 applier threads, 1 standard applier and
 # 1 aborter and 1 post aborter
-SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user';
+SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
 
 # Set ALTER TABLE to block in the applier thread. wsrep_sync_wait = 0 for the duration, as causal reads will be blocked
 --let $debug_orig = `SELECT @@debug`
-SET GLOBAL debug = 'd,sync.alter_opened_table';
+SET GLOBAL debug_dbug = 'd,sync.alter_opened_table';
 SET SESSION wsrep_sync_wait = 0;
 
 --connection node_1
@@ -25,7 +25,7 @@ SET SESSION wsrep_osu_method='NBO';
 
 --connection node_2
 # There is a separate applier thread for the ALTER TABLE
---let $wait_condition = SELECT COUNT(*) = 4 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user';
+--let $wait_condition = SELECT COUNT(*) = 4 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
 --source include/wait_condition.inc
 
 # The applier thread is blocked
@@ -52,13 +52,13 @@ SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 't1';
 
 # Then, if we unblock the applier thread
 --disable_query_log
---eval SET GLOBAL debug = '$debug_orig';
+--eval SET GLOBAL debug_dbug = '$debug_orig';
 --enable_query_log
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_opened_table';
 SET SESSION wsrep_sync_wait = 7;
 
 # ... the applier thread will terminate
---let $wait_condition = SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user'
+--let $wait_condition = SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%'
 --source include/wait_condition.inc
 
 SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST
@@ -76,6 +76,7 @@ ALTER TABLE t1 LOCK=SHARED, ADD COLUMN t3 INTEGER;
 
 DROP TABLE t1;
 DROP TABLE t2;
+SET DEBUG_SYNC= 'RESET';
 
 --connection node_1
 --reap

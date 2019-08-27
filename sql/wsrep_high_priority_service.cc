@@ -548,6 +548,7 @@ static void* process_apply_nbo(void *args_ptr)
   thd->variables.tx_isolation= ISO_READ_COMMITTED;
   thd->tx_isolation          = ISO_READ_COMMITTED;
 
+  thd->wsrep_applier= true;
   server_threads.insert(thd);
   mysql_thread_set_psi_id(thd->thread_id);
   thd->system_thread= SYSTEM_THREAD_SLAVE_SQL;

@@ -23,9 +23,8 @@
 
 # Begin an ALTER and block
 
---connection node_1
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 SET SESSION wsrep_osu_method=NBO;
 --send  ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;
 
@@ -59,7 +58,7 @@ SET SESSION wsrep_sync_wait = 0;
 
 # Restart node_2 again, now with the DDL out of the way
 --connection node_1a
-SET GLOBAL debug = '';
+SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC='now SIGNAL signal.alter_locked_tables_inplace';
 
 --connection node_1
@@ -78,6 +77,9 @@ SHOW CREATE TABLE t1;
 
 SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
+
+--connection node_1a
+SET DEBUG_SYNC= 'RESET';
 
 --connection node_1
 CALL mtr.add_suppression("Non-blocking operation in progress, cannot donate SST");

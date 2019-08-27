@@ -13,7 +13,7 @@ SET GLOBAL wsrep_slave_threads=2;
 CREATE TABLE t1 (f1 INTEGER NOT NULL, f2 INTEGER NOT NULL) ENGINE=InnoDB;
 
 --connection node_2
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
@@ -31,8 +31,8 @@ SET SESSION wsrep_sync_wait=0;
 --let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now';
 --source include/wait_condition.inc
 
+SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET GLOBAL debug = '';
 
 --sleep 1
 
@@ -43,6 +43,7 @@ SET GLOBAL debug = '';
 --reap
 
 --connection node_1a
+--error 1213
 --reap
 
 --connection node_1

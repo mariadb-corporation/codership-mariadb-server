@@ -212,8 +212,6 @@ extern void wsrep_last_committed_id (wsrep_gtid_t* gtid);
 extern int  wsrep_check_opts();
 extern void wsrep_prepend_PATH (const char* path);
 
-bool wsrep_thd_is_nbo(THD *thd);
-
 void wsrep_nbo_phase_one_end(THD *thd);
 int wsrep_nbo_phase_two_begin(THD *thd);
 

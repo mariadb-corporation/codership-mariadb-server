@@ -1,3 +1,5 @@
+connection node_2;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1);
 CREATE TABLE t2 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
@@ -5,6 +7,7 @@ SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=EXCLUSIVE, RENAME TO t2;
 ERROR 42S01: Table 't2' already exists
 ALTER TABLE t1 LOCK=EXCLUSIVE, RENAME TO t3;
+connection node_2;
 SHOW CREATE TABLE t3;
 Table	Create Table
 t3	CREATE TABLE `t3` (
@@ -17,3 +20,4 @@ SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t2;
 DROP TABLE t3;
 CALL mtr.add_suppression("Slave SQL: Error 'Table 't2' already exists' on query.");
+CALL mtr.add_suppression("WSREP: Event 1 Query apply failed");

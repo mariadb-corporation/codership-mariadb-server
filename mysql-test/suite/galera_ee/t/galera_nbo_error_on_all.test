@@ -17,5 +17,9 @@ ALTER TABLE t1 ALGORITHM=INPLACE, LOCK=SHARED, ADD PRIMARY KEY (f1);
 --connection node_1
 SHOW CREATE TABLE t1;
 
+--connection node_2
 SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
+
+--connection node_1
+CALL mtr.add_suppression("WSREP: Event 1 Query apply failed");

@@ -12,7 +12,7 @@ CREATE TABLE t2 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 CREATE TABLE t3 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 
 --connection node_2
-SET GLOBAL debug = 'd,sync.alter_locked_tables:d,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables:d,sync.alter_locked_tables_inplace';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
@@ -39,9 +39,9 @@ INSERT INTO t3 VALUES (1);
 --let $wait_condition = SELECT COUNT(*) = 1 FROM t3;
 INSERT INTO t3 VALUES (2);
 
+SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET GLOBAL debug = '';
 
 --let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';
 --source include/wait_condition.inc
@@ -61,5 +61,7 @@ SELECT COUNT(*) = 2 FROM t3;
 SHOW CREATE TABLE t1;
 SHOW CREATE TABLE t2;
 SELECT COUNT(*) = 2 FROM t3;
+
+SET DEBUG_SYNC= 'RESET';
 
 DROP TABLE t1, t2, t3;

@@ -1698,11 +1698,6 @@ static bool wsrep_can_run_in_toi(THD *thd, const char *db, const char *table,
   }
 }
 
-bool wsrep_thd_is_nbo(THD *thd)
-{
-  return (thd->wsrep_cs().mode() == wsrep::client_state::m_nbo);
-}
-
 /*
   Decide if statement should run in NBO
 
@@ -2116,16 +2111,15 @@ void wsrep_nbo_phase_one_end(THD *thd)
   DBUG_ENTER("wsrep_nbo_phase_one_end");
   if (wsrep_thd_is_nbo(thd))
   {
+    wsrep::client_state& cs(thd->wsrep_cs());
     if (thd->wsrep_nbo_notify_ctx)
     {
       // todo: should we have a more explicit condition here?
       // something closer to "if NBO_worker", for ex.
       thd->wsrep_nbo_notify_ctx->notify(0);
       thd->wsrep_nbo_notify_ctx= 0;
-    } else
+    } else if (cs.in_toi())
     {
-      wsrep::client_state& cs(thd->wsrep_cs());
-      DBUG_ASSERT(cs.in_toi());
       cs.end_nbo_phase_one();
     }
   }
@@ -2138,13 +2132,9 @@ int wsrep_nbo_phase_two_begin(THD *thd)
   int ret= 0;
   if (wsrep_thd_is_nbo(thd))
   {
+    // ensure phase one is ended. It may happen when there's an error early in phase one.
+    wsrep_nbo_phase_one_end(thd);
     wsrep::client_state& cs(thd->wsrep_cs());
-    /* Statement failed before phase one end. Start phase one
-       here. Todo: error handling/voting.*/
-    if (cs.in_toi())
-    {
-      wsrep_nbo_phase_one_end(thd);
-    }
     ret= cs.begin_nbo_phase_two();
   }
   DBUG_RETURN(ret);
@@ -2153,9 +2143,9 @@ int wsrep_nbo_phase_two_begin(THD *thd)
 void wsrep_NBO_end(THD *thd)
 {
   DBUG_ASSERT(wsrep_thd_is_nbo(thd));
-  wsrep::client_state& cs(thd->wsrep_cs());
   if (wsrep_thd_is_nbo(thd))
   {
+    wsrep::client_state& cs(thd->wsrep_cs());
     wsrep_set_SE_checkpoint(cs.toi_meta().gtid());
     int ret= cs.end_nbo_phase_two();
 

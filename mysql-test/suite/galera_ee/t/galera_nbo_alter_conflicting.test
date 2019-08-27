@@ -13,7 +13,7 @@ SET GLOBAL wsrep_slave_threads=2;
 CREATE TABLE t1 (f1 INTEGER NOT NULL, f2 INTEGER NOT NULL) ENGINE=InnoDB;
 
 --connection node_2
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
@@ -32,7 +32,7 @@ SET SESSION wsrep_sync_wait=0;
 --source include/wait_condition.inc
 
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET GLOBAL debug = '';
+SET GLOBAL debug_dbug = '';
 
 --sleep 1
 

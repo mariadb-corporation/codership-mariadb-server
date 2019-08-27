@@ -1,12 +1,17 @@
-SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user';
+connection node_2;
+connection node_1;
+connection node_2;
+SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
 COUNT(*) = 3
 1
-SET GLOBAL debug = 'd,sync.alter_opened_table';
+SET GLOBAL debug_dbug = 'd,sync.alter_opened_table';
 SET SESSION wsrep_sync_wait = 0;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 CREATE TABLE t2 (f1 INTEGER) ENGINE=InnoDB;
 SET SESSION wsrep_osu_method='NBO';
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;;
+connection node_2;
 SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST
 WHERE USER = 'system user'
 AND STATE = 'debug sync point: now'
@@ -33,3 +38,5 @@ INSERT INTO t1 VALUES (1,2);
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN t3 INTEGER;
 DROP TABLE t1;
 DROP TABLE t2;
+SET DEBUG_SYNC= 'RESET';
+connection node_1;
