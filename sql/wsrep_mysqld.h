@@ -219,17 +219,17 @@ class Wsrep_nbo_notify_context
 {
 public:
   Wsrep_nbo_notify_context(mysql_mutex_t& mutex,
-                           mysql_cond_t& cond)
-    : m_mutex(mutex)
+                           mysql_cond_t& cond,
+                           wsrep::mutable_buffer& err)
+    : err(err)
+    , m_mutex(mutex)
     , m_cond(cond)
     , m_notified()
-    , m_error()
   { }
 
-  void notify(int error)
+  void notify()
   {
     mysql_mutex_lock(&m_mutex);
-    m_error= error;
     m_notified= true;
     mysql_cond_signal(&m_cond);
     mysql_mutex_unlock(&m_mutex);
@@ -244,11 +244,11 @@ public:
     }
     mysql_mutex_unlock(&m_mutex);
   }
+  wsrep::mutable_buffer& err; /* for nbo thread to pass errors to applier thread */
 private:
   mysql_mutex_t& m_mutex;
   mysql_cond_t& m_cond;
   bool m_notified;
-  int m_error;
 };
 
 /* Other global variables */

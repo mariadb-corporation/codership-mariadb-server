@@ -83,7 +83,8 @@ public:
   ~Wsrep_applier_service();
   int apply_write_set(const wsrep::ws_meta&, const wsrep::const_buffer&,
                       wsrep::mutable_buffer&);
-  int apply_nbo_begin(const wsrep::ws_meta&, const wsrep::const_buffer& data);
+  int apply_nbo_begin(const wsrep::ws_meta&, const wsrep::const_buffer& data,
+                      wsrep::mutable_buffer& err);
   void after_apply();
   bool is_replaying() const { return false; }
   bool check_exit_status() const;
@@ -96,7 +97,8 @@ public:
   ~Wsrep_replayer_service();
   int apply_write_set(const wsrep::ws_meta&, const wsrep::const_buffer&,
                       wsrep::mutable_buffer&);
-  int apply_nbo_begin(const wsrep::ws_meta&, const wsrep::const_buffer&)
+  int apply_nbo_begin(const wsrep::ws_meta&, const wsrep::const_buffer& data,
+                      wsrep::mutable_buffer& err)
   {
       DBUG_ASSERT(0); /* DDL should never cause replaying */
       return 0;

@@ -2111,16 +2111,23 @@ void wsrep_nbo_phase_one_end(THD *thd)
   DBUG_ENTER("wsrep_nbo_phase_one_end");
   if (wsrep_thd_is_nbo(thd))
   {
+    wsrep::mutable_buffer local_err;
+    // nbo thread reports error through its notify ctx
+    wsrep::mutable_buffer& err = thd->wsrep_nbo_notify_ctx ?
+                                 thd->wsrep_nbo_notify_ctx->err :
+                                 local_err;
+    if (thd->is_error() && !wsrep_must_ignore_error(thd))
+    {
+        wsrep_store_error(thd, err);
+    }
     wsrep::client_state& cs(thd->wsrep_cs());
     if (thd->wsrep_nbo_notify_ctx)
     {
-      // todo: should we have a more explicit condition here?
-      // something closer to "if NBO_worker", for ex.
-      thd->wsrep_nbo_notify_ctx->notify(0);
+      thd->wsrep_nbo_notify_ctx->notify();
       thd->wsrep_nbo_notify_ctx= 0;
     } else if (cs.in_toi())
     {
-      cs.end_nbo_phase_one();
+      cs.end_nbo_phase_one(err);
     }
   }
   DBUG_VOID_RETURN;
@@ -2132,7 +2139,7 @@ int wsrep_nbo_phase_two_begin(THD *thd)
   int ret= 0;
   if (wsrep_thd_is_nbo(thd))
   {
-    // ensure phase one is ended. It may happen when there's an error early in phase one.
+    // ensure phase one is ended, in case of an early error in phase one
     wsrep_nbo_phase_one_end(thd);
     wsrep::client_state& cs(thd->wsrep_cs());
     ret= cs.begin_nbo_phase_two();
@@ -2147,7 +2154,12 @@ void wsrep_NBO_end(THD *thd)
   {
     wsrep::client_state& cs(thd->wsrep_cs());
     wsrep_set_SE_checkpoint(cs.toi_meta().gtid());
-    int ret= cs.end_nbo_phase_two();
+    wsrep::mutable_buffer err;
+    if (thd->is_error() && !wsrep_must_ignore_error(thd))
+    {
+        wsrep_store_error(thd, err);
+    }
+    int ret= cs.end_nbo_phase_two(err);
 
     if (!ret)
     {
@@ -2624,7 +2636,7 @@ int wsrep_must_ignore_error(THD* thd)
   const uint flags= sql_command_flags[thd->lex->sql_command];
 
   DBUG_ASSERT(error);
-  DBUG_ASSERT(wsrep_thd_is_toi(thd));
+  DBUG_ASSERT(wsrep_thd_is_toi(thd) || wsrep_thd_is_nbo(thd));
 
   if ((wsrep_ignore_apply_errors & WSREP_IGNORE_ERRORS_ON_DDL))
     goto ignore_error;

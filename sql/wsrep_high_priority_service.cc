@@ -536,7 +536,9 @@ static void* process_apply_nbo(void *args_ptr)
   wsrep::mutable_buffer data;
   data.push_back(static_cast<const char*>(args->data.ptr()),
                  static_cast<const char*>(args->data.ptr()) + args->data.size());
-  my_thread_init(); // todo: check for error?
+  if (my_thread_init()) {
+      // TODO(leandro): handle error. int error field in notify ctx?
+  }
 
   THD *thd= args->thd;
   thd->thread_stack= (char*)&thd;
@@ -567,16 +569,23 @@ static void* process_apply_nbo(void *args_ptr)
 
   thd->wsrep_nbo_notify_ctx= args->notify;
   wsrep_open(thd);
-  wsrep_before_command(thd);
-  thd->wsrep_cs().enter_nbo_mode(args->ws_meta);
+  if (wsrep_before_command(thd)) {
+      // TODO(leandro): handle error
+  }
+  if (thd->wsrep_cs().enter_nbo_mode(args->ws_meta)) {
+      // TODO(leandro): handle error or make return void
+  }
 
-  int ret= wsrep_apply_events(thd, thd->wsrep_rgi->rli,
+  int const ret= wsrep_apply_events(thd, thd->wsrep_rgi->rli,
                               data.data(), data.size());
-  if (ret != 0 || thd->wsrep_has_ignored_error)
+  if (ret || wsrep_thd_has_ignored_error(thd))
   {
+    wsrep_thd_set_ignored_error(thd, false);
+    if (ret && thd->wsrep_nbo_notify_ctx)
+    {
+      wsrep_store_error(thd, thd->wsrep_nbo_notify_ctx->err);
+    }
     wsrep_dump_rbr_buf_with_header(thd, data.data(), data.size());
-    thd->wsrep_has_ignored_error= false;
-    /* todo: error voting */
   }
   trans_commit(thd);
 
@@ -587,7 +596,7 @@ static void* process_apply_nbo(void *args_ptr)
   wsrep_close(thd);
   if (thd->wsrep_nbo_notify_ctx)
   {
-    thd->wsrep_nbo_notify_ctx->notify(0);
+    thd->wsrep_nbo_notify_ctx->notify();
     thd->wsrep_nbo_notify_ctx= 0;
   }
   server_threads.erase(thd);
@@ -599,11 +608,10 @@ static void* process_apply_nbo(void *args_ptr)
 }
 
 int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
-                                           const wsrep::const_buffer& data)
+                                           const wsrep::const_buffer& data,
+                                           wsrep::mutable_buffer& err)
 {
   DBUG_ENTER("Wsrep_applier_service::apply_nbo_begin");
-  int ret= 0;
-
   /*
     - Allocate a new THD and launch worker thread for NBO
     - If thread creation is successful, wait for signal from worker thread.
@@ -619,14 +627,19 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
     thd->variables.option_bits&= ~(OPTION_BIN_LOG);
 
   Wsrep_nbo_notify_context notify_ctx(thd->LOCK_thd_data,
-                                  thd->COND_wsrep_thd);
+                                      thd->COND_wsrep_thd,
+                                      err);
   Wsrep_apply_nbo_args* args= new Wsrep_apply_nbo_args{
     thd, ws_meta, data, &notify_ctx};
   pthread_t th;
-  pthread_create(&th, NULL, &process_apply_nbo, args);
+  if (pthread_create(&th, NULL, &process_apply_nbo, args)) {
+    WSREP_ERROR("Failed to allocate THD for NBO execution");
+    // TODO(leandro): do we need to do sth with err buffer?
+    DBUG_RETURN(1);
+  }
   pthread_detach(th);
   notify_ctx.wait();
-  DBUG_RETURN(ret);
+  DBUG_RETURN(0);
 }
 
 void Wsrep_applier_service::after_apply()
