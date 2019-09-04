@@ -1715,7 +1715,6 @@ static bool wsrep_can_run_in_nbo(THD *thd, const char *db, const char *table,
   {
   case SQLCOM_ALTER_TABLE:
   case SQLCOM_CREATE_INDEX:
-  case SQLCOM_DROP_INDEX:
     switch (thd->lex->alter_info.requested_lock)
     {
     case Alter_info::ALTER_TABLE_LOCK_SHARED:
@@ -1724,6 +1723,10 @@ static bool wsrep_can_run_in_nbo(THD *thd, const char *db, const char *table,
     default:
       return false;
     }
+  case SQLCOM_DROP_INDEX:
+    /* MariaDB 10.5: DROP INDEX grabs shared upgradeable lock, so it is
+       safe for NBO */
+    return true;
   case SQLCOM_OPTIMIZE:
     return true;
   default:
