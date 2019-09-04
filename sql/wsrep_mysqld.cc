@@ -1907,10 +1907,11 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
   thd_proc_info(thd, "acquiring total order isolation");
 
   wsrep::client_state& cs(thd->wsrep_cs());
-  int ret= cs.enter_toi_local(key_array,
-                              wsrep::const_buffer(buff.ptr, buff.len),
-                              wsrep::provider::flag::start_transaction |
-                              wsrep::provider::flag::commit);
+  int ret= cs.enter_toi_local(
+      key_array,
+      wsrep::const_buffer(buff.ptr, buff.len),
+      wsrep::clock::now()
+      + std::chrono::seconds(thd->variables.lock_wait_timeout));
 
   if (ret)
   {
@@ -2057,8 +2058,11 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
   thd_proc_info(thd, "acquiring total order isolation for NBO phase one");
 
   wsrep::client_state& cs(thd->wsrep_cs());
-  int ret= cs.begin_nbo_phase_one(key_array,
-                                  wsrep::const_buffer(buff.ptr, buff.len));
+  int ret= cs.begin_nbo_phase_one(
+      key_array,
+      wsrep::const_buffer(buff.ptr, buff.len),
+      wsrep::clock::now()
+      + std::chrono::seconds(thd->variables.lock_wait_timeout));
 
   if (ret)
   {
