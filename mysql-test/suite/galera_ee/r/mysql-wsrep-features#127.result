@@ -1,5 +1,10 @@
+connection node_2;
+connection node_1;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER);
 SET GLOBAL wsrep_OSU_method=NBO;
+connection node_2;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;
+connection node_1;
 SET GLOBAL wsrep_OSU_method=TOI;
 DROP TABLE t1;

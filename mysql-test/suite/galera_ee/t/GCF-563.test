@@ -14,7 +14,7 @@ CREATE TABLE t1 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 CREATE TABLE t2 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 
 --connection node_2
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
@@ -32,7 +32,7 @@ SET SESSION wsrep_sync_wait=0;
 --let $wait_condition = SELECT COUNT(*) > 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now';
 --source include/wait_condition.inc
 
-SET GLOBAL debug = '';
+SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
@@ -61,3 +61,4 @@ DROP TABLE t1;
 DROP TABLE t2;
 
 SET GLOBAL wsrep_slave_threads=1;
+SET GLOBAL DEBUG_DBUG = 'RESET';

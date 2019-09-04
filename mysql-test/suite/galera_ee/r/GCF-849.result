@@ -1,6 +1,15 @@
+connection node_2;
+connection node_1;
+connection node_2;
+connection node_1;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;
+connection node_2;
+# restart
+connection node_1;
+connection node_2;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (

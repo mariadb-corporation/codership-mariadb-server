@@ -10,7 +10,7 @@
 CREATE TABLE t1 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 
 --connection node_2
-SET GLOBAL DEBUG = 'd,sync.alter_locked_tables';
+SET GLOBAL DEBUG_DBUG = 'd,sync.alter_locked_tables';
 SET SESSION wsrep_sync_wait = 0;
 
 --connection node_1
@@ -24,7 +24,7 @@ SET SESSION wsrep_osu_method=NBO;
 --error ER_LOCK_DEADLOCK
 ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 
-SET GLOBAL DEBUG = '';
+SET GLOBAL DEBUG_DBUG = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables';
 
 --connection node_1
@@ -36,6 +36,7 @@ ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 
 SHOW CREATE TABLE t1;
 
+SET GLOBAL DEBUG_DBUG = 'RESET';
 CALL mtr.add_suppression("TO isolation failed");
 CALL mtr.add_suppression("ALTER TABLE isolation failure");
 

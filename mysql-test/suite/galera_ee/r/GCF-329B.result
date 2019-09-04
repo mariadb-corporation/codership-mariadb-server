@@ -1,14 +1,24 @@
+connection node_2;
+connection node_1;
+connection node_1;
 SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
+connection node_1;
 SET SESSION wsrep_OSU_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;;
+connection node_2;
 Killing server ...
+connection node_1a;
+connection node_2;
+# restart
+connection node_2a;
 SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='t1';
 COUNT(*) = 2
 1
 SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
 VARIABLE_VALUE = 2
 1
+connection node_1;
 SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='t1';
 COUNT(*) = 2
 1

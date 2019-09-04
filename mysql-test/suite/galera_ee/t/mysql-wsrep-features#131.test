@@ -7,7 +7,7 @@ INSERT INTO t1 VALUES (1);
 SET SESSION wsrep_osu_method=NBO;
 
 --connection node_2
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 
 --connection node_1
 --send ALTER TABLE t1 ALGORITHM=INPLACE, LOCK=SHARED, ADD PRIMARY KEY (f1);
@@ -25,11 +25,12 @@ SET SESSION wsrep_sync_wait=0;
 --connection node_2a
 
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET GLOBAL debug = '';
+SET GLOBAL debug_dbug = 'RESET';
 
 --connection node_2
 --error ER_DUP_ENTRY
 --reap
+
 
 --connection node_1
 --reap
