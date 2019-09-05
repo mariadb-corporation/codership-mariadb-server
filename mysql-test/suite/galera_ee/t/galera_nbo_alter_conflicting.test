@@ -51,6 +51,8 @@ SET SESSION wsrep_OSU_method=TOI;
 
 DROP TABLE t1;
 
+CALL mtr.add_suppression("ALTER TABLE isolation failure");
+
 --connection node_2
 CALL mtr.add_suppression("Slave SQL: Error 'Multiple primary key defined' on query");
 

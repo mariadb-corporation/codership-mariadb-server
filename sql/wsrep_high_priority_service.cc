@@ -382,9 +382,13 @@ int Wsrep_high_priority_service::apply_toi(const wsrep::ws_meta& ws_meta,
   WSREP_DEBUG("Wsrep_high_priority_service::apply_toi: %lld",
               client_state.toi_meta().seqno().get());
 
-  int ret= apply_events(thd, m_rli, data, err);
-  wsrep_thd_set_ignored_error(thd, false);
-  trans_commit(thd);
+  int ret= 0;
+  if (!wsrep::rolls_back_transaction(ws_meta.flags()))
+  {
+      ret= apply_events(thd, m_rli, data, err);
+      wsrep_thd_set_ignored_error(thd, false);
+      trans_commit(thd);
+  }
 
   thd->close_temporary_tables();
   thd->lex->sql_command= SQLCOM_END;
@@ -587,11 +591,29 @@ static void* process_apply_nbo(void *args_ptr)
     }
     wsrep_dump_rbr_buf_with_header(thd, data.data(), data.size());
   }
-  trans_commit(thd);
+
+  if (wsrep_current_error(thd))
+  {
+    trans_rollback(thd);
+  }
+  else
+  {
+    trans_commit(thd);
+  }
+
+  delete thd->system_thread_info.rpl_sql_info;
+  if (thd->wsrep_rgi && thd->wsrep_rgi->rli)
+    delete thd->wsrep_rgi->rli->mi;
+  if (thd->wsrep_rgi)
+    delete thd->wsrep_rgi->rli;
+  delete thd->wsrep_rgi;
+  thd->wsrep_rgi= NULL;
 
   thd->close_temporary_tables();
   thd->lex->sql_command= SQLCOM_END;
 
+  /* Nowhere to report the error. */
+  thd->wsrep_cs().reset_error();
   wsrep_after_command_ignore_result(thd);
   wsrep_close(thd);
   if (thd->wsrep_nbo_notify_ctx)
@@ -612,6 +634,15 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
                                            wsrep::mutable_buffer& err)
 {
   DBUG_ENTER("Wsrep_applier_service::apply_nbo_begin");
+  if (wsrep::rolls_back_transaction(ws_meta.flags()))
+  {
+    if (!ws_meta.gtid().is_undefined())
+    {
+      wsrep_set_SE_checkpoint(ws_meta.gtid());
+    }
+    must_exit_= check_exit_status();
+    DBUG_RETURN(0);
+  }
   /*
     - Allocate a new THD and launch worker thread for NBO
     - If thread creation is successful, wait for signal from worker thread.
@@ -635,10 +666,18 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   if (pthread_create(&th, NULL, &process_apply_nbo, args)) {
     WSREP_ERROR("Failed to allocate THD for NBO execution");
     // TODO(leandro): do we need to do sth with err buffer?
+    delete args;
     DBUG_RETURN(1);
   }
   pthread_detach(th);
   notify_ctx.wait();
+
+  if (!ws_meta.gtid().is_undefined())
+  {
+    wsrep_set_SE_checkpoint(ws_meta.gtid());
+  }
+  must_exit_= check_exit_status();
+
   DBUG_RETURN(0);
 }
 

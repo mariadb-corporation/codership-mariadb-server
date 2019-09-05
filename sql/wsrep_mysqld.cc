@@ -2017,6 +2017,15 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
 {
   DBUG_ASSERT(thd->variables.wsrep_OSU_method == WSREP_OSU_NBO);
   WSREP_DEBUG("NBO begin");
+  if (!Wsrep_server_state::has_capability(wsrep::provider::capability::nbo))
+  {
+    WSREP_DEBUG("Provider does not support NBO");
+    my_message(ER_NOT_SUPPORTED_YET,
+               "wsrep_OSU_method NBO not supported by the provider",
+               MYF(0));
+    return -1;
+  }
+
   if (!wsrep_can_run_in_nbo(thd, db, table, table_list))
   {
     WSREP_DEBUG("Cannot run DDL in NBO %s", WSREP_QUERY(thd));
@@ -2132,7 +2141,8 @@ void wsrep_nbo_phase_one_end(THD *thd)
     {
       thd->wsrep_nbo_notify_ctx->notify();
       thd->wsrep_nbo_notify_ctx= 0;
-    } else if (cs.in_toi())
+    }
+    else if (cs.in_toi())
     {
       cs.end_nbo_phase_one(err);
     }
