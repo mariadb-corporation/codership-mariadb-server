@@ -31,7 +31,7 @@ DROP TABLE t1;
 
 SET GLOBAL DEBUG_DBUG = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET GLOBAL DEBUG_DBUG = 'RESET';
+SET DEBUG_SYNC = 'RESET';
 
 --connection node_1
 --reap

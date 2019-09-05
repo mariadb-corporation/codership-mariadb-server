@@ -20,6 +20,7 @@ SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC = 'RESET';
 connection node_1;
 connection node_1a;
 connection node_1;
@@ -63,4 +64,3 @@ t2	CREATE TABLE `t2` (
 DROP TABLE t1;
 DROP TABLE t2;
 SET GLOBAL wsrep_slave_threads=1;
-SET GLOBAL DEBUG_DBUG = 'RESET';

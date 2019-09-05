@@ -26,6 +26,7 @@ ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 
 SET GLOBAL DEBUG_DBUG = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables';
+SET DEBUG_SYNC = 'RESET';
 
 --connection node_1
 --reap
@@ -36,7 +37,6 @@ ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 
 SHOW CREATE TABLE t1;
 
-SET GLOBAL DEBUG_DBUG = 'RESET';
 CALL mtr.add_suppression("TO isolation failed");
 CALL mtr.add_suppression("ALTER TABLE isolation failure");
 

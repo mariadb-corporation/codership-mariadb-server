@@ -36,6 +36,7 @@ SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC = 'RESET';
 
 --let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';
 --source include/wait_condition.inc
@@ -61,4 +62,3 @@ DROP TABLE t1;
 DROP TABLE t2;
 
 SET GLOBAL wsrep_slave_threads=1;
-SET GLOBAL DEBUG_DBUG = 'RESET';

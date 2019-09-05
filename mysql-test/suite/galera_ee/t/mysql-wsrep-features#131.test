@@ -24,8 +24,9 @@ SET SESSION wsrep_sync_wait=0;
 --connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2
 --connection node_2a
 
+SET GLOBAL DEBUG_DBUG = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET GLOBAL debug_dbug = 'RESET';
+SET DEBUG_SYNC = 'RESET';
 
 --connection node_2
 --error ER_DUP_ENTRY
