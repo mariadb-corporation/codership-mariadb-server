@@ -21,6 +21,7 @@ SET SESSION wsrep_osu_method=NBO;
 --let $wait_condition = SELECT COUNT(*) > 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';
 --source include/wait_condition.inc
 
+SET SESSION lock_wait_timeout = 3;
 --error ER_LOCK_DEADLOCK
 ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 

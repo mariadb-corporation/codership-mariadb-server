@@ -9,6 +9,7 @@ connection node_1;
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);;
 connection node_2;
+SET SESSION lock_wait_timeout = 3;
 ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SET GLOBAL DEBUG_DBUG = '';

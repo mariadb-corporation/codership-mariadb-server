@@ -9,9 +9,11 @@ SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ALGORITHM=INPLACE, ADD PRIMARY KEY (f1);;
 connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
 connection node_1a;
+SET SESSION lock_wait_timeout= 3;
 DROP TABLE t1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 connection node_2;
+SET SESSION lock_wait_timeout= 3;
 DROP TABLE t1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SET GLOBAL DEBUG_DBUG = '';
