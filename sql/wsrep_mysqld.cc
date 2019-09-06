@@ -2150,6 +2150,20 @@ void wsrep_nbo_phase_one_end(THD *thd)
   DBUG_VOID_RETURN;
 }
 
+/*
+  Append all opened tables which are not temporary into phase two
+  key array to take into account all tables which were opened during
+  DDL processing.
+*/
+static wsrep::key_array
+wsrep_nbo_phase_two_keys(THD *thd)
+{
+  /* Todo: It is not certain that all tables involved in the DDL are
+     contained in first_select_lex()->table_list. Figure out how to get
+     list of all tables affecting the DDL.  */
+  return wsrep_prepare_keys_for_toi(0, 0, thd->lex->first_select_lex()->table_list.first, 0);
+}
+
 int wsrep_nbo_phase_two_begin(THD *thd)
 {
   DBUG_ENTER("wsrep_nbo_phase_two_begin");
@@ -2158,8 +2172,10 @@ int wsrep_nbo_phase_two_begin(THD *thd)
   {
     // ensure phase one is ended, in case of an early error in phase one
     wsrep_nbo_phase_one_end(thd);
+    wsrep::key_array keys= wsrep_nbo_phase_two_keys(thd);
+
     wsrep::client_state& cs(thd->wsrep_cs());
-    ret= cs.begin_nbo_phase_two();
+    ret= cs.begin_nbo_phase_two(keys);
   }
   DBUG_RETURN(ret);
 }
