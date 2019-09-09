@@ -1,9 +1,20 @@
+connection node_2;
+connection node_1;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-SET GLOBAL debug = 'd,sync.alter_opened_table';
+connection node_3;
+SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+Warnings:
+Warning	1287	'@@debug' is deprecated and will be removed in a future release. Please use '@@debug_dbug' instead
+connection node_1;
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;;
+connection node_3;
 SET SESSION wsrep_sync_wait = 0;
+connection node_2;
 INSERT INTO t1 VALUES (1,2);
+connection node_3;
+# restart
 SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 't1';
 COUNT(*) = 2
 1
@@ -11,6 +22,7 @@ SELECT COUNT(*) = 1 FROM t1;
 COUNT(*) = 1
 1
 CALL mtr.add_suppression("WSREP: no corresponding NBO begin found for NBO end source");
+connection node_2;
 SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 't1';
 COUNT(*) = 2
 1
@@ -18,6 +30,7 @@ SELECT COUNT(*) = 1 FROM t1;
 COUNT(*) = 1
 1
 CALL mtr.add_suppression("WSREP: gcs_caused() returned -1 \\(Operation not permitted\\)");
+connection node_1;
 SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 't1';
 COUNT(*) = 2
 1
@@ -26,3 +39,5 @@ COUNT(*) = 1
 1
 SET SESSION wsrep_OSU_method=TOI;
 DROP TABLE t1;
+connection node_3;
+CALL mtr.add_suppression("WSREP: Failed to send NBO-end");

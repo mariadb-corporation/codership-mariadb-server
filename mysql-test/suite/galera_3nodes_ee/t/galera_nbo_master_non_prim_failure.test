@@ -14,7 +14,7 @@ INSERT INTO t1 VALUES (1);
 # Issue a DDL
 
 --connection node_2
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 SET SESSION wsrep_osu_method=NBO;
 SET SESSION lock_wait_timeout=2;
 --send ALTER TABLE t1 ALGORITHM=INPLACE, LOCK=SHARED, ADD COLUMN f2 INTEGER;
@@ -32,18 +32,20 @@ SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
 --connection node_1
 --source include/wait_until_connected_again.inc
 SET SESSION wsrep_sync_wait = 0;
---let $wait_condition = SELECT COUNT(*) = 2 FROM wsrep_schema.members;
+--let $wait_condition = SELECT COUNT(*) = 2 FROM mysql.wsrep_cluster_members;
 --source include/wait_condition.inc
 
 # Confirm that the DDL remains blocked in NBO
 
 --connection node_2a
+SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET GLOBAL debug = '';
+SET DEBUG_SYNC = 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC = 'RESET';
 
 SET SESSION wsrep_on=OFF;
 SET SESSION wsrep_sync_wait = 0;
---let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'acquiring total order isolation for NBO end'
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'acquiring total order isolation for NBO phase two'
 --source include/wait_condition.inc
 
 # DDL should now return a failure

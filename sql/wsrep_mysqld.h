@@ -246,6 +246,8 @@ public:
   }
   wsrep::mutable_buffer& err; /* for nbo thread to pass errors to applier thread */
 private:
+  Wsrep_nbo_notify_context(const Wsrep_nbo_notify_context&);
+  Wsrep_nbo_notify_context& operator=(const Wsrep_nbo_notify_context&);
   mysql_mutex_t *m_mutex;
   mysql_cond_t *m_cond;
   bool m_notified;
