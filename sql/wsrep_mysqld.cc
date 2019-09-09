@@ -1931,6 +1931,14 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
                  WSREP_QUERY(thd));
       my_error(ER_ERROR_DURING_COMMIT, MYF(0), WSREP_SIZE_EXCEEDED);
       break;
+    case wsrep::e_deadlock_error:
+      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+                 "Deadlock error.",
+                 ret,
+                 (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
+      my_error(ER_LOCK_DEADLOCK, MYF(0));
+      break;
     default:
       WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
                  "Check wsrep connection state and retry the query.",

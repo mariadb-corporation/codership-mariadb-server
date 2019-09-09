@@ -1,5 +1,7 @@
 connection node_2;
 connection node_1;
+connection node_1;
+connection node_2;
 connection node_2;
 connection node_1;
 connection node_1;
@@ -18,3 +20,4 @@ t1	CREATE TABLE `t1` (
   PRIMARY KEY (`f1`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1
 DROP TABLE t1;
+connection node_1;

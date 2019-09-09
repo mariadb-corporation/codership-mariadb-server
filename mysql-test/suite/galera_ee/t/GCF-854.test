@@ -8,7 +8,6 @@
 # Shut down node #2 and wait until it is completely gone
 --connection node_2
 --source include/shutdown_mysqld.inc
---sleep 2
 
 --connection node_1
 --source include/wait_until_connected_again.inc

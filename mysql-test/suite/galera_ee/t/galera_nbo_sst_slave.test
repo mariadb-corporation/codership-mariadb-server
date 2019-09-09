@@ -11,7 +11,6 @@
 --connection node_2
 --let $MYSQLD2_DATADIR = `SELECT @@datadir`
 --source include/shutdown_mysqld.inc
---sleep 2
 
 --connection node_1
 --source include/wait_until_connected_again.inc
@@ -37,10 +36,10 @@ SET SESSION wsrep_sync_wait = 0;
 # Attempt to restart node #2. With grastate.dat removed, SST should be attempted
 
 --connection node_2
---exec echo "restart" > $_expect_file_name
---sleep 1
---exec echo "wait" > $_expect_file_name
---sleep 5
+
+--echo restart node_2, should fail
+--error 134
+--exec $MYSQLD --defaults-group-suffix=.2 --defaults-file=$MYSQLTEST_VARDIR/my.cnf
 
 --connection node_1a
 --let $assert_text= Master should report that it can not donate SST
@@ -55,15 +54,13 @@ SET SESSION wsrep_sync_wait = 0;
 --let $assert_match= Will never receive state
 --source include/assert_grep.inc
 
-
-# Restart node_2 again, now with the DDL out of the way
---connection node_1a
 SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC='now SIGNAL signal.alter_locked_tables_inplace';
 
 --connection node_1
 --reap
 
+# Restart node_2 again, now with the DDL out of the way
 --connection node_2
 --source include/start_mysqld.inc
 SHOW CREATE TABLE t1;

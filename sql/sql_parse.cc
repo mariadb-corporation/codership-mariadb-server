@@ -5917,7 +5917,12 @@ wsrep_error_label:
 
 finish:
 #ifdef WITH_WSREP
-  wsrep_nbo_phase_two_begin(thd);
+  if (wsrep_nbo_phase_two_begin(thd))
+  {
+    // TODO(leandro): node is out of the cluster and can't finish in TO.
+    // Try to shutdown the provider cleanly.
+    res= true;
+  }
 #endif /* WITH_WSREP */
   thd->reset_query_timer();
   DBUG_ASSERT(!thd->in_active_multi_stmt_transaction() ||

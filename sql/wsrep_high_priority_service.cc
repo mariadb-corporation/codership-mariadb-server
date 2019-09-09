@@ -671,6 +671,7 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   }
   pthread_detach(th);
   notify_ctx.wait();
+  // TODO(leandro): have notify ctx carry its own err buffer, then copy it into arg here
 
   if (!ws_meta.gtid().is_undefined())
   {

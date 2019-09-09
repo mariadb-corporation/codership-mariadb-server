@@ -37,8 +37,6 @@ SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC = 'now WAIT_FOR signal.continued';
 SET DEBUG_SYNC = 'RESET';
 
---sleep 1
-
 --let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';
 --source include/wait_condition.inc
 

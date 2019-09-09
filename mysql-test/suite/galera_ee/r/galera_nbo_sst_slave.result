@@ -10,10 +10,10 @@ connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
 connection node_1a;
 SET SESSION wsrep_sync_wait = 0;
 connection node_2;
+restart node_2, should fail
 connection node_1a;
 include/assert_grep.inc [Master should report that it can not donate SST]
 include/assert_grep.inc [Slave should report that it could not join]
-connection node_1a;
 SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC='now SIGNAL signal.alter_locked_tables_inplace';
 connection node_1;
