@@ -31,8 +31,10 @@ SET SESSION wsrep_sync_wait=0;
 --let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now';
 --source include/wait_condition.inc
 
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET GLOBAL debug_dbug = '';
+SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC = 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC = 'RESET';
 
 --sleep 1
 

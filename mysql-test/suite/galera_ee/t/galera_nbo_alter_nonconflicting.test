@@ -1,5 +1,6 @@
 #
-# Test that wsrep can process two ALTERs on the same table that are not conflicting
+# Test that wsrep can process two ALTERs on the same table that are not
+# conflicting.
 #
 
 --source include/galera_cluster.inc
@@ -33,6 +34,8 @@ SET SESSION wsrep_sync_wait=0;
 
 SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC = 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC = 'RESET';
 
 --sleep 1
 
@@ -43,7 +46,6 @@ SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 --reap
 
 --connection node_1a
---error 1213
 --reap
 
 --connection node_1

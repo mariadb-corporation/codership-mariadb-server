@@ -7675,6 +7675,11 @@ static bool mysql_inplace_alter_table(THD *thd,
                       "wait_for signal.alter_locked_tables_inplace";
                     DBUG_ASSERT(!debug_sync_set_action(thd,
                                                        STRING_WITH_LEN(act)));
+                    const char act2[]=
+                      "now "
+                      "signal signal.continued";
+                    DBUG_ASSERT(!debug_sync_set_action(thd,
+                                                       STRING_WITH_LEN(act2)));
                   };);
 #endif  /* WITH_WSREP */
 

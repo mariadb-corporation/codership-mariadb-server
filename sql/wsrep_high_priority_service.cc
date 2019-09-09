@@ -657,8 +657,8 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   else
     thd->variables.option_bits&= ~(OPTION_BIN_LOG);
 
-  Wsrep_nbo_notify_context notify_ctx(thd->LOCK_thd_data,
-                                      thd->COND_wsrep_thd,
+  Wsrep_nbo_notify_context notify_ctx(&m_thd->LOCK_thd_data,
+                                      &m_thd->COND_wsrep_thd,
                                       err);
   Wsrep_apply_nbo_args* args= new Wsrep_apply_nbo_args{
     thd, ws_meta, data, &notify_ctx};
