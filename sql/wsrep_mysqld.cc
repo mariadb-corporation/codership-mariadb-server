@@ -2138,11 +2138,20 @@ void wsrep_nbo_phase_one_end(THD *thd)
     wsrep::mutable_buffer local_err;
     // nbo thread reports error through its notify ctx
     wsrep::mutable_buffer& err = thd->wsrep_nbo_notify_ctx ?
-                                 thd->wsrep_nbo_notify_ctx->err :
+                                 thd->wsrep_nbo_notify_ctx->m_err :
                                  local_err;
     if (thd->is_error() && !wsrep_must_ignore_error(thd))
     {
+      if (thd->wsrep_nbo_notify_ctx)
+      {
+        mysql_mutex_lock(thd->wsrep_nbo_notify_ctx->m_mutex);
         wsrep_store_error(thd, err);
+        mysql_mutex_unlock(thd->wsrep_nbo_notify_ctx->m_mutex);
+      }
+      else
+      {
+        wsrep_store_error(thd, err);
+      }
     }
     wsrep::client_state& cs(thd->wsrep_cs());
     if (thd->wsrep_nbo_notify_ctx)

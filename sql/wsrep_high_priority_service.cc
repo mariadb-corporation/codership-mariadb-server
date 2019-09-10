@@ -587,7 +587,9 @@ static void* process_apply_nbo(void *args_ptr)
     wsrep_thd_set_ignored_error(thd, false);
     if (ret && thd->wsrep_nbo_notify_ctx)
     {
-      wsrep_store_error(thd, thd->wsrep_nbo_notify_ctx->err);
+      mysql_mutex_lock(thd->wsrep_nbo_notify_ctx->m_mutex);
+      wsrep_store_error(thd, thd->wsrep_nbo_notify_ctx->m_err);
+      mysql_mutex_unlock(thd->wsrep_nbo_notify_ctx->m_mutex);
     }
     wsrep_dump_rbr_buf_with_header(thd, data.data(), data.size());
   }
@@ -658,8 +660,7 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
     thd->variables.option_bits&= ~(OPTION_BIN_LOG);
 
   Wsrep_nbo_notify_context notify_ctx(&m_thd->LOCK_thd_data,
-                                      &m_thd->COND_wsrep_thd,
-                                      err);
+                                      &m_thd->COND_wsrep_thd);
   Wsrep_apply_nbo_args* args= new Wsrep_apply_nbo_args{
     thd, ws_meta, data, &notify_ctx};
   pthread_t th;
@@ -670,8 +671,7 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
     DBUG_RETURN(1);
   }
   pthread_detach(th);
-  notify_ctx.wait();
-  // TODO(leandro): have notify ctx carry its own err buffer, then copy it into arg here
+  notify_ctx.wait(err);
 
   if (!ws_meta.gtid().is_undefined())
   {

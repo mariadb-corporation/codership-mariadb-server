@@ -219,9 +219,8 @@ class Wsrep_nbo_notify_context
 {
 public:
   Wsrep_nbo_notify_context(mysql_mutex_t *mutex,
-                           mysql_cond_t *cond,
-                           wsrep::mutable_buffer& err)
-    : err(err)
+                           mysql_cond_t *cond)
+    : m_err()
     , m_mutex(mutex)
     , m_cond(cond)
     , m_notified()
@@ -235,20 +234,24 @@ public:
     mysql_mutex_unlock(m_mutex);
   }
 
-  void wait()
+  void wait(wsrep::mutable_buffer& err)
   {
     mysql_mutex_lock(m_mutex);
     while (!m_notified)
     {
       mysql_cond_wait(m_cond, m_mutex);
     }
+    err = m_err;
     mysql_mutex_unlock(m_mutex);
   }
-  wsrep::mutable_buffer& err; /* for nbo thread to pass errors to applier thread */
+  wsrep::mutable_buffer m_err;
+  // nbo thread must lock m_mutex when modifying m_err to avoid race in
+  // case applier wakes up early
+  mysql_mutex_t *m_mutex;
+
 private:
   Wsrep_nbo_notify_context(const Wsrep_nbo_notify_context&);
   Wsrep_nbo_notify_context& operator=(const Wsrep_nbo_notify_context&);
-  mysql_mutex_t *m_mutex;
   mysql_cond_t *m_cond;
   bool m_notified;
 };
