@@ -9,16 +9,17 @@ connection node_2;
 SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 connection node_1;
 SET SESSION wsrep_osu_method=NBO;
-ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);;
+ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
 connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
 connection node_1a;
 SET SESSION wsrep_osu_method=NBO;
-ALTER TABLE t2 LOCK=SHARED, ADD PRIMARY KEY (f1);;
+ALTER TABLE t2 LOCK=SHARED, ADD PRIMARY KEY (f1);
 connection node_2;
 SET SESSION wsrep_sync_wait=0;
 SET GLOBAL debug_dbug = '';
+SET DEBUG_SYNC = 'RESET';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC= 'now WAIT_FOR signal.continued';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC = 'RESET';
 connection node_1;
@@ -37,18 +38,6 @@ t2	CREATE TABLE `t2` (
   PRIMARY KEY (`f1`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1
 connection node_2;
-SHOW CREATE TABLE t1;
-Table	Create Table
-t1	CREATE TABLE `t1` (
-  `f1` int(11) NOT NULL,
-  PRIMARY KEY (`f1`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
-SHOW CREATE TABLE t2;
-Table	Create Table
-t2	CREATE TABLE `t2` (
-  `f1` int(11) NOT NULL,
-  PRIMARY KEY (`f1`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (

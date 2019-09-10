@@ -18,28 +18,30 @@ SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
---send ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
+--send ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1)
 
 --connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
 --connection node_1a
 SET SESSION wsrep_osu_method=NBO;
---send ALTER TABLE t2 LOCK=SHARED, ADD PRIMARY KEY (f1);
+--send ALTER TABLE t2 LOCK=SHARED, ADD PRIMARY KEY (f1)
 
+# wait for both ALTERs to block in sync point
 --connection node_2
 SET SESSION wsrep_sync_wait=0;
-
-# Wait for the ALTER to block in sync point
---let $wait_condition = SELECT COUNT(*) > 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now';
+--let $wait_condition = SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now'
 --source include/wait_condition.inc
 
+# now signal both ALTERs to continue
 SET GLOBAL debug_dbug = '';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
 SET DEBUG_SYNC = 'RESET';
-
---let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';
+SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC= 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+--let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%'
 --source include/wait_condition.inc
+
+# clear signals from sync point
+SET DEBUG_SYNC = 'RESET';
 
 --connection node_1
 --reap
@@ -52,9 +54,6 @@ SHOW CREATE TABLE t1;
 SHOW CREATE TABLE t2;
 
 --connection node_2
-SHOW CREATE TABLE t1;
-SHOW CREATE TABLE t2;
-
 SHOW CREATE TABLE t1;
 SHOW CREATE TABLE t2;
 
