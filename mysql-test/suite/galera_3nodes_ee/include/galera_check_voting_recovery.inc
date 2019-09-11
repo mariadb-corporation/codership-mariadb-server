@@ -19,20 +19,16 @@ SELECT VARIABLE_VALUE = 'Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VA
 # Node #2 is kicked out
 
 --connection node_2
-SET SESSION wsrep_on=OFF;
+SET SESSION wsrep_sync_wait = 0;
 SELECT VARIABLE_VALUE = 'non-Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
 SELECT VARIABLE_VALUE = 'Inconsistent' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_state_comment';
-SET SESSION wsrep_on=ON;
 
 # Restore cluster
 
---let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.2.expect
---exec echo "wait" > $_expect_file_name
+# --let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.2.expect
+# --exec echo "wait" > $_expect_file_name
 # Exclude SHOW commands run during server shutdown from sync waiting
---disable_query_log
-SET SESSION wsrep_sync_wait = 7;
---enable_query_log
---shutdown_server
+--source include/shutdown_mysqld.inc
 --source include/wait_until_disconnected.inc
 
 --sleep 5
