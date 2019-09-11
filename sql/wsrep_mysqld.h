@@ -221,20 +221,38 @@ public:
   Wsrep_nbo_notify_context(mysql_mutex_t *mutex,
                            mysql_cond_t *cond)
     : m_err()
+    , m_apply_error(0)
     , m_mutex(mutex)
     , m_cond(cond)
     , m_notified()
   { }
 
-  void notify()
+  void notify(int apply_error)
   {
     mysql_mutex_lock(m_mutex);
     m_notified= true;
+    m_apply_error = apply_error;
     mysql_cond_signal(m_cond);
     mysql_mutex_unlock(m_mutex);
   }
 
-  void wait(wsrep::mutable_buffer& err)
+  void set_error(const wsrep::mutable_buffer& err)
+  {
+    assert(!m_notified);
+    mysql_mutex_lock(m_mutex);
+    m_err = err;
+    mysql_mutex_unlock(m_mutex);
+  }
+
+  /**
+   * Wait for call to notify() from NBO thread, returning any errors
+   * encountered during NBO execution.
+   *
+   * @param Output param, error buffer for error voting.
+   *
+   * @return Non-zero if there were any applying errors, zero otherwise.
+   */
+  int wait(wsrep::mutable_buffer& err)
   {
     mysql_mutex_lock(m_mutex);
     while (!m_notified)
@@ -242,16 +260,17 @@ public:
       mysql_cond_wait(m_cond, m_mutex);
     }
     err = m_err;
+    int ret_err = m_apply_error;
     mysql_mutex_unlock(m_mutex);
+    return ret_err;
   }
-  wsrep::mutable_buffer m_err;
-  // nbo thread must lock m_mutex when modifying m_err to avoid race in
-  // case applier wakes up early
-  mysql_mutex_t *m_mutex;
 
 private:
   Wsrep_nbo_notify_context(const Wsrep_nbo_notify_context&);
   Wsrep_nbo_notify_context& operator=(const Wsrep_nbo_notify_context&);
+  wsrep::mutable_buffer m_err;
+  int m_apply_error;
+  mysql_mutex_t *m_mutex;
   mysql_cond_t *m_cond;
   bool m_notified;
 };

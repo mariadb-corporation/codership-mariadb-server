@@ -540,11 +540,16 @@ static void* process_apply_nbo(void *args_ptr)
   wsrep::mutable_buffer data;
   data.push_back(static_cast<const char*>(args->data.ptr()),
                  static_cast<const char*>(args->data.ptr()) + args->data.size());
-  if (my_thread_init()) {
+  THD *thd= args->thd;
+  int apply_err;
+  if (my_thread_init())
+  {
       // TODO(leandro): handle error. int error field in notify ctx?
+      WSREP_ERROR("Failed to create/initialize NBO worker thread");
+      apply_err= 1;
+      goto error;
   }
 
-  THD *thd= args->thd;
   thd->thread_stack= (char*)&thd;
   thd->store_globals();
   thd->security_ctx->skip_grants();
@@ -573,23 +578,31 @@ static void* process_apply_nbo(void *args_ptr)
 
   thd->wsrep_nbo_notify_ctx= args->notify;
   wsrep_open(thd);
-  if (wsrep_before_command(thd)) {
-      // TODO(leandro): handle error
+  if (wsrep_before_command(thd))
+  {
+    WSREP_ERROR("NBO worker wsrep_before_command() failed");
+    apply_err= 1;
+    goto error;
   }
-  if (thd->wsrep_cs().enter_nbo_mode(args->ws_meta)) {
-      // TODO(leandro): handle error or make return void
+  if (thd->wsrep_cs().enter_nbo_mode(args->ws_meta))
+  {
+    // TODO(leandro): should enter_nbo_mode return void instead?
+    // If we need an error later it's a wsrep-lib API change though
+    WSREP_ERROR("NBO worker enter_nbo_mode() failed");
+    apply_err= 1;
+    goto error;
   }
 
-  int const ret= wsrep_apply_events(thd, thd->wsrep_rgi->rli,
+  apply_err= wsrep_apply_events(thd, thd->wsrep_rgi->rli,
                               data.data(), data.size());
-  if (ret || wsrep_thd_has_ignored_error(thd))
+  if (apply_err || wsrep_thd_has_ignored_error(thd))
   {
     wsrep_thd_set_ignored_error(thd, false);
-    if (ret && thd->wsrep_nbo_notify_ctx)
+    if (apply_err && thd->wsrep_nbo_notify_ctx)
     {
-      mysql_mutex_lock(thd->wsrep_nbo_notify_ctx->m_mutex);
-      wsrep_store_error(thd, thd->wsrep_nbo_notify_ctx->m_err);
-      mysql_mutex_unlock(thd->wsrep_nbo_notify_ctx->m_mutex);
+      wsrep::mutable_buffer err;
+      wsrep_store_error(thd, err);
+      thd->wsrep_nbo_notify_ctx->set_error(err);
     }
     wsrep_dump_rbr_buf_with_header(thd, data.data(), data.size());
   }
@@ -614,13 +627,14 @@ static void* process_apply_nbo(void *args_ptr)
   thd->close_temporary_tables();
   thd->lex->sql_command= SQLCOM_END;
 
+error:
   /* Nowhere to report the error. */
   thd->wsrep_cs().reset_error();
   wsrep_after_command_ignore_result(thd);
   wsrep_close(thd);
   if (thd->wsrep_nbo_notify_ctx)
   {
-    thd->wsrep_nbo_notify_ctx->notify();
+    thd->wsrep_nbo_notify_ctx->notify(apply_err);
     thd->wsrep_nbo_notify_ctx= 0;
   }
   server_threads.erase(thd);
@@ -666,12 +680,11 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   pthread_t th;
   if (pthread_create(&th, NULL, &process_apply_nbo, args)) {
     WSREP_ERROR("Failed to allocate THD for NBO execution");
-    // TODO(leandro): do we need to do sth with err buffer?
     delete args;
     DBUG_RETURN(1);
   }
   pthread_detach(th);
-  notify_ctx.wait(err);
+  int apply_err = notify_ctx.wait(err);
 
   if (!ws_meta.gtid().is_undefined())
   {
@@ -679,7 +692,7 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   }
   must_exit_= check_exit_status();
 
-  DBUG_RETURN(0);
+  DBUG_RETURN(apply_err);
 }
 
 void Wsrep_applier_service::after_apply()
