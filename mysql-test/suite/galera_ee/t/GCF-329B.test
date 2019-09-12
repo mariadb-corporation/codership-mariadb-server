@@ -6,6 +6,10 @@
 --source include/have_innodb.inc
 --source include/big_test.inc
 
+--let $node_1=node_1
+--let $node_2=node_2
+--source suite/galera/include/auto_increment_offset_save.inc
+
 --connection node_1
 
 # Enable the master to continue running during the split-brain situation that
@@ -51,3 +55,5 @@ SET SESSION wsrep_OSU_method=TOI;
 --enable_query_log
 
 DROP TABLE t1;
+
+--source suite/galera/include/auto_increment_offset_restore.inc

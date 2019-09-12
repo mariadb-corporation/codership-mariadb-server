@@ -1,11 +1,12 @@
 connection node_2;
 connection node_1;
 connection node_1;
+connection node_2;
+connection node_3;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 connection node_3;
-SET GLOBAL debug = 'd,sync.alter_locked_tables_inplace';
-Warnings:
-Warning	1287	'@@debug' is deprecated and will be removed in a future release. Please use '@@debug_dbug' instead
+SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 connection node_1;
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;;

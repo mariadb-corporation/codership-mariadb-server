@@ -1,6 +1,9 @@
 connection node_2;
 connection node_1;
 connection node_1;
+connection node_2;
+connection node_3;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 connection node_2;
 SET SESSION wsrep_on=OFF;

@@ -6,6 +6,10 @@
 --source include/have_innodb.inc
 --source include/big_test.inc
 
+--let $node_1=node_1
+--let $node_2=node_2
+--source suite/galera/include/auto_increment_offset_save.inc
+
 --connection node_1
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1);
@@ -32,6 +36,8 @@ SHOW CREATE TABLE t1;
 
 SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
+
+--source suite/galera/include/auto_increment_offset_restore.inc
 
 --connection node_2
 CALL mtr.add_suppression("This will leave database in inconsistent state since DDL execution cannot be terminated in order");

@@ -7,6 +7,10 @@
 --source include/have_debug.inc
 --source include/big_test.inc
 
+--let $node_1=node_1
+--let $node_2=node_2
+--source suite/galera/include/auto_increment_offset_save.inc
+
 # Shut down node #2 and wait until it is completely gone
 --connection node_2
 --let $MYSQLD2_DATADIR = `SELECT @@datadir`
@@ -74,6 +78,8 @@ SHOW CREATE TABLE t1;
 
 SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
+
+--source suite/galera/include/auto_increment_offset_restore.inc
 
 --connection node_1a
 SET DEBUG_SYNC= 'RESET';

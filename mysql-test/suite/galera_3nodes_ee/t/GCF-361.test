@@ -4,6 +4,12 @@
 --let $galera_connection_name = node_3
 --let $galera_server_number = 3
 --source include/galera_connect.inc
+
+--let $node_1=node_1
+--let $node_2=node_2
+--let $node_3=node_3
+--source suite/galera/include/auto_increment_offset_save.inc
+
 --connection node_3
 # create inconsistency
 SET GLOBAL wsrep_on=OFF;
@@ -20,7 +26,6 @@ INSERT INTO t1 VALUES(3);
 --connection node_2
 --let $wait_condition = SELECT COUNT(*) = 3 FROM t1
 --source include/wait_condition.inc
---sleep 1
 
 --connection node_3
 SELECT COUNT(*) = 0 FROM t1;
@@ -41,6 +46,8 @@ SET SESSION wsrep_on = OFF;
 --source include/restart_mysqld.inc
 --source include/wait_until_connected_again.inc
 --source include/galera_wait_ready.inc
+
+--source suite/galera/include/auto_increment_offset_restore.inc
 
 CALL mtr.add_suppression("Slave SQL: Error 'Table 't1' already exists' on query. Default database: 'test'. Query: 'CREATE TABLE t1 \\\(f1 INTEGER PRIMARY KEY\\\) ENGINE=InnoDB', Error_code: 1050");
 CALL mtr.add_suppression("WSREP: Inconsistency detected: Inconsistent by consensus on ");

@@ -10,6 +10,11 @@
 --let $galera_server_number = 3
 --source include/galera_connect.inc
 
+--let $node_1=node_1
+--let $node_2=node_2
+--let $node_3=node_3
+--source suite/galera/include/auto_increment_offset_save.inc
+
 --connection node_1
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1);
@@ -32,7 +37,6 @@ SET SESSION wsrep_sync_wait = 0;
 
 # Restart the master
 --source include/kill_galera.inc
---sleep 5
 
 --connection node_1
 --source include/wait_until_connected_again.inc
@@ -44,7 +48,6 @@ SET SESSION wsrep_sync_wait = 0;
 
 --connection node_2a
 --source include/start_mysqld.inc
---sleep 5
 
 # Confirm that all nodes have the same view of the database
 --connection node_1
@@ -64,6 +67,9 @@ SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 't1';
 SELECT COUNT(*) = 1 FROM t1;
 
 DROP TABLE t1;
+
+--let $node_2=node_2b
+--source suite/galera/include/auto_increment_offset_restore.inc
 
 # CALL mtr.add_suppression('Failed to send state UUID: -11 \\(Resource temporarily unavailable\\)');
 # CALL mtr.add_suppression('discarding established');

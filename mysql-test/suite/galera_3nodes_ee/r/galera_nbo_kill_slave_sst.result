@@ -1,6 +1,9 @@
 connection node_2;
 connection node_1;
 connection node_1;
+connection node_2;
+connection node_3;
+connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 connection node_3;
 SET GLOBAL debug_dbug = 'd,sync.alter_opened_table';
