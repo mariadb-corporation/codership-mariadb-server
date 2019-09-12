@@ -935,7 +935,19 @@ void wsrep_stop_replication(THD *thd)
     Wsrep_server_state::instance().disconnect();
     Wsrep_server_state::instance().wait_until_state(Wsrep_server_state::s_disconnected);
   }
-
+  else
+  {
+    /* This is an ugly hack which should be solved otherwise: If the
+       wsrep is in disconnected state, the shutdown above is skipped and
+       the execution proceeds directly to wsrep_close_client_connections().
+       This in turn may close the connection with issued COM_SHUTDOWN
+       before response is sent to client, which causes problems with
+       MTR tests because shutdown command gets an error. We insert short
+       sleep here in disconnected state to let the client get the response
+       for command before closing connections.
+    */
+    ::sleep(1);
+  }
   /* my connection, should not terminate with wsrep_close_client_connection(),
      make transaction to rollback
   */
@@ -957,7 +969,19 @@ void wsrep_shutdown_replication()
     Wsrep_server_state::instance().disconnect();
     Wsrep_server_state::instance().wait_until_state(Wsrep_server_state::s_disconnected);
   }
-
+  else
+  {
+    /* This is an ugly hack which should be solved otherwise: If the
+       wsrep is in disconnected state, the shutdown above is skipped and
+       the execution proceeds directly to wsrep_close_client_connections().
+       This in turn may close the connection with issued COM_SHUTDOWN
+       before response is sent to client, which causes problems with
+       MTR tests because shutdown command gets an error. We insert short
+       sleep here in disconnected state to let the client get the response
+       for command before closing connections.
+    */
+    ::sleep(1);
+  }
   wsrep_close_client_connections(TRUE);
 
   /* wait until appliers have stopped */
