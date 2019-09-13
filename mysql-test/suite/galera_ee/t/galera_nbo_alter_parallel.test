@@ -36,12 +36,14 @@ SET SESSION wsrep_sync_wait=0;
 INSERT INTO t3 VALUES (1);
 
 --connection node_2
---let $wait_condition = SELECT COUNT(*) = 1 FROM t3;
 INSERT INTO t3 VALUES (2);
+--let $wait_condition = SELECT COUNT(*) = 2 FROM t3;
+--source include/wait_condition.inc
 
 SET GLOBAL debug_dbug = '';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables';
 SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC= 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables';
 
 --let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';
 --source include/wait_condition.inc
