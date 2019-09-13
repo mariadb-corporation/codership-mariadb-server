@@ -6,6 +6,15 @@
 --source include/have_debug_sync.inc
 --source include/have_debug.inc
 
+--let $galera_connection_name = node_3
+--let $galera_server_number = 3
+--source include/galera_connect.inc
+
+--let $node_1=node_1
+--let $node_2=node_2
+--let $node_3=node_3
+--source suite/galera/include/auto_increment_offset_save.inc
+
 CREATE TABLE t1 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1);
 
@@ -64,8 +73,7 @@ SET SESSION wsrep_OSU_method=TOI;
 DROP TABLE t1;
 CALL mtr.add_suppression("gcs_caused\\(\\) returned -1");
 
---let $galera_connection_name = node_3
---let $galera_server_number = 3
---source include/galera_connect.inc
 --connection node_3
 --source include/galera_wait_ready.inc
+
+--source suite/galera/include/auto_increment_offset_restore.inc
