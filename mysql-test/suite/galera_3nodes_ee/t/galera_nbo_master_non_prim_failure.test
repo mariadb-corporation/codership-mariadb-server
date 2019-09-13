@@ -60,7 +60,7 @@ SET SESSION wsrep_sync_wait = 0;
 # DDL should now return a failure
 
 --connection node_2
---error ER_ERROR_DURING_COMMIT
+--error ER_LOCK_WAIT_TIMEOUT
 --reap
 
 # Node #2 is now non-prim

@@ -24,7 +24,7 @@ SET DEBUG_SYNC = 'RESET';
 SET SESSION wsrep_on=OFF;
 SET SESSION wsrep_sync_wait = 0;
 connection node_2;
-ERROR HY000: Got error 6 "No such device or address" during COMMIT
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
 connection node_2;
 SET SESSION wsrep_sync_wait = 0;
 SELECT VARIABLE_VALUE = 'non-Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
