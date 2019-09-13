@@ -17,14 +17,19 @@ SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
 SET SESSION wsrep_osu_method=NBO;
 --send ALTER TABLE t1 ALGORITHM=INPLACE, LOCK=SHARED, ADD PRIMARY KEY (f1);
 
+--connection node_2
+SET SESSION wsrep_sync_wait=0;
+# Wait for the NBO to block in sync point.
+# If TOI goes first, it gets blocked inside TOI mode, preventing NBO from acquiring TOI mode
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now';
+--source include/wait_condition.inc
+
 --connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
 --connection node_1a
 ALTER TABLE t2 LOCK=SHARED, ADD COLUMN f2 INTEGER;
 
 --connection node_2
-SET SESSION wsrep_sync_wait=0;
-
-# Wait for the ALTERs to block in sync point
+# Wait for both ALTERs to block in sync point
 --let $wait_condition = SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now';
 --source include/wait_condition.inc
 
