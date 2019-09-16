@@ -8,10 +8,10 @@
 
 --connection node_1
 CREATE TABLE t1 (f1 INTEGER NOT NULL) ENGINE=InnoDB;
-SET GLOBAL DEBUG_DBUG = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL DEBUG_DBUG = 'd,sync.wsrep_alter_locked_tables';
 
 --connection node_2
-SET GLOBAL DEBUG_DBUG = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL DEBUG_DBUG = 'd,sync.wsrep_alter_locked_tables';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
@@ -24,8 +24,8 @@ SET SESSION wsrep_osu_method=NBO;
 --source include/wait_condition.inc
 
 SET GLOBAL DEBUG_DBUG = '';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET DEBUG_SYNC= 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC= 'now SIGNAL signal.wsrep_alter_locked_tables';
+SET DEBUG_SYNC= 'now WAIT_FOR signal.wsrep_alter_locked_tables_continued';
 SET DEBUG_SYNC= 'RESET';
 
 SET SESSION lock_wait_timeout= 3;
@@ -41,8 +41,8 @@ SET SESSION lock_wait_timeout= 3;
 DROP TABLE t1;
 
 SET GLOBAL DEBUG_DBUG = '';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET DEBUG_SYNC= 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC= 'now SIGNAL signal.wsrep_alter_locked_tables';
+SET DEBUG_SYNC= 'now WAIT_FOR signal.wsrep_alter_locked_tables_continued';
 SET DEBUG_SYNC= 'RESET';
 
 --connection node_1

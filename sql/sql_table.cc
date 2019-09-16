@@ -7668,19 +7668,6 @@ static bool mysql_inplace_alter_table(THD *thd,
 #ifdef WITH_WSREP
   wsrep_nbo_phase_one_end(thd);
 
-  DBUG_EXECUTE_IF("sync.alter_locked_tables_inplace",
-                  {
-                    const char act[]=
-                      "now "
-                      "wait_for signal.alter_locked_tables_inplace";
-                    DBUG_ASSERT(!debug_sync_set_action(thd,
-                                                       STRING_WITH_LEN(act)));
-                    const char act2[]=
-                      "now "
-                      "signal signal.continued";
-                    DBUG_ASSERT(!debug_sync_set_action(thd,
-                                                       STRING_WITH_LEN(act2)));
-                  };);
 #endif  /* WITH_WSREP */
 
   switch (inplace_supported) {
@@ -10195,19 +10182,6 @@ do_continue:;
 
 #ifdef WITH_WSREP
   wsrep_nbo_phase_one_end(thd);
-
-  /*
-    wsrep_nbo_phase_one_end signals the applier for the release of
-    the commit monitor, the sync point thus happens after it's released
-  */
-  DBUG_EXECUTE_IF("sync.alter_locked_tables",
-                  {
-                    const char act[]=
-                      "now "
-                      "wait_for signal.alter_locked_tables";
-                    DBUG_ASSERT(!debug_sync_set_action(thd,
-                                                       STRING_WITH_LEN(act)));
-                  };);
 
 #endif /* WITH_WSREP */
 

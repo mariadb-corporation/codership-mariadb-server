@@ -14,7 +14,7 @@ SET GLOBAL wsrep_slave_threads=2;
 CREATE TABLE t1 (f1 INTEGER NOT NULL, f2 INTEGER NOT NULL) ENGINE=InnoDB;
 
 --connection node_2
-SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.wsrep_alter_locked_tables';
 
 --connection node_1
 SET SESSION wsrep_osu_method=NBO;
@@ -33,8 +33,8 @@ SET SESSION wsrep_sync_wait=0;
 --source include/wait_condition.inc
 
 SET GLOBAL debug_dbug = '';
-SET DEBUG_SYNC= 'now SIGNAL signal.alter_locked_tables_inplace';
-SET DEBUG_SYNC = 'now WAIT_FOR signal.continued';
+SET DEBUG_SYNC= 'now SIGNAL signal.wsrep_alter_locked_tables';
+SET DEBUG_SYNC = 'now WAIT_FOR signal.wsrep_alter_locked_tables_continued';
 SET DEBUG_SYNC = 'RESET';
 
 --let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE INFO LIKE 'ALTER%';

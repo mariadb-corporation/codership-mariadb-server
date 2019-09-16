@@ -5,7 +5,7 @@ connection node_2;
 connection node_2;
 connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.wsrep_alter_locked_tables';
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;;
 connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
@@ -17,7 +17,7 @@ connection node_1a;
 include/assert_grep.inc [Master should report that it can not donate SST]
 include/assert_grep.inc [Slave should report that it could not join]
 SET GLOBAL debug_dbug = '';
-SET DEBUG_SYNC='now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC='now SIGNAL signal.wsrep_alter_locked_tables';
 connection node_1;
 connection node_2;
 # restart

@@ -544,7 +544,6 @@ static void* process_apply_nbo(void *args_ptr)
   int apply_err;
   if (my_thread_init())
   {
-      // TODO(leandro): handle error. int error field in notify ctx?
       WSREP_ERROR("Failed to create/initialize NBO worker thread");
       apply_err= 1;
       goto error;
@@ -586,8 +585,6 @@ static void* process_apply_nbo(void *args_ptr)
   }
   if (thd->wsrep_cs().enter_nbo_mode(args->ws_meta))
   {
-    // TODO(leandro): should enter_nbo_mode return void instead?
-    // If we need an error later it's a wsrep-lib API change though
     WSREP_ERROR("NBO worker enter_nbo_mode() failed");
     apply_err= 1;
     goto error;

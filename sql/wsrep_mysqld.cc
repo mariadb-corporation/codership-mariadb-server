@@ -18,6 +18,7 @@
 #include "wsrep_server_state.h"
 
 #include "mariadb.h"
+#include "debug_sync.h"
 #include <mysqld.h>
 #include <transaction.h>
 #include <sql_class.h>
@@ -2188,6 +2189,20 @@ void wsrep_nbo_phase_one_end(THD *thd)
       cs.end_nbo_phase_one(err);
     }
   }
+  DBUG_EXECUTE_IF("sync.wsrep_alter_locked_tables",
+                  {
+                    const char act[]=
+                      "now "
+                      "WAIT_FOR signal.wsrep_alter_locked_tables";
+                    DBUG_ASSERT(!debug_sync_set_action(thd,
+                                                       STRING_WITH_LEN(act)));
+                    const char act2[]=
+                      "now "
+                      "SIGNAL signal.wsrep_alter_locked_tables_continued";
+                    DBUG_ASSERT(!debug_sync_set_action(thd,
+                                                       STRING_WITH_LEN(act2)));
+
+                  };);
   DBUG_VOID_RETURN;
 }
 

@@ -27,7 +27,7 @@
 # Begin an ALTER and block
 
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.wsrep_alter_locked_tables';
 SET SESSION wsrep_osu_method=NBO;
 --send  ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;
 
@@ -59,7 +59,7 @@ SET SESSION wsrep_sync_wait = 0;
 --source include/assert_grep.inc
 
 SET GLOBAL debug_dbug = '';
-SET DEBUG_SYNC='now SIGNAL signal.alter_locked_tables_inplace';
+SET DEBUG_SYNC='now SIGNAL signal.wsrep_alter_locked_tables';
 
 --connection node_1
 --reap

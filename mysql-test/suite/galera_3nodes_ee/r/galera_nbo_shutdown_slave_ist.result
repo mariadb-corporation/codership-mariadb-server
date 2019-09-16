@@ -6,7 +6,7 @@ connection node_3;
 connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 connection node_3;
-SET GLOBAL debug_dbug = 'd,sync.alter_locked_tables_inplace';
+SET GLOBAL debug_dbug = 'd,sync.wsrep_alter_locked_tables';
 connection node_1;
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD COLUMN f2 INTEGER;;
