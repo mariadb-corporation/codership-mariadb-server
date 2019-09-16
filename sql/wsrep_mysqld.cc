@@ -935,19 +935,7 @@ void wsrep_stop_replication(THD *thd)
     Wsrep_server_state::instance().disconnect();
     Wsrep_server_state::instance().wait_until_state(Wsrep_server_state::s_disconnected);
   }
-  else
-  {
-    /* This is an ugly hack which should be solved otherwise: If the
-       wsrep is in disconnected state, the shutdown above is skipped and
-       the execution proceeds directly to wsrep_close_client_connections().
-       This in turn may close the connection with issued COM_SHUTDOWN
-       before response is sent to client, which causes problems with
-       MTR tests because shutdown command gets an error. We insert short
-       sleep here in disconnected state to let the client get the response
-       for command before closing connections.
-    */
-    ::sleep(1);
-  }
+
   /* my connection, should not terminate with wsrep_close_client_connection(),
      make transaction to rollback
   */
@@ -960,6 +948,38 @@ void wsrep_stop_replication(THD *thd)
   node_uuid= WSREP_UUID_UNDEFINED;
 }
 
+static my_bool close_connection_for_shutdown(THD *thd, void *)
+{
+  mysql_mutex_lock(&thd->LOCK_thd_data);
+  if (thd->wsrep_cs().state() != wsrep::client_state::s_none)
+  {
+    thd->set_killed(KILL_CONNECTION);
+    MYSQL_CALLBACK(thread_scheduler, post_kill_notification, (thd));
+  }
+  mysql_mutex_unlock(&thd->LOCK_thd_data);
+  return 0;
+}
+
+static my_bool have_open_connections(THD *thd, void *)
+{
+  mysql_mutex_lock(&thd->LOCK_thd_data);
+  my_bool ret= (thd->wsrep_cs().state() != wsrep::client_state::s_none);
+  mysql_mutex_unlock(&thd->LOCK_thd_data);
+  return ret;
+}
+
+static void close_client_connections_for_shutdown(int wait_time)
+{
+  const int sleep_time= 100;
+  server_threads.iterate(close_connection_for_shutdown);
+  while (server_threads.iterate(have_open_connections) && wait_time > 0)
+  {
+    WSREP_DEBUG("wait for open connection to close: %d", wait_time);
+    my_sleep(sleep_time);
+    wait_time -= sleep_time;
+  }
+}
+
 void wsrep_shutdown_replication()
 {
   WSREP_INFO("Shutdown replication");
@@ -969,19 +989,11 @@ void wsrep_shutdown_replication()
     Wsrep_server_state::instance().disconnect();
     Wsrep_server_state::instance().wait_until_state(Wsrep_server_state::s_disconnected);
   }
-  else
-  {
-    /* This is an ugly hack which should be solved otherwise: If the
-       wsrep is in disconnected state, the shutdown above is skipped and
-       the execution proceeds directly to wsrep_close_client_connections().
-       This in turn may close the connection with issued COM_SHUTDOWN
-       before response is sent to client, which causes problems with
-       MTR tests because shutdown command gets an error. We insert short
-       sleep here in disconnected state to let the client get the response
-       for command before closing connections.
-    */
-    ::sleep(1);
-  }
+
+  /* Do softer kill first to allow client sessions to complete currently running
+     comamnds and return errors to client. */
+  close_client_connections_for_shutdown(2000);
+
   wsrep_close_client_connections(TRUE);
 
   /* wait until appliers have stopped */

@@ -2414,11 +2414,17 @@ dispatch_end:
     */
     DBUG_ASSERT((command != COM_QUIT && command != COM_STMT_CLOSE)
                   || thd->get_stmt_da()->is_disabled());
-    /* wsrep BF abort in query exec phase */
+    /*
+      Wsrep BF abort in query exec phase.
+
+      COM_SHUTDOWN may cause THD to be killed by shutdown process before it
+      gets here. always do end of statement for it to avoid client getting
+      connection error.
+    */
     mysql_mutex_lock(&thd->LOCK_thd_data);
     do_end_of_statement=
       thd->wsrep_trx().state() != wsrep::transaction::s_replaying
-      && !thd->killed;
+      && (!thd->killed || command == COM_SHUTDOWN);
 
     mysql_mutex_unlock(&thd->LOCK_thd_data);
   }
