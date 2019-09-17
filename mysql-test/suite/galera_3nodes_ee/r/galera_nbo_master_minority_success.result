@@ -15,7 +15,7 @@ SET SESSION wsrep_on=ON;
 connection node_2;
 SET SESSION wsrep_osu_method=NBO;
 ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
-ERROR HY000: Got error 7 "Argument list too long" during COMMIT
+ERROR 70100: Query execution was interrupted
 connection node_1;
 SELECT VARIABLE_VALUE = 'Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
 VARIABLE_VALUE = 'Primary'

@@ -30,7 +30,7 @@ SET SESSION wsrep_on=ON;
 # Node #2 goes non-prim because it is in the minority
 --connection node_2
 SET SESSION wsrep_osu_method=NBO;
---error ER_ERROR_DURING_COMMIT
+--error ER_QUERY_INTERRUPTED
 ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
 
 --source ../include/galera_check_voting_recovery.inc

@@ -2233,6 +2233,7 @@ int wsrep_nbo_phase_two_begin(THD *thd)
     wsrep::client_state& cs(thd->wsrep_cs());
     thd_proc_info(thd, "acquiring total order isolation for NBO phase two");
     ret= cs.begin_nbo_phase_two(keys,
+                                thd->get_stmt_da()->is_error(),
                                 wsrep::clock::now()
                                 + std::chrono::seconds(thd->variables.lock_wait_timeout));
   }

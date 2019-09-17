@@ -14,6 +14,7 @@ ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SET GLOBAL DEBUG_DBUG = '';
 SET DEBUG_SYNC= 'now SIGNAL signal.wsrep_alter_locked_tables';
+SET DEBUG_SYNC= 'now WAIT_FOR signal.wsrep_alter_locked_tables_continued';
 SET DEBUG_SYNC = 'RESET';
 connection node_1;
 connection node_2;

@@ -24,10 +24,7 @@ SET SESSION wsrep_on=ON;
 
 SET SESSION wsrep_OSU_method='NBO';
 
-# We get ER_ERROR_DURING_COMMIT instead of ER_MULTIPLE_PRI_KEY
-# because of error voting which makes the node_2 to exit the
-# group.
---error ER_ERROR_DURING_COMMIT
+--error ER_MULTIPLE_PRI_KEY
 ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
 
 --source ../include/galera_check_voting_recovery.inc
