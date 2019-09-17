@@ -27,6 +27,7 @@ SET SESSION wsrep_sync_wait=0;
 # Confirm that unrelated tables can be modified
 INSERT INTO t2 VALUES (2);
 
+SET GLOBAL debug_dbug = '';
 ALTER TABLE t2 ALGORITHM=COPY, ADD COLUMN f2 INTEGER;
 
 # Confirm that the ALTER-ed table can not be modified on either node
@@ -47,7 +48,6 @@ ALTER TABLE t2 ALGORITHM=COPY, ADD COLUMN f3 INTEGER;
 # Unblock the ALTER and confirm that it executed on all nodes
 --connection node_2
 SET DEBUG_SYNC= 'now SIGNAL signal.wsrep_alter_locked_tables';
-SET GLOBAL debug_dbug = '';
 
 --let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_NAME = 't1'
 --source include/wait_condition.inc
