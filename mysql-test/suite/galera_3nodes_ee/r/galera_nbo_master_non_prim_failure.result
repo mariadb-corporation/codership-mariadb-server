@@ -61,3 +61,4 @@ connection node_2;
 CALL mtr.add_suppression("Lock wait timeout while waiting NBO end to replicate");
 CALL mtr.add_suppression("Failed to acquire total order isolation for non-blocking DDL end event, provider returned error code 6");
 CALL mtr.add_suppression("This will leave database in inconsistent state since DDL execution cannot be terminated in order");
+CALL mtr.add_suppression("NBO phase two begin failed for:");

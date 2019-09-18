@@ -68,4 +68,5 @@ CALL mtr.add_suppression("Inconsistent by consensus");
 CALL mtr.add_suppression("Failed to execute TOI action");
 CALL mtr.add_suppression("Non-blocking operation end failed");
 CALL mtr.add_suppression("Closing during nonblocking operation.");
+CALL mtr.add_suppression("NBO phase two begin failed for:");
 connection node_3;

@@ -410,6 +410,7 @@ extern PSI_thread_key key_wsrep_sst_joiner;
 extern PSI_thread_key key_wsrep_sst_donor;
 extern PSI_thread_key key_wsrep_rollbacker;
 extern PSI_thread_key key_wsrep_applier;
+extern PSI_thread_key key_wsrep_nbo_worker;
 #endif /* HAVE_PSI_INTERFACE */
 
 

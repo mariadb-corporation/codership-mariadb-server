@@ -71,3 +71,4 @@ DROP TABLE t1;
 
 --connection node_3
 CALL mtr.add_suppression("WSREP: Failed to send NBO-end");
+CALL mtr.add_suppression("NBO phase two begin failed for:");

@@ -5925,7 +5925,7 @@ finish:
 #ifdef WITH_WSREP
   if (wsrep_nbo_phase_two_begin(thd))
   {
-    // TODO(leandro): node is out of the cluster and can't finish in TO.
+    // TODO(leandro): node could not enter TOI to finish the operation.
     // Try to shutdown the provider cleanly.
     res= true;
   }

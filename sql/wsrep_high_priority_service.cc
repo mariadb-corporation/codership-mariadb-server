@@ -675,7 +675,7 @@ int Wsrep_applier_service::apply_nbo_begin(const wsrep::ws_meta& ws_meta,
   Wsrep_apply_nbo_args* args= new Wsrep_apply_nbo_args{
     thd, ws_meta, data, &notify_ctx};
   pthread_t th;
-  if (pthread_create(&th, NULL, &process_apply_nbo, args)) {
+  if (mysql_thread_create(key_wsrep_nbo_worker, &th, NULL, &process_apply_nbo, args)) {
     WSREP_ERROR("Failed to allocate THD for NBO execution");
     delete args;
     DBUG_RETURN(1);

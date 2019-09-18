@@ -214,14 +214,15 @@ static PSI_file_info wsrep_files[]=
 };
 
 PSI_thread_key key_wsrep_sst_joiner, key_wsrep_sst_donor,
-  key_wsrep_rollbacker, key_wsrep_applier;
+  key_wsrep_rollbacker, key_wsrep_applier, key_wsrep_nbo_worker;
 
 static PSI_thread_info wsrep_threads[]=
 {
  {&key_wsrep_sst_joiner, "wsrep_sst_joiner_thread", PSI_FLAG_GLOBAL},
  {&key_wsrep_sst_donor, "wsrep_sst_donor_thread", PSI_FLAG_GLOBAL},
  {&key_wsrep_rollbacker, "wsrep_rollbacker_thread", PSI_FLAG_GLOBAL},
- {&key_wsrep_applier, "wsrep_applier_thread", PSI_FLAG_GLOBAL}
+ {&key_wsrep_applier, "wsrep_applier_thread", PSI_FLAG_GLOBAL},
+ {&key_wsrep_nbo_worker, "wsrep_nbo_worker_thread", PSI_FLAG_GLOBAL},
 };
 
 #endif /* HAVE_PSI_INTERFACE */
@@ -1976,16 +1977,24 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
                  WSREP_QUERY(thd));
       my_error(ER_LOCK_DEADLOCK, MYF(0));
       break;
+    case wsrep::e_timeout_error:
+      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+                 "Operation timed out.",
+                 ret,
+                 (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
+      my_error(ER_LOCK_WAIT_TIMEOUT, MYF(0));
+      break;
     default:
       WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
-                 "Check wsrep connection state and retry the query.",
+                 "Check your wsrep connection state and retry the query.",
                  ret,
                  (thd->db.str ? thd->db.str : "(null)"),
                  WSREP_QUERY(thd));
       if (!thd->is_error())
       {
-        my_error(ER_LOCK_DEADLOCK, MYF(0), "WSREP replication failed. Check "
-                 "your wsrep connection state and retry the query.");
+        my_error(ER_LOCK_DEADLOCK, MYF(0), "WSREP replication failed. "
+                 "Check your wsrep connection state and retry the query.");
       }
     }
     rc= -1;
@@ -2087,9 +2096,9 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
 
   buf_err = wsrep_TOI_event_buf(thd, &buf, &buf_len);
   if (buf_err) {
-    WSREP_ERROR("Failed to create TOI event buf: %d", buf_err);
+    WSREP_ERROR("Failed to create NBO event buf: %d", buf_err);
     my_message(ER_UNKNOWN_ERROR,
-               "WSREP replication failed to prepare TOI event buffer. "
+               "WSREP replication failed to prepare NBO event buffer. "
                "Check your query.",
                MYF(0));
     return -1;
@@ -2142,16 +2151,24 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
                  WSREP_QUERY(thd));
       my_error(ER_LOCK_DEADLOCK, MYF(0));
       break;
+    case wsrep::e_timeout_error:
+      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+                 "Operation timed out.",
+                 ret,
+                 (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
+      my_error(ER_LOCK_WAIT_TIMEOUT, MYF(0));
+      break;
     default:
       WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
-                 "Check wsrep connection state and retry the query.",
+                 "Check your wsrep connection state and retry the query.",
                  ret,
                  (thd->db.str ? thd->db.str : "(null)"),
                  WSREP_QUERY(thd));
       if (!thd->is_error())
       {
-        my_error(ER_LOCK_DEADLOCK, MYF(0), "WSREP replication failed. Check "
-                 "your wsrep connection state and retry the query.");
+        my_error(ER_LOCK_DEADLOCK, MYF(0), "WSREP replication failed. "
+                 "Check your wsrep connection state and retry the query.");
       }
     }
     rc= -1;
@@ -2162,6 +2179,7 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
   }
 
   if (buf) my_free(buf);
+  // TODO(leandro): following method has TOI specific messages
   if (rc) wsrep_TOI_begin_failed(thd, NULL);
 
   return rc;
@@ -2186,7 +2204,16 @@ void wsrep_nbo_phase_one_end(THD *thd)
     }
     else if (cs.in_toi())
     {
-      cs.end_nbo_phase_one(err);
+      int ret = cs.end_nbo_phase_one(err);
+      if (!ret)
+      {
+        WSREP_DEBUG("NBO phase one END: %lld", cs.toi_meta().seqno().get());
+      }
+      else
+      {
+        WSREP_WARN("NBO phase one end failed for: %d, schema: %s, sql: %s",
+                   ret, (thd->db.str ? thd->db.str : "(null)"), WSREP_QUERY(thd));
+      }
     }
   }
   DBUG_EXECUTE_IF("sync.wsrep_alter_locked_tables",
@@ -2233,9 +2260,45 @@ int wsrep_nbo_phase_two_begin(THD *thd)
     wsrep::client_state& cs(thd->wsrep_cs());
     thd_proc_info(thd, "acquiring total order isolation for NBO phase two");
     ret= cs.begin_nbo_phase_two(keys,
-                                thd->get_stmt_da()->is_error(),
                                 wsrep::clock::now()
                                 + std::chrono::seconds(thd->variables.lock_wait_timeout));
+    if (ret)
+    {
+      DBUG_ASSERT(cs.current_error());
+      WSREP_DEBUG("begin_nbo_phase_two() failed for %llu: %s, seqno: %lld",
+                  thd->thread_id, WSREP_QUERY(thd),
+                  cs.toi_meta().seqno().get());
+      switch (cs.current_error()) {
+      /*
+       * TODO(leandro): revise errors and messages here. If the node
+       * is inconsistent it doesn't make sense to ask the user to retry.
+       */
+      case wsrep::e_interrupted_error:
+        WSREP_WARN("NBO phase two begin failed for: %d, schema: %s, sql: %s. "
+                   "Check your wsrep connection state and retry the query.",
+                   ret,
+                   (thd->db.str ? thd->db.str : "(null)"),
+                   WSREP_QUERY(thd));
+        // If the thread had already errored, we don't override the
+        // error so the original one can be reported.
+        if (thd->is_error())
+          cs.reset_error();
+        break;
+      case wsrep::e_timeout_error:
+        WSREP_WARN("NBO phase two begin failed for: %d, schema: %s, sql: %s. "
+                   "Operation timed out.",
+                   ret,
+                   (thd->db.str ? thd->db.str : "(null)"),
+                   WSREP_QUERY(thd));
+        break;
+      default:
+        WSREP_WARN("NBO phase two begin failed for: %d, schema: %s, sql: %s. "
+                   "Check your wsrep connection state and retry the query.",
+                   ret,
+                   (thd->db.str ? thd->db.str : "(null)"),
+                   WSREP_QUERY(thd));
+      }
+    }
   }
   DBUG_RETURN(ret);
 }
