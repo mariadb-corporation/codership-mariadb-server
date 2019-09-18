@@ -1678,6 +1678,14 @@ static bool wsrep_can_run_in_toi(THD *thd, const char *db, const char *table,
     }
     return true;
 
+  case SQLCOM_DROP_TRIGGER:
+    DBUG_ASSERT(table_list);
+    if (thd->find_temporary_table(table_list))
+    {
+      return false;
+    }
+    return true;
+
   default:
     if (table && !thd->find_temporary_table(db, table))
     {
@@ -2635,7 +2643,7 @@ void* start_wsrep_THD(void *arg)
   /* from handle_one_connection... */
   pthread_detach_this_thread();
 
-  mysql_thread_set_psi_id(thd->thread_id);
+  // mysql_thread_set_psi_id(thd->thread_id);
   thd->thr_create_utime=  microsecond_interval_timer();
   if (MYSQL_CALLBACK_ELSE(thread_scheduler, init_new_connection_thread, (), 0))
   {

@@ -14,17 +14,17 @@ CREATE TRIGGER tr1 BEFORE INSERT ON t1 FOR EACH ROW INSERT INTO t2 VALUES (NULL,
 --connection node_2
 SET SESSION wsrep_sync_wait = 0;
 SET GLOBAL wsrep_slave_threads = 2;
-
-SET GLOBAL DEBUG_DBUG = 'd,sync.mdev_20225';
+SET GLOBAL debug_dbug = 'd,sync.mdev_20225';
 
 --let $galera_connection_name = node_1a
 --let $galera_server_number = 1
 --source include/galera_connect.inc
-
 DROP TRIGGER tr1;
 
 --connection node_2
-SET GLOBAL DEBUG_DBUG = 'now WAIT_FOR signal.mdev_20225';
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE = 'debug sync point: now'
+--source include/wait_condition.inc
+
 
 --connection node_1
 INSERT INTO t1 VALUES (NULL);
@@ -34,8 +34,13 @@ INSERT INTO t1 VALUES (NULL);
 --sleep 1
 
 --connection node_2
-SET GLOBAL DEBUG_DBUG = 'RESET';
+SET GLOBAL debug_dbug = 'RESET';
+SET DEBUG_SYNC = 'now SIGNAL signal.mdev_20225_continue';
+SET DEBUG_SYNC = 'RESET';
 SET GLOBAL wsrep_slave_threads = 1;
+
+# Trigger should now be dropped on node_2.
+SHOW TRIGGERS;
 
 DROP TABLE t1;
 DROP TABLE t2;
