@@ -1,0 +1,41 @@
+#
+# MDEV-20225 - Verify that DROP TRIGGER gets keys assigned corresponding
+#              to all affected tables.
+#
+
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+CREATE TABLE t1 (f1 INT NOT NULL PRIMARY KEY AUTO_INCREMENT) ENGINE=InnoDB;
+CREATE TABLE t2 (f1 INT NOT NULL PRIMARY KEY AUTO_INCREMENT, f2 INT) ENGINE=InnoDB;
+
+CREATE TRIGGER tr1 BEFORE INSERT ON t1 FOR EACH ROW INSERT INTO t2 VALUES (NULL, NEW.f1);
+
+--connection node_2
+SET SESSION wsrep_sync_wait = 0;
+SET GLOBAL wsrep_slave_threads = 2;
+
+SET GLOBAL DEBUG_DBUG = 'd,sync.mdev_20225';
+
+--let $galera_connection_name = node_1a
+--let $galera_server_number = 1
+--source include/galera_connect.inc
+
+DROP TRIGGER tr1;
+
+--connection node_2
+SET GLOBAL DEBUG_DBUG = 'now WAIT_FOR signal.mdev_20225';
+
+--connection node_1
+INSERT INTO t1 VALUES (NULL);
+# We must rely on sleep here. If the bug is fixed, the second applier
+# is not allowed to go past apply monitor which would trigger the bug,
+# so there is no sync point or condition to wait.
+--sleep 1
+
+--connection node_2
+SET GLOBAL DEBUG_DBUG = 'RESET';
+SET GLOBAL wsrep_slave_threads = 1;
+
+DROP TABLE t1;
+DROP TABLE t2;
