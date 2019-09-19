@@ -26,7 +26,6 @@ t1	CREATE TABLE `t1` (
   `f1` int(11) NOT NULL,
   PRIMARY KEY (`f1`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1
-CALL mtr.add_suppression("TO isolation failed");
 CALL mtr.add_suppression("ALTER TABLE isolation failure");
 connection node_1;
 SHOW CREATE TABLE t1;

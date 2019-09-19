@@ -28,6 +28,3 @@ SET DEBUG_SYNC= 'RESET';
 connection node_1;
 SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
-CALL mtr.add_suppression("TO isolation failed for");
-connection node_2;
-CALL mtr.add_suppression("TO isolation failed for");

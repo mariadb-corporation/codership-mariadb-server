@@ -1866,7 +1866,7 @@ static int wsrep_TOI_event_buf(THD* thd, uchar** buf, size_t* buf_len)
   return err;
 }
 
-static void wsrep_TOI_begin_failed(THD* thd, const wsrep_buf_t* /* const err */)
+static void wsrep_TOI_begin_failed(THD* thd)
 {
   if (wsrep_thd_trx_seqno(thd) > 0)
   {
@@ -2006,7 +2006,7 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
 
   if (buf) my_free(buf);
 
-  if (rc) wsrep_TOI_begin_failed(thd, NULL);
+  if (rc) wsrep_TOI_begin_failed(thd);
 
   return rc;
 }
@@ -2136,7 +2136,7 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
     switch (cs.current_error())
     {
     case wsrep::e_size_exceeded_error:
-      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+      WSREP_WARN("TO isolation failed for NBO phase one: %d, schema: %s, sql: %s. "
                  "Maximum size exceeded.",
                  ret,
                  (thd->db.str ? thd->db.str : "(null)"),
@@ -2144,7 +2144,7 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
       my_error(ER_ERROR_DURING_COMMIT, MYF(0), WSREP_SIZE_EXCEEDED);
       break;
     case wsrep::e_deadlock_error:
-      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+      WSREP_WARN("TO isolation failed for NBO phase one: %d, schema: %s, sql: %s. "
                  "Deadlock error.",
                  ret,
                  (thd->db.str ? thd->db.str : "(null)"),
@@ -2152,7 +2152,7 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
       my_error(ER_LOCK_DEADLOCK, MYF(0));
       break;
     case wsrep::e_timeout_error:
-      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+      WSREP_WARN("TO isolation failed for NBO phase one: %d, schema: %s, sql: %s. "
                  "Operation timed out.",
                  ret,
                  (thd->db.str ? thd->db.str : "(null)"),
@@ -2160,7 +2160,7 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
       my_error(ER_LOCK_WAIT_TIMEOUT, MYF(0));
       break;
     default:
-      WSREP_WARN("TO isolation failed for: %d, schema: %s, sql: %s. "
+      WSREP_WARN("TO isolation failed for NBO phase one: %d, schema: %s, sql: %s. "
                  "Check your wsrep connection state and retry the query.",
                  ret,
                  (thd->db.str ? thd->db.str : "(null)"),
@@ -2179,8 +2179,7 @@ int wsrep_NBO_begin(THD *thd, const char *db, const char *table,
   }
 
   if (buf) my_free(buf);
-  // TODO(leandro): following method has TOI specific messages
-  if (rc) wsrep_TOI_begin_failed(thd, NULL);
+  if (rc) wsrep_TOI_begin_failed(thd);
 
   return rc;
 }
@@ -2268,36 +2267,16 @@ int wsrep_nbo_phase_two_begin(THD *thd)
       WSREP_DEBUG("begin_nbo_phase_two() failed for %llu: %s, seqno: %lld",
                   thd->thread_id, WSREP_QUERY(thd),
                   cs.toi_meta().seqno().get());
-      switch (cs.current_error()) {
-      /*
-       * TODO(leandro): revise errors and messages here. If the node
-       * is inconsistent it doesn't make sense to ask the user to retry.
-       */
-      case wsrep::e_interrupted_error:
-        WSREP_WARN("NBO phase two begin failed for: %d, schema: %s, sql: %s. "
-                   "Check your wsrep connection state and retry the query.",
-                   ret,
-                   (thd->db.str ? thd->db.str : "(null)"),
-                   WSREP_QUERY(thd));
-        // If the thread had already errored, we don't override the
-        // error so the original one can be reported.
-        if (thd->is_error())
-          cs.reset_error();
-        break;
-      case wsrep::e_timeout_error:
-        WSREP_WARN("NBO phase two begin failed for: %d, schema: %s, sql: %s. "
-                   "Operation timed out.",
-                   ret,
-                   (thd->db.str ? thd->db.str : "(null)"),
-                   WSREP_QUERY(thd));
-        break;
-      default:
-        WSREP_WARN("NBO phase two begin failed for: %d, schema: %s, sql: %s. "
-                   "Check your wsrep connection state and retry the query.",
-                   ret,
-                   (thd->db.str ? thd->db.str : "(null)"),
-                   WSREP_QUERY(thd));
+      // If the thread had already errored, we don't override the
+      // original error so it can be reported to the client.
+      if ((cs.current_error() == wsrep::e_interrupted_error) && thd->is_error())
+      {
+        cs.reset_error();
       }
+      WSREP_WARN("TO isolation failed for NBO phase two: %d, schema: %s, sql: %s.",
+                 ret,
+                 (thd->db.str ? thd->db.str : "(null)"),
+                 WSREP_QUERY(thd));
     }
   }
   DBUG_RETURN(ret);

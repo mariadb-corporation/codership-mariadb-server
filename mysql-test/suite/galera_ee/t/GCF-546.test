@@ -39,7 +39,6 @@ ALTER TABLE t1 LOCK=SHARED, ALGORITHM=COPY, ADD PRIMARY KEY (f1);
 
 SHOW CREATE TABLE t1;
 
-CALL mtr.add_suppression("TO isolation failed");
 CALL mtr.add_suppression("ALTER TABLE isolation failure");
 
 --connection node_1
