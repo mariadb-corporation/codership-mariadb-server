@@ -2643,7 +2643,7 @@ void* start_wsrep_THD(void *arg)
   /* from handle_one_connection... */
   pthread_detach_this_thread();
 
-  // mysql_thread_set_psi_id(thd->thread_id);
+  mysql_thread_set_psi_id(thd->thread_id);
   thd->thr_create_utime=  microsecond_interval_timer();
   if (MYSQL_CALLBACK_ELSE(thread_scheduler, init_new_connection_thread, (), 0))
   {
