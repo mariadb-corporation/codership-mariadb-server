@@ -44,6 +44,7 @@ push @::global_suppressions,
      qr(WSREP: Action message in non-primary configuration from member [0-9]*),
      qr(WSREP: --wsrep-causal-reads=ON takes precedence over --wsrep-sync-wait=0. WSREP_SYNC_WAIT_BEFORE_READ is on),
      qr(WSREP: JOIN message from member .* in non-primary configuration. Ignored.),
+     qr(WSREP: TO isolation failed for.*),
    );
 
 bless { };

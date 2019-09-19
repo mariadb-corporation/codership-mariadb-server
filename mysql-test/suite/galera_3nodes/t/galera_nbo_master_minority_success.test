@@ -1,5 +1,6 @@
 #
-# Test the situation where the master is in the majority when an NBO DDL fails on master
+# This test has the master (node #2) in the minority when an
+# NBO DDL succeeds on master
 #
 
 --source include/galera_cluster.inc
@@ -17,29 +18,29 @@
 --connection node_1
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 
-# Introduce inconsistency on node #2
-
---connection node_2
---let $wsrep_cluster_address_node2 = `SELECT @@wsrep_cluster_address`
 SET SESSION wsrep_on=OFF;
 ALTER TABLE t1 ADD PRIMARY KEY (f1);
 SET SESSION wsrep_on=ON;
 
-# Run DDL that will fail on nodes #1 and #3 but succeed on node #2
+--connection node_3
+SET SESSION wsrep_on=OFF;
+ALTER TABLE t1 ADD PRIMARY KEY (f1);
+SET SESSION wsrep_on=ON;
 
---connection node_1
+# Node #2 goes non-prim because it is in the minority
+--connection node_2
 SET SESSION wsrep_osu_method=NBO;
+--error ER_QUERY_INTERRUPTED
+ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
 
---error ER_CANT_DROP_FIELD_OR_KEY
-ALTER TABLE t1 LOCK=SHARED, DROP PRIMARY KEY;
+--source ./galera_check_voting_recovery.inc
 
---source ../include/galera_check_voting_recovery.inc
-
---connection node_1
-SET SESSION wsrep_OSU_method=TOI;
+--connection node_2
+SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
 
---source suite/galera/include/auto_increment_offset_restore.inc
+--connection node_1
+CALL mtr.add_suppression("Slave SQL: Error");
 
 --connection node_2
 CALL mtr.add_suppression("inconsistent with group");
@@ -47,4 +48,7 @@ CALL mtr.add_suppression("Failed to send NBO-end");
 CALL mtr.add_suppression("NBO phase two begin failed for:");
 
 --connection node_3
+--source include/galera_wait_ready.inc
 CALL mtr.add_suppression("Slave SQL: Error");
+
+--source suite/galera/include/auto_increment_offset_restore.inc

@@ -20,7 +20,6 @@ SET GLOBAL debug_dbug = '';
 SET DEBUG_SYNC='now SIGNAL signal.wsrep_alter_locked_tables';
 connection node_1;
 connection node_2;
-# restart
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (

@@ -1,5 +1,5 @@
 #
-# This test has the master (node #2) in the minority when an
+# This test has the master in the majority when an
 # NBO DDL succeeds on master
 #
 
@@ -18,37 +18,31 @@
 --connection node_1
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 
-SET SESSION wsrep_on=OFF;
-ALTER TABLE t1 ADD PRIMARY KEY (f1);
-SET SESSION wsrep_on=ON;
-
---connection node_3
-SET SESSION wsrep_on=OFF;
-ALTER TABLE t1 ADD PRIMARY KEY (f1);
-SET SESSION wsrep_on=ON;
-
-# Node #2 goes non-prim because it is in the minority
+# Introduce inconsistency on node #2
 --connection node_2
+SET SESSION wsrep_on=OFF;
+ALTER TABLE t1 ADD PRIMARY KEY (f1);
+SET SESSION wsrep_on=ON;
+
+--connection node_1
 SET SESSION wsrep_osu_method=NBO;
---error ER_QUERY_INTERRUPTED
 ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
 
---source ../include/galera_check_voting_recovery.inc
+--source ./galera_check_voting_recovery.inc
 
---connection node_2
+--connection node_1
 SET SESSION wsrep_osu_method=TOI;
 DROP TABLE t1;
 
---connection node_1
-CALL mtr.add_suppression("Slave SQL: Error");
-
 --connection node_2
-CALL mtr.add_suppression("inconsistent with group");
-CALL mtr.add_suppression("Failed to send NBO-end");
+CALL mtr.add_suppression("Slave SQL: Error");
+CALL mtr.add_suppression("Inconsistent by consensus");
+CALL mtr.add_suppression("Failed to execute TOI action");
+CALL mtr.add_suppression("Non-blocking operation end failed");
+CALL mtr.add_suppression("Closing during nonblocking operation.");
 CALL mtr.add_suppression("NBO phase two begin failed for:");
 
 --connection node_3
 --source include/galera_wait_ready.inc
-CALL mtr.add_suppression("Slave SQL: Error");
 
 --source suite/galera/include/auto_increment_offset_restore.inc

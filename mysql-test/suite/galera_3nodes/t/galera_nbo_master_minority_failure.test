@@ -27,7 +27,7 @@ SET SESSION wsrep_OSU_method='NBO';
 --error ER_MULTIPLE_PRI_KEY
 ALTER TABLE t1 LOCK=SHARED, ADD PRIMARY KEY (f1);
 
---source ../include/galera_check_voting_recovery.inc
+--source ./galera_check_voting_recovery.inc
 
 --connection node_1
 DROP TABLE t1;

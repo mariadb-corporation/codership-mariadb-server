@@ -12,7 +12,6 @@ connection node_2;
 Killing server ...
 connection node_1a;
 connection node_2;
-# restart
 connection node_2a;
 SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='t1';
 COUNT(*) = 2
