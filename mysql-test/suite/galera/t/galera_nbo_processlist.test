@@ -7,9 +7,8 @@
 --source include/have_debug_sync.inc
 
 --connection node_2
-# At the start, we 3 applier threads, 1 standard applier and
-# 1 aborter and 1 post aborter
-SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
+# At the start, we have 2 applier threads, 1 standard applier and 1 rollbacker
+SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
 
 # Set ALTER TABLE to block in the applier thread. wsrep_sync_wait = 0 for the duration, as causal reads will be blocked
 --let $debug_orig = `SELECT @@debug`
@@ -25,7 +24,7 @@ SET SESSION wsrep_osu_method='NBO';
 
 --connection node_2
 # There is a separate applier thread for the ALTER TABLE
---let $wait_condition = SELECT COUNT(*) = 4 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
+--let $wait_condition = SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
 --source include/wait_condition.inc
 
 # The applier thread is blocked
@@ -58,7 +57,7 @@ SET DEBUG_SYNC= 'now SIGNAL signal.alter_opened_table';
 SET SESSION wsrep_sync_wait = 7;
 
 # ... the applier thread will terminate
---let $wait_condition = SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%'
+--let $wait_condition = SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%'
 --source include/wait_condition.inc
 
 SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.PROCESSLIST

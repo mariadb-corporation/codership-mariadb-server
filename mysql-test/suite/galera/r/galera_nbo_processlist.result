@@ -1,8 +1,8 @@
 connection node_2;
 connection node_1;
 connection node_2;
-SELECT COUNT(*) = 3 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
-COUNT(*) = 3
+SELECT COUNT(*) = 2 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE NOT LIKE '%InnoDB%';
+COUNT(*) = 2
 1
 SET GLOBAL debug_dbug = 'd,sync.alter_opened_table';
 SET SESSION wsrep_sync_wait = 0;
