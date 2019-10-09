@@ -467,6 +467,17 @@ int wsrep_init_server();
 void wsrep_init_globals();
 
 /**
+ * Initialize wsrep_schema. This initializes access to wsrep
+ * system tables under mysql database.
+ */
+void wsrep_init_schema();
+
+/**
+ * Deinit wsrep_schema. This deinitializes access to wsrep
+ * system tables under mysql database.
+ */
+void wsrep_deinit_schema();
+/**
  * Deinit and release WSREP resources.
  */
 void wsrep_deinit_server();

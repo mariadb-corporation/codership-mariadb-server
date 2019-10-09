@@ -22,6 +22,7 @@
 #include "wsrep_priv.h"
 #include "wsrep_thd.h"
 #include "wsrep_xid.h"
+#include "wsrep_trans_observer.h"
 #include <my_dir.h>
 #include <cstdio>
 #include <cstdlib>
@@ -50,10 +51,48 @@ struct handlerton* innodb_hton_ptr __attribute__((weak));
 bool wsrep_on_update (sys_var *self, THD* thd, enum_var_type var_type)
 {
   if (var_type == OPT_GLOBAL) {
-    // FIXME: this variable probably should be changed only per session
     thd->variables.wsrep_on= global_system_variables.wsrep_on;
-  }
+    /*
+      We need to release LOCK_global_system_variables temporarily
+      to allow initialization/deinitialization to proceed. This may
+      cause a race condition if two clients try to change wsrep_on
+      simultaneously.
+    */
+    mysql_mutex_unlock(&LOCK_global_system_variables);
 
+    if (global_system_variables.wsrep_on)
+    {
+      if (wsrep_init()) return true;
+      wsrep_init_schema();
+      if (!wsrep_start_replication())
+      {
+        wsrep_deinit_schema();
+        wsrep_deinit(false);
+        mysql_mutex_lock(&LOCK_global_system_variables);
+        return true;
+      }
+      wsrep_create_rollbacker();
+      wsrep_create_appliers(1);
+      Wsrep_server_state& server_state(Wsrep_server_state::instance());
+      if (wsrep_before_SE())
+      {
+        server_state.wait_until_state(Wsrep_server_state::s_initializing);
+      }
+      else
+      {
+        server_state.wait_until_state(Wsrep_server_state::s_joiner);
+      }
+      server_state.initialized();
+    }
+    else
+    {
+      wsrep_stop_replication(thd);
+      wsrep_deinit_schema();
+      wsrep_deinit(false);
+    }
+    mysql_mutex_lock(&LOCK_global_system_variables);
+  }
+  thd->store_globals();
   return false;
 }
 
@@ -70,6 +109,28 @@ bool wsrep_on_check(sys_var *self, THD* thd, set_var* var)
             " innodb_lock_schedule_algorithm=FCFS and restart.", MYF(0));
     return true;
   }
+
+  /* The value is about to change. If the change is for global, we need
+     to close other connections and close wsrep session for this thread
+     to make sure that no transactions are committed without replicating to
+     the cluster. */
+  if (global_system_variables.wsrep_on && !new_wsrep_on)
+  {
+    wsrep_commit_empty(thd, true);
+    wsrep_after_statement(thd);
+    wsrep_after_command_ignore_result(thd);
+    wsrep_close(thd);
+    // wsrep_cleanup(thd);
+    wsrep_close_client_connections(TRUE, thd);
+  }
+  else if (!global_system_variables.wsrep_on && new_wsrep_on)
+  {
+    wsrep_close_client_connections(TRUE, thd);
+    wsrep_open(thd);
+    wsrep_before_command(thd);
+    wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+  }
+
   return false;
 }
 
@@ -808,6 +869,11 @@ static const int          mysql_status_len= 512;
 
 static void export_wsrep_status_to_mysql(THD* thd)
 {
+  if (Wsrep_server_state::instance().state() ==
+      Wsrep_server_state::s_disconnected)
+  {
+    return;
+  }
   int wsrep_status_len, i;
 
   thd->wsrep_status_vars= Wsrep_server_state::instance().status();

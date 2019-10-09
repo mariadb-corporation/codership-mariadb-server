@@ -6,4 +6,12 @@
 --source include/have_binlog_format_row.inc
 
 SET GLOBAL wsrep_on=ON;
+--source include/wait_wsrep_ready.inc
 SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';
+SET GLOBAL wsrep_on=OFF;
+# Need to clean up wsrep schema tables to avoid test check to fail.
+# TODO: Wsrep_provider_options will still fail test check since it
+# cannot be reset with wsrep_on=OFF.
+DROP TABLE mysql.wsrep_cluster;
+DROP TABLE mysql.wsrep_cluster_members;
+DROP TABLE mysql.wsrep_streaming_log;

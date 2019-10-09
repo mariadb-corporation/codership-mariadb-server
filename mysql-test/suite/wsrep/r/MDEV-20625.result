@@ -2,3 +2,7 @@ SET GLOBAL wsrep_on=ON;
 SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';
 Variable_name	Value
 wsrep_cluster_size	1
+SET GLOBAL wsrep_on=OFF;
+DROP TABLE mysql.wsrep_cluster;
+DROP TABLE mysql.wsrep_cluster_members;
+DROP TABLE mysql.wsrep_streaming_log;
