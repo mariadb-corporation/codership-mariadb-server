@@ -110,25 +110,27 @@ bool wsrep_on_check(sys_var *self, THD* thd, set_var* var)
     return true;
   }
 
-  /* The value is about to change. If the change is for global, we need
-     to close other connections and close wsrep session for this thread
-     to make sure that no transactions are committed without replicating to
-     the cluster. */
-  if (global_system_variables.wsrep_on && !new_wsrep_on)
+  if (var->type == OPT_GLOBAL)
   {
-    wsrep_commit_empty(thd, true);
-    wsrep_after_statement(thd);
-    wsrep_after_command_ignore_result(thd);
-    wsrep_close(thd);
-    // wsrep_cleanup(thd);
-    wsrep_close_client_connections(TRUE, thd);
-  }
-  else if (!global_system_variables.wsrep_on && new_wsrep_on)
-  {
-    wsrep_close_client_connections(TRUE, thd);
-    wsrep_open(thd);
-    wsrep_before_command(thd);
-    wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+    /* The global value is about to change. If the change is for global, we need
+       to close other connections and close wsrep session for this thread
+       to make sure that no transactions are committed without replicating to
+       the cluster. */
+    if (global_system_variables.wsrep_on && !new_wsrep_on)
+    {
+      wsrep_commit_empty(thd, true);
+      wsrep_after_statement(thd);
+      wsrep_after_command_ignore_result(thd);
+      wsrep_close(thd);
+      wsrep_close_client_connections(TRUE, thd);
+    }
+    else if (!global_system_variables.wsrep_on && new_wsrep_on)
+    {
+      wsrep_close_client_connections(TRUE, thd);
+      wsrep_open(thd);
+      wsrep_before_command(thd);
+      wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+    }
   }
 
   return false;
