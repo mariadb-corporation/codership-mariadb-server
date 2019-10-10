@@ -838,11 +838,8 @@ static const int          mysql_status_len= 512;
 
 static void export_wsrep_status_to_mysql(THD* thd)
 {
-  if (Wsrep_server_state::instance().state() ==
-      Wsrep_server_state::s_disconnected)
-  {
-    return;
-  }
+  if (!Wsrep_server_state::instance().is_provider_loaded()) return;
+
   int wsrep_status_len, i;
 
   thd->wsrep_status_vars= Wsrep_server_state::instance().status();
