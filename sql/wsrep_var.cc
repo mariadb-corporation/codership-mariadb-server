@@ -52,47 +52,7 @@ bool wsrep_on_update (sys_var *self, THD* thd, enum_var_type var_type)
 {
   if (var_type == OPT_GLOBAL) {
     thd->variables.wsrep_on= global_system_variables.wsrep_on;
-    /*
-      We need to release LOCK_global_system_variables temporarily
-      to allow initialization/deinitialization to proceed. This may
-      cause a race condition if two clients try to change wsrep_on
-      simultaneously.
-    */
-    mysql_mutex_unlock(&LOCK_global_system_variables);
-
-    if (global_system_variables.wsrep_on)
-    {
-      if (wsrep_init()) return true;
-      wsrep_init_schema();
-      if (!wsrep_start_replication())
-      {
-        wsrep_deinit_schema();
-        wsrep_deinit(false);
-        mysql_mutex_lock(&LOCK_global_system_variables);
-        return true;
-      }
-      wsrep_create_rollbacker();
-      wsrep_create_appliers(1);
-      Wsrep_server_state& server_state(Wsrep_server_state::instance());
-      if (wsrep_before_SE())
-      {
-        server_state.wait_until_state(Wsrep_server_state::s_initializing);
-      }
-      else
-      {
-        server_state.wait_until_state(Wsrep_server_state::s_joiner);
-      }
-      server_state.initialized();
-    }
-    else
-    {
-      wsrep_stop_replication(thd);
-      wsrep_deinit_schema();
-      wsrep_deinit(false);
-    }
-    mysql_mutex_lock(&LOCK_global_system_variables);
   }
-  thd->store_globals();
   return false;
 }
 
@@ -112,16 +72,17 @@ bool wsrep_on_check(sys_var *self, THD* thd, set_var* var)
 
   if (var->type == OPT_GLOBAL)
   {
-    /* The global value is about to change. If the change is for global, we need
-       to close other connections and close wsrep session for this thread
-       to make sure that no transactions are committed without replicating to
-       the cluster. */
+    /*
+      The global value is about to change. We need to make sure that
+      
+     */
     if (global_system_variables.wsrep_on && !new_wsrep_on)
     {
       wsrep_commit_empty(thd, true);
       wsrep_after_statement(thd);
       wsrep_after_command_ignore_result(thd);
       wsrep_close(thd);
+      wsrep_cleanup(thd);
       wsrep_close_client_connections(TRUE, thd);
     }
     else if (!global_system_variables.wsrep_on && new_wsrep_on)
