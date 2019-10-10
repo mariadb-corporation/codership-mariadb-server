@@ -71,6 +71,7 @@ class Wsrep_schema
     @param transaction_id Transaction identifier
     @param flags Flags for the fragment
     @param data Fragment data buffer
+    @param xid  Transaction xid
 
     @return Zero in case of success, non-zero on failure.
   */
@@ -79,7 +80,8 @@ class Wsrep_schema
                       wsrep::transaction_id transaction_id,
                       wsrep::seqno seqno,
                       int flags,
-                      const wsrep::const_buffer& data);
+                      const wsrep::const_buffer& data,
+                      const std::string& xid);
   /**
      Update existing fragment meta data. The fragment must have been
      inserted before using append_fragment().

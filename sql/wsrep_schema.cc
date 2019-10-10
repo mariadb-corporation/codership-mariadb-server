@@ -885,7 +885,8 @@ int Wsrep_schema::append_fragment(THD* thd,
                                   wsrep::transaction_id transaction_id,
                                   wsrep::seqno seqno,
                                   int flags,
-                                  const wsrep::const_buffer& data)
+                                  const wsrep::const_buffer& data,
+                                  const std::string& xid)
 {
   DBUG_ENTER("Wsrep_schema::append_fragment");
   std::ostringstream os;
