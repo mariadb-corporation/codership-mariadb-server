@@ -50,8 +50,6 @@ struct handlerton* innodb_hton_ptr __attribute__((weak));
 
 bool wsrep_on_update (sys_var *self, THD* thd, enum_var_type var_type)
 {
-  WSREP_INFO("wsrep_on_update(): %d %d %d", var_type, thd->variables.wsrep_on,
-             global_system_variables.wsrep_on);
   if (var_type == OPT_GLOBAL) {
     if (global_system_variables.wsrep_on)
     {
@@ -80,7 +78,6 @@ bool wsrep_on_check(sys_var *self, THD* thd, set_var* var)
     return true;
   }
 
-  WSREP_INFO("wsrep_on_check: %d", var->type);
   if (var->type == OPT_GLOBAL)
   {
     /*
