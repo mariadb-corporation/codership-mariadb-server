@@ -50,8 +50,18 @@ struct handlerton* innodb_hton_ptr __attribute__((weak));
 
 bool wsrep_on_update (sys_var *self, THD* thd, enum_var_type var_type)
 {
+  WSREP_INFO("wsrep_on_update(): %d %d %d", var_type, thd->variables.wsrep_on,
+             global_system_variables.wsrep_on);
   if (var_type == OPT_GLOBAL) {
-    thd->variables.wsrep_on= global_system_variables.wsrep_on;
+    if (global_system_variables.wsrep_on)
+    {
+      thd->variables.wsrep_on= global_system_variables.wsrep_on;
+      /* Open wsrep session for the connection and fake a new
+         transaction start to go through wsrep hooks. */
+      wsrep_open(thd);
+      wsrep_before_command(thd);
+      wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+    }
   }
   return false;
 }
@@ -70,12 +80,15 @@ bool wsrep_on_check(sys_var *self, THD* thd, set_var* var)
     return true;
   }
 
+  WSREP_INFO("wsrep_on_check: %d", var->type);
   if (var->type == OPT_GLOBAL)
   {
     /*
-      The global value is about to change. We need to make sure that
-      
-     */
+      The global value is about to change. We close all client connections
+      to make sure that there will be no connections working with wrong
+      wsrep_on setting. This THD thd->variables.wsrep_on will be adjusted
+      in wsrep_on_update().
+    */
     if (global_system_variables.wsrep_on && !new_wsrep_on)
     {
       wsrep_commit_empty(thd, true);
@@ -88,9 +101,8 @@ bool wsrep_on_check(sys_var *self, THD* thd, set_var* var)
     else if (!global_system_variables.wsrep_on && new_wsrep_on)
     {
       wsrep_close_client_connections(TRUE, thd);
-      wsrep_open(thd);
-      wsrep_before_command(thd);
-      wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+      /* Wsrep session is opened in wsrep_on_update() after the
+         global value has been changed. */
     }
   }
 
