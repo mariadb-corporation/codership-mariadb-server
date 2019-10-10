@@ -54,11 +54,8 @@ bool wsrep_on_update (sys_var *self, THD* thd, enum_var_type var_type)
     if (global_system_variables.wsrep_on)
     {
       thd->variables.wsrep_on= global_system_variables.wsrep_on;
-      /* Open wsrep session for the connection and fake a new
-         transaction start to go through wsrep hooks. */
       wsrep_open(thd);
       wsrep_before_command(thd);
-      wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
     }
   }
   return false;
