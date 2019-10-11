@@ -51,12 +51,13 @@ struct handlerton* innodb_hton_ptr __attribute__((weak));
 bool wsrep_on_update (sys_var *self, THD* thd, enum_var_type var_type)
 {
   if (var_type == OPT_GLOBAL) {
-    if (global_system_variables.wsrep_on)
-    {
       thd->variables.wsrep_on= global_system_variables.wsrep_on;
-      wsrep_open(thd);
-      wsrep_before_command(thd);
-    }
+      if (thd->variables.wsrep_on &&
+          thd->wsrep_cs().state() == wsrep::client_state::s_none)
+      {
+          wsrep_open(thd);
+          wsrep_before_command(thd);
+      }
   }
   return false;
 }
