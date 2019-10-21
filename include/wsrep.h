@@ -23,8 +23,9 @@
 #define DBUG_ASSERT_IF_WSREP(A) DBUG_ASSERT(A)
 
 #define WSREP_MYSQL_DB (char *)"mysql"
-#define WSREP_TO_ISOLATION_BEGIN(db_, table_, table_list_)                   \
-  if (WSREP_ON && WSREP(thd) && wsrep_to_isolation_begin(thd, db_, table_, table_list_)) \
+#define WSREP_TO_ISOLATION_BEGIN(db_, table_, table_list_)              \
+  if (WSREP_ON && WSREP(thd) && thd->wsrep_cs().state() != wsrep::client_state::s_none && \
+      wsrep_to_isolation_begin(thd, db_, table_, table_list_))          \
     goto wsrep_error_label;
 
 #define WSREP_TO_ISOLATION_BEGIN_ALTER(db_, table_, table_list_, alter_info_) \
