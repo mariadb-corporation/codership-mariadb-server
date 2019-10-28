@@ -361,6 +361,7 @@ bool wsrep_provider_update (sys_var *self, THD* thd, enum_var_type type)
      there can be several concurrent clients changing wsrep_provider
   */
   mysql_mutex_unlock(&LOCK_global_system_variables);
+  WSREP_INFO("Set wsrep_provider: %llu", thd->wsrep_cs().id().get());
   wsrep_stop_replication(thd);
 
   /* provider status variables are allocated in provider library
