@@ -924,7 +924,7 @@ void wsrep_recover()
 
 void wsrep_stop_replication(THD *thd)
 {
-  WSREP_INFO("Stop replication by %llu", (thd) ? thd->thread_id : 0);
+  WSREP_INFO("Stop replication by %llu", (thd) ? thd->wsrep_cs().id().get() : 0);
   if (Wsrep_server_state::instance().state() !=
       Wsrep_server_state::s_disconnected)
   {
@@ -2339,7 +2339,7 @@ void wsrep_close_client_connections(my_bool wait_to_end, THD* except_caller_thd)
   /* Clear thread cache */
   kill_cached_threads++;
   flush_thread_cache();
-  
+  WSREP_INFO("close_client_connections: %p", except_caller_thd);
   /*
     First signal all threads that it's time to die
   */

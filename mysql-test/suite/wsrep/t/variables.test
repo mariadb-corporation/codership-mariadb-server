@@ -158,7 +158,11 @@ SET @@global.wsrep_sst_auth= @wsrep_sst_auth_saved;
 
 # Reset (for mtr internal checks)
 SET GLOBAL wsrep_slave_threads= @wsrep_slave_threads_saved;
+--enable_reconnect
+# Provider disconnect closes the connection
+--error 2013,2006
 SET GLOBAL wsrep_provider= none;
+--source include/wait_until_connected_again.inc
 SET GLOBAL wsrep_cluster_address= @wsrep_cluster_address_saved;
 SET GLOBAL wsrep_provider_options= @wsrep_provider_options_saved;
 
