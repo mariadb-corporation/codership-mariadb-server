@@ -342,6 +342,16 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
                                           const wsrep::ws_meta& ws_meta)
 {
   DBUG_ENTER("Wsrep_high_priority_service::rollback");
+  DBUG_EXECUTE_IF("sync.wsrep_rollback_cb",
+                  {
+                    const char act[]=
+                      "now "
+                      "SIGNAL sync.wsrep_rollback_cb_reached "
+                      "WAIT_FOR signal.wsrep_rollback_cb";
+                    DBUG_ASSERT(!debug_sync_set_action(m_thd,
+                                                       STRING_WITH_LEN(act)));
+                  };);
+
   m_thd->wsrep_cs().prepare_for_ordering(ws_handle, ws_meta, false);
   int ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
   m_thd->mdl_context.release_transactional_locks();
@@ -364,6 +374,16 @@ int Wsrep_high_priority_service::apply_toi(const wsrep::ws_meta& ws_meta,
 
   WSREP_DEBUG("Wsrep_high_priority_service::apply_toi: %lld",
               client_state.toi_meta().seqno().get());
+
+  DBUG_EXECUTE_IF("sync.wsrep_apply_toi_cb",
+                  {
+                    const char act[]=
+                      "now "
+                      "SIGNAL sync.wsrep_apply_toi_cb_reached "
+                      "WAIT_FOR signal.wsrep_apply_toi_cb";
+                    DBUG_ASSERT(!debug_sync_set_action(thd,
+                                                       STRING_WITH_LEN(act)));
+                  };);
 
   int ret= wsrep_apply_events(thd, m_rli, data.data(), data.size());
   if (ret != 0 || thd->wsrep_has_ignored_error)
