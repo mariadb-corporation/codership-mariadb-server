@@ -19059,12 +19059,10 @@ wsrep_innobase_kill_one_trx(
 
 static
 void
-wsrep_wait_until_initialized(
-/*====================*/
-       handlerton*)
+wsrep_wait_until_initialized(handlerton*)
 {
 	extern bool trx_rollback_is_active;
-	DBUG_ENTER("wsrep_innodb_wait_untill_initialized");
+	DBUG_ENTER("wsrep_wait_until_initialized");
 
 	WSREP_DEBUG("waiitng until innodb is initialized %d",
 		   trx_rollback_is_active);
@@ -19072,7 +19070,6 @@ wsrep_wait_until_initialized(
 		WSREP_DEBUG("innodb rollbacker still active");
 		sleep(1);
 	}
-	WSREP_DEBUG("innodb is now initialized %d", trx_rollback_is_active);
 	DBUG_VOID_RETURN;
 }
 
