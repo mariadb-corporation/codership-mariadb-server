@@ -90,10 +90,22 @@ xb_write_galera_info(bool incremental_prepare)
 		FILE* fp_in  = fopen(XB_GALERA_INFO_FILENAME, "r");
 		FILE* fp_out = fopen(XB_GALERA_INFO_FILENAME_SST, "w");
 
-		char buf[BUFSIZ];
+		char buf[BUFSIZ] = {'\0'};
 		size_t size;
 		while ((size = fread(buf, 1, BUFSIZ, fp_in))) {
-			fwrite(buf, 1, size, fp_out);
+			if (fwrite(buf, 1, size, fp_out) != strlen(buf)) {
+				die(
+				    "could not write to "
+				    XB_GALERA_INFO_FILENAME_SST
+				    ", errno = %d\n",
+				    errno);
+			}
+		}
+		if (!feof(fp_in)) {
+			die(
+			    XB_GALERA_INFO_FILENAME_SST
+			    " not fully copied\n"
+			);
 		}
 		fclose(fp_out);
 		fclose(fp_in);
@@ -113,7 +125,6 @@ xb_write_galera_info(bool incremental_prepare)
 		    "could not create " XB_GALERA_INFO_FILENAME
 		    ", errno = %d\n",
 		    errno);
-		exit(EXIT_FAILURE);
 	}
 
 	seqno = wsrep_xid_seqno(&xid);
