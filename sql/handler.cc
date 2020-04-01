@@ -6757,7 +6757,7 @@ int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
 void wsrep_wait_until_innodb_initialized()
 {
   handlerton *hton= installed_htons[DB_TYPE_INNODB];
-  hton->wait_until_initialized(hton);
+  if (hton)  hton->wait_until_initialized(hton);
 }
 #endif /* WITH_WSREP */
 
