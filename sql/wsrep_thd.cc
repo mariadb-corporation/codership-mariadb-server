@@ -121,7 +121,7 @@ bool wsrep_create_appliers(long threads, bool mutex_protected)
   /*  Dont' start slave threads if wsrep-provider or wsrep-cluster-address
       is not set.
   */
-  if (!WSREP_PROVIDER_EXISTS)
+  if (!WSREP_DEFINED)
   {
     return false;
   }

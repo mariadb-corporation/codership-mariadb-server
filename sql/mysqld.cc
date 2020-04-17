@@ -1874,7 +1874,7 @@ extern "C" void unireg_abort(int exit_code)
   disable_log_notes= 1;
 
 #ifdef WITH_WSREP
-  if (WSREP_ON &&
+  if (WSREP_DEFINED &&
       Wsrep_server_state::is_inited() &&
       Wsrep_server_state::instance().state() != wsrep::server_state::s_disconnected)
   {
@@ -1889,7 +1889,7 @@ extern "C" void unireg_abort(int exit_code)
     sleep(1); /* so give some time to exit for those which can */
     WSREP_INFO("Some threads may fail to exit.");
   }
-  if (WSREP_ON)
+  if (WSREP_DEFINED)
   {
     /* In bootstrap mode we deinitialize wsrep here. */
     if (opt_bootstrap || wsrep_recovery)
@@ -5005,7 +5005,7 @@ static int init_server_components()
   xid_cache_init();
 
   /* need to configure logging before initializing storage engines */
-  if (!opt_bin_log_used && !WSREP_ON)
+  if (!opt_bin_log_used && !WSREP_DEFINED)
   {
     if (opt_log_slave_updates)
       sql_print_warning("You need to use --log-bin to make "
@@ -5113,7 +5113,7 @@ static int init_server_components()
 #ifdef WITH_WSREP
   if (wsrep_init_server()) unireg_abort(1);
 
-  if (WSREP_ON && !wsrep_recovery && !opt_abort)
+  if (WSREP_DEFINED && !wsrep_recovery && !opt_abort)
   {
     if (opt_bootstrap) // bootsrap option given - disable wsrep functionality
     {
@@ -5355,7 +5355,7 @@ static int init_server_components()
   if (wsrep_before_SE())
     wsrep_plugins_post_init();
 
-  if (WSREP_ON && !opt_bin_log)
+  if (WSREP_DEFINED && !opt_bin_log)
   {
     wsrep_emulate_bin_log= 1;
   }
@@ -5718,7 +5718,7 @@ int mysqld_main(int argc, char **argv)
       set_user(mysqld_user, user_info);
   }
 
-  if (WSREP_ON && wsrep_check_opts()) unireg_abort(1);
+  if (WSREP_DEFINED && wsrep_check_opts()) unireg_abort(1);
 
   /* 
    The subsequent calls may take a long time : e.g. innodb log read.
@@ -5746,7 +5746,7 @@ int mysqld_main(int argc, char **argv)
   if (wsrep_recovery)
   {
     select_thread_in_use= 0;
-    if (WSREP_ON)
+    if (WSREP_DEFINED)
       wsrep_recover();
     else
       sql_print_information("WSREP: disabled, skipping position recovery");
@@ -5793,7 +5793,7 @@ int mysqld_main(int argc, char **argv)
   if (Events::init((THD*) 0, opt_noacl || opt_bootstrap))
     unireg_abort(1);
 
-  if (WSREP_ON)
+  if (WSREP_DEFINED)
   {
     if (opt_bootstrap)
     {
@@ -8871,7 +8871,7 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
     global_system_variables.binlog_format= BINLOG_FORMAT_ROW;
   }
 
-  if (!opt_bootstrap && WSREP_PROVIDER_EXISTS && WSREP_ON &&
+  if (!opt_bootstrap && WSREP_DEFINED &&
       global_system_variables.binlog_format != BINLOG_FORMAT_ROW)
   {
 
@@ -9334,7 +9334,7 @@ void refresh_status(THD *thd)
   /* Reset some global variables */
   reset_status_vars();
 #ifdef WITH_WSREP
-  if (WSREP_ON)
+  if (WSREP_DEFINED)
   {
     Wsrep_server_state::instance().provider().reset_status();
   }

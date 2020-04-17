@@ -84,6 +84,8 @@ const char *wsrep_data_home_dir;
 const char *wsrep_dbug_option;
 const char *wsrep_notify_cmd;
 
+my_bool wsrep_provider_set;
+
 ulong   wsrep_debug;                            // Debug level logging
 my_bool wsrep_convert_LOCK_to_trx;              // Convert locking sessions to trx
 my_bool wsrep_auto_increment_control;           // Control auto increment variables
@@ -693,7 +695,7 @@ void wsrep_init_globals()
 {
   wsrep_init_sidno(Wsrep_server_state::instance().connected_gtid().id());
   wsrep_init_schema();
-  if (WSREP_ON)
+  if (WSREP_DEFINED)
   {
     Wsrep_server_state::instance().initialized();
   }
@@ -708,12 +710,12 @@ void wsrep_deinit_server()
 int wsrep_init()
 {
   assert(wsrep_provider);
+  wsrep_provider_set = false;
 
   wsrep_init_position();
   wsrep_sst_auth_init();
 
-  if (strlen(wsrep_provider)== 0 ||
-      !strcmp(wsrep_provider, WSREP_NONE))
+  if (!WSREP_PROVIDER_EXISTS)
   {
     // enable normal operation in case no provider is specified
     global_system_variables.wsrep_on= 0;
@@ -768,6 +770,7 @@ int wsrep_init()
   WSREP_DEBUG("SR storage init for: %s",
               (wsrep_SR_store_type == WSREP_SR_STORE_TABLE) ? "table" : "void");
 
+  wsrep_provider_set = true;
   return 0;
 }
 
@@ -830,7 +833,7 @@ void wsrep_init_startup (bool sst_first)
     wsrep_plugins_pre_init();
 
   /* Skip replication start if dummy wsrep provider is loaded */
-  if (!strcmp(wsrep_provider, WSREP_NONE)) return;
+  if (!WSREP_DEFINED) return;
 
   /* Skip replication start if no cluster address */
   if (!wsrep_cluster_address || wsrep_cluster_address[0] == 0) return;
