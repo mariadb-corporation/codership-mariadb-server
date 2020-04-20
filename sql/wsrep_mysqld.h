@@ -213,10 +213,20 @@ extern void wsrep_prepend_PATH (const char* path);
 
 /* Other global variables */
 extern wsrep_seqno_t wsrep_locked_seqno;
-#define WSREP_ON                         \
-  ((global_system_variables.wsrep_on) && \
-   wsrep_provider                     && \
-   strcmp(wsrep_provider, WSREP_NONE))
+
+#define WSREP_PROVIDER_EXISTS						\
+  (wsrep_provider && strncasecmp(wsrep_provider, WSREP_NONE, FN_REFLEN))
+
+/* this macro is meant to be used during server initialization to see if node is
+   supposed to be in cluster */
+#define WSREP_DEFINED                    \
+  (global_system_variables.wsrep_on && WSREP_PROVIDER_EXISTS)
+
+#define WSREP_ON						\
+  (global_system_variables.wsrep_on && wsrep_provider_set)
+
+
+extern my_bool wsrep_provider_set;
 
 /* use xxxxxx_NNULL macros when thd pointer is guaranteed to be non-null to
  * avoid compiler warnings (GCC 6 and later) */
@@ -276,9 +286,6 @@ void WSREP_LOG(void (*fun)(const char* fmt, ...), const char* fmt, ...);
     if (victim_thd) WSREP_LOG_CONFLICT_THD(victim_thd, "Victim thread"); \
     WSREP_LOG(sql_print_information, "context: %s:%d", __FILE__, __LINE__); \
   }
-
-#define WSREP_PROVIDER_EXISTS                                                  \
-  (wsrep_provider && strncasecmp(wsrep_provider, WSREP_NONE, FN_REFLEN))
 
 #define WSREP_QUERY(thd) (thd->query())
 
@@ -485,6 +492,7 @@ enum wsrep::streaming_context::fragment_unit wsrep_fragment_unit(ulong unit);
 #define WSREP(T)  (0)
 #define WSREP_NNULL(T) (0)
 #define WSREP_ON  (0)
+#define WSREP_DEFINED  (0)
 #define WSREP_EMULATE_BINLOG(thd) (0)
 #define WSREP_EMULATE_BINLOG_NNULL(thd) (0)
 #define WSREP_BINLOG_FORMAT(my_format) ((ulong)my_format)
