@@ -341,6 +341,21 @@ static inline int wsrep_after_commit(THD* thd, bool all)
               wsrep_has_changes(thd));
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   int ret= 0;
+
+  /*
+    Transaction has been committed, so we now can signal all waiters and
+    update `wsrep_last_written_gtid_seqno` to be use with `WSREP_LAST_WRITTEN_GTID`.
+  */
+  if ((thd->wsrep_trx().state() == wsrep::transaction::s_committing) ||
+      (thd->wsrep_trx().state() == wsrep::transaction::s_ordered_commit))
+  {
+    wsrep_gtid_server.signal_waiters(thd->wsrep_current_gtid_seqno, false);
+    if (wsrep_thd_is_local(thd))
+    {
+      thd->wsrep_last_written_gtid_seqno= thd->wsrep_current_gtid_seqno;
+    }
+  }
+
   if (thd->wsrep_trx().state() == wsrep::transaction::s_committing)
   {
     ret= thd->wsrep_cs().ordered_commit();
