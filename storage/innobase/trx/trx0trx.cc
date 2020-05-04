@@ -444,6 +444,9 @@ void trx_free(trx_t*& trx)
 	trx->mysql_thd = 0;
 	trx->mysql_log_file_name = 0;
 
+#ifdef WITH_WSREP
+	trx->wsrep = false;
+#endif /* WITH_WSREP */
 	// FIXME: We need to avoid this heap free/alloc for each commit.
 	if (trx->autoinc_locks != NULL) {
 		ut_ad(ib_vector_is_empty(trx->autoinc_locks));
