@@ -2673,6 +2673,7 @@ innobase_trx_init(
 	trx->check_unique_secondary = !thd_test_options(
 		thd, OPTION_RELAXED_UNIQUE_CHECKS);
 #ifdef WITH_WSREP
+	trx->lock.was_chosen_as_wsrep_victim = false;
 	trx->wsrep = wsrep_on(thd);
 #endif
 
