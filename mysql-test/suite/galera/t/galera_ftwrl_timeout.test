@@ -1,5 +1,6 @@
 # The test verifies that the FLUSH TABLES WITH READ LOCK does not
-# time out if it becomes blocked for a while during SST donation.
+# time out if it needs to wait for another MDL lock for short duration
+# during SST donation.
 
 --source include/galera_cluster.inc
 
