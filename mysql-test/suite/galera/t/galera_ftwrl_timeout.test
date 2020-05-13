@@ -3,6 +3,10 @@
 
 --source include/galera_cluster.inc
 
+--let $node_1 = node_1
+--let $node_2 = node_2
+--source include/auto_increment_offset_save.inc
+
 --let $galera_connection_name = node_1_ctrl
 --let $galera_server_number = 1
 --source include/galera_connect.inc
@@ -16,6 +20,9 @@ CREATE TABLE t1 (f1 INT PRIMARY KEY, f2 INT);
 INSERT INTO t1 VALUES (1, 1);
 SET DEBUG_SYNC = "before_lock_tables_takes_lock SIGNAL sync_point_reached WAIT_FOR sync_point_continue";
 --send UPDATE t1 SET f2 = 2 WHERE f1 = 1
+
+--connection node_1_ctrl
+SET DEBUG_SYNC = "now WAIT_FOR sync_point_reached";
 
 #
 # Restart node_2, force SST.
@@ -32,7 +39,7 @@ SET DEBUG_SYNC = "before_lock_tables_takes_lock SIGNAL sync_point_reached WAIT_F
 --sleep 10
 
 --connection node_1_ctrl
-SET DEBUG_SYNC = "now SIGNAL sync_point_continue WAIT_FOR sync_point_reached";
+SET DEBUG_SYNC = "now SIGNAL sync_point_continue";
 
 --connection node_1
 --reap
@@ -44,3 +51,5 @@ SET DEBUG_SYNC = "RESET";
 
 --connection node_1
 DROP TABLE t1;
+
+--source include/auto_increment_offset_restore.inc
