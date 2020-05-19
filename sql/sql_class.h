@@ -4854,6 +4854,7 @@ public:
     table updates from being replicated to other nodes via galera replication.
   */
   bool                      wsrep_ignore_table;
+  bool                      wsrep_killed;
   
 
   /*
