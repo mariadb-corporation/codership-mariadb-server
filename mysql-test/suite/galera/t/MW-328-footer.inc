@@ -4,6 +4,9 @@
 
 --connection node_1
 --disable_query_log
+
+# kill may fail, if victim is in replicating phase
+--error 0, ER_KILL_DENIED_ERROR
 --eval KILL CONNECTION $sp_connection_id
 --enable_query_log
 

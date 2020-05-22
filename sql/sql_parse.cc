@@ -9047,7 +9047,8 @@ kill_one_thread(THD *thd, longlong id, killed_state kill_signal, killed_type typ
   uint error= (type == KILL_TYPE_QUERY ? ER_NO_SUCH_QUERY : ER_NO_SUCH_THREAD);
   DBUG_ENTER("kill_one_thread");
   DBUG_PRINT("enter", ("id: %lld  signal: %u", id, (uint) kill_signal));
-  WSREP_DEBUG("kill_one_thread %llu", thd->thread_id);
+  WSREP_DEBUG("kill_one_thread by %llu for victim %llu, by signal %d",
+              thd->thread_id, id, kill_signal);
   if (id && (tmp= find_thread_by_id(id, type == KILL_TYPE_QUERY)))
   {
     /*
@@ -9075,13 +9076,37 @@ kill_one_thread(THD *thd, longlong id, killed_state kill_signal, killed_type typ
     if (((thd->security_ctx->master_access & SUPER_ACL) ||
         thd->security_ctx->user_matches(tmp->security_ctx)) &&
         !wsrep_thd_is_BF(tmp, false) && !tmp->wsrep_applier)
+    {
 #else
     if ((thd->security_ctx->master_access & SUPER_ACL) ||
         thd->security_ctx->user_matches(tmp->security_ctx))
-#endif /* WITH_WSREP */
     {
-      tmp->awake_no_mutex(kill_signal);
-      error=0;
+#endif /* WITH_WSREP */
+#ifdef WITH_WSREP
+      if (tmp->wsrep_trx().active() &&
+          tmp->wsrep_trx().state() == wsrep::transaction::s_executing)
+      {
+#endif /* WITH_WSREP */
+       tmp->awake_no_mutex(kill_signal);
+       error=0;
+#ifdef WITH_WSREP
+      }
+      else if (tmp->wsrep_trx().active() &&
+               (tmp->wsrep_trx().state() == wsrep::transaction::s_committing ||
+                tmp->wsrep_trx().state() == wsrep::transaction::s_certifying))
+      {
+        WSREP_DEBUG("Die soft for committing thread %llu", id);
+        tmp->set_killed_no_mutex(kill_signal);
+        error=ER_KILL_DENIED_ERROR;
+      }
+      else
+      {
+        WSREP_INFO("KILL QUERY skipped for thread %llu, in state %d",
+                   id, tmp->wsrep_trx().state());
+       tmp->set_killed_no_mutex(kill_signal);
+       error=ER_KILL_DENIED_ERROR;
+      }
+#endif /* WITH_WSREP */
     }
     else
       error= (type == KILL_TYPE_QUERY ? ER_KILL_QUERY_DENIED_ERROR :

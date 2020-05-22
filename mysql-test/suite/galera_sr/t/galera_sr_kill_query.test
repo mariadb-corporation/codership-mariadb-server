@@ -24,6 +24,7 @@ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 --connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
 --echo Killing query ...
 --disable_query_log
+--error 0, ER_KILL_DENIED_ERROR
 --eval KILL QUERY $connection_id
 --enable_query_log
 
