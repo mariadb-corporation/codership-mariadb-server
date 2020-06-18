@@ -101,9 +101,6 @@ public:
 #ifndef DBUG_OFF
   int n_calls_processed; /* Number of calls served by this target */
 #endif
-#ifdef WITH_WSREP
-  mysql_mutex_t *LOCK_thd_data_ptr; /* WSREP locks with `find_thread_by_id` */
-#endif
 private:
   class Call_request;
 
