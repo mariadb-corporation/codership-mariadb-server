@@ -1,0 +1,10 @@
+connection node_2;
+connection node_1;
+SET max_statement_time=2;
+CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
+SET GLOBAL wsrep_provider_options = 'signal=commit_monitor_master_enter_sync';
+INSERT INTO t1 VALUES (1);
+SELECT COUNT(*) AS EXPECT_0 FROM t1;
+EXPECT_0
+1
+DROP TABLE t1;
