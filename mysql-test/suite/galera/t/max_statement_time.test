@@ -6,9 +6,9 @@
 --source include/galera_have_debug_sync.inc
 
 
-SET max_statement_time=2;
-
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
+
+SET max_statement_time=2;
 
 --let $galera_sync_point = commit_monitor_master_enter_sync
 --source include/galera_set_sync_point.inc
@@ -18,9 +18,11 @@ CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 --sleep 10
 --let $galera_sync_point = commit_monitor_master_enter_sync
 --source include/galera_signal_sync_point.inc
+--source include/galera_clear_sync_point.inc
 
 --connection node_1
 --reap
+SET max_statement_time=0;
 
 SELECT * FROM t1;
 
