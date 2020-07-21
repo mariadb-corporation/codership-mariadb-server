@@ -1,0 +1,405 @@
+connection node_2;
+connection node_1;
+connection node_2;
+CREATE TABLE t1 (f1 INT PRIMARY KEY AUTO_INCREMENT, f2 VARCHAR(64)) ENGINE=InnoDB;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER EVENT");
+ALTER EVENT non_existent DISABLE;
+ERROR HY000: Unknown event 'non_existent'
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER FUNCTION");
+ALTER FUNCTION non_existent COMMENT "test";
+ERROR 42000: FUNCTION test.non_existent does not exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER SERVER");
+ALTER SERVER non_existent OPTIONS (USER "test");
+ERROR HY000: The foreign server name you are trying to reference does not exist. Data source error:  non_existent
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER TABLE");
+ALTER TABLE non_existent RENAME test;
+ERROR 42S02: Table 'test.non_existent' doesn't exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER VIEW");
+ALTER VIEW non_existent AS SELECT f1 AS f3 FROM t1;
+ERROR 42S02: Table 'test.non_existent' doesn't exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ANALYZE TABLE");
+ANALYZE TABLE t1;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("BEGIN");
+BEGIN;
+"Expect in transaction 1"
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	1
+ROLLBACK;
+SELECT f2 FROM t1 WHERE f2 = "BEGIN";
+f2
+BEGIN
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CHECK TABLE");
+CHECK TABLE t1;
+Table	Op	Msg_type	Msg_text
+test.t1	check	status	OK
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE DATABASE");
+CREATE DATABASE galera_commit_implicit;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP DATABASE galera_commit_implicit;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE EVENT");
+CREATE EVENT galera_commit_implicit ON SCHEDULE AT CURRENT_TIMESTAMP + INTERVAL 1 HOUR DO SELECT 1;
+Warnings:
+Warning	1105	Event scheduler is switched off, use SET GLOBAL event_scheduler=ON to enable it.
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP EVENT galera_commit_implicit;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE FUNCTION");
+CREATE FUNCTION galera_commit_implicit () RETURNS INT RETURN (1);
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP FUNCTION galera_commit_implicit;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE INDEX");
+CREATE INDEX t1_f2_index ON t1 (f2);
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP INDEX t1_f2_index ON t1;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE PROCEDURE");
+CREATE PROCEDURE galera_commit_implicit ()
+BEGIN
+SELECT 1;
+END;
+|
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP PROCEDURE galera_commit_implicit;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE INDEX");
+CREATE INDEX t1_f2_index ON t1 (f2);
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP INDEX t1_f2_index ON t1;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE ROLE");
+CREATE ROLE galera_commit_implicit;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP ROLE galera_commit_implicit;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE SERVER");
+CREATE SERVER galera_commit_implicit FOREIGN DATA WRAPPER not_supported OPTIONS (HOST "non_existent");
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP SERVER galera_commit_implicit;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE TABLE");
+CREATE TABLE t2 (f1 INT PRIMARY KEY);
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP TABLE t2;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE TRIGGER");
+CREATE TRIGGER galera_commit_implicit AFTER UPDATE ON t1 FOR EACH ROW SET @sum = 1;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP TRIGGER galera_commit_implicit;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE VIEW");
+CREATE VIEW t1_view AS SELECT f2 FROM t1;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+DROP VIEW t1_view;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP DATABASE");
+DROP DATABASE non_existent;
+ERROR HY000: Can't drop database 'non_existent'; database doesn't exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP EVENT");
+DROP EVENT non_existent;
+ERROR HY000: Unknown event 'non_existent'
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP FUNCTION");
+DROP FUNCTION non_existent;
+ERROR 42000: FUNCTION test.non_existent does not exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP INDEX");
+DROP INDEX non_existent ON t1;
+ERROR 42000: Can't DROP INDEX `non_existent`; check that it exists
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP PROCEDURE");
+DROP PROCEDURE non_existent;
+ERROR 42000: PROCEDURE test.non_existent does not exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP ROLE");
+DROP ROLE non_existent;
+ERROR HY000: Operation DROP ROLE failed for 'non_existent'
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP SERVER");
+DROP SERVER non_existent;
+ERROR HY000: The foreign server name you are trying to reference does not exist. Data source error:  non_existent
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP TABLE");
+DROP TABLE non_existent;
+ERROR 42S02: Unknown table 'test.non_existent'
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP TRIGGER");
+DROP TRIGGER non_existent;
+ERROR HY000: Trigger does not exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP USER");
+DROP USER non_existent;
+ERROR HY000: Operation DROP USER failed for 'non_existent'@'%'
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP VIEW");
+DROP VIEW non_existent;
+ERROR 42S02: Unknown VIEW: 'test.non_existent'
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("FLUSH");
+FLUSH TABLES t1;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("GRANT");
+GRANT ALL PRIVILEGES ON *.* TO 'non_existent'@'%';
+ERROR 28000: Can't find any matching row in the user table
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("LOCK");
+LOCK TABLES t1 READ;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+UNLOCK TABLES;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("OPTIMIZE");
+OPTIMIZE TABLE t1;
+Table	Op	Msg_type	Msg_text
+test.t1	optimize	note	Table does not support optimize, doing recreate + analyze instead
+test.t1	optimize	status	OK
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("RENAME TABLE");
+RENAME TABLE t1 TO t2;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+RENAME TABLE t2 TO t1;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("RENAME USER");
+RENAME USER 'non_existent' TO 'another'@'localhost';
+ERROR HY000: Operation RENAME USER failed for 'non_existent'@'%'
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("REPAIR TABLE");
+REPAIR TABLE t1;
+Table	Op	Msg_type	Msg_text
+test.t1	repair	note	The storage engine for the table doesn't support repair
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("RESET");
+RESET QUERY CACHE;
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("REVOKE");
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM non_existent;
+ERROR HY000: Can't revoke all privileges for one or more of the requested users
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("SET PASSWORD");
+SET PASSWORD FOR non_existent = PASSWORD('passwd');
+ERROR 28000: Can't find any matching row in the user table
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("START TRANSACTION");
+START TRANSACTION;
+"Expect in transaction 1"
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	1
+ROLLBACK;
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("TRUNCATE TABLE");
+TRUNCATE TABLE t2;
+ERROR 42S02: Table 'test.t2' doesn't exist
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+SET AUTOCOMMIT = 0;
+INSERT INTO t1 (f2) VALUES ("AUTOCOMMIT 1");
+SET AUTOCOMMIT = 1;
+"Expect in transaction 1"
+SHOW VARIABLES LIKE "in_transaction";
+Variable_name	Value
+in_transaction	0
+ROLLBACK;
+connection node_1;
+SELECT f2 FROM t1;
+f2
+ALTER EVENT
+ALTER FUNCTION
+ALTER SERVER
+ALTER TABLE
+ALTER VIEW
+ANALYZE TABLE
+BEGIN
+CHECK TABLE
+CREATE DATABASE
+CREATE EVENT
+CREATE FUNCTION
+CREATE INDEX
+CREATE PROCEDURE
+CREATE INDEX
+CREATE ROLE
+CREATE SERVER
+CREATE TABLE
+CREATE TRIGGER
+CREATE VIEW
+DROP DATABASE
+DROP EVENT
+DROP FUNCTION
+DROP INDEX
+DROP PROCEDURE
+DROP ROLE
+DROP SERVER
+DROP TABLE
+DROP TRIGGER
+DROP USER
+DROP VIEW
+FLUSH
+GRANT
+LOCK
+OPTIMIZE
+RENAME TABLE
+RENAME USER
+REPAIR TABLE
+RESET
+REVOKE
+SET PASSWORD
+START TRANSACTION
+TRUNCATE TABLE
+AUTOCOMMIT 1
+DROP TABLE t1;

@@ -1,0 +1,339 @@
+#
+# Check the cases where an implicit commit is supposed to happen.
+#
+# As the implicit commit is supposed to happen before statement
+# execution, no attempt is made to make the statement to succeed
+# in all the cases to keep test simple.
+#
+# Each case will consist of START TRANSACTION, INSERT into table
+# with a row describing the case, and a SQL statement which is supposed
+# to do implicit commit. After the statement the 'in_transaction' server
+# variable is checked and ROLLBACK is done. If the implicit commit was not
+# effective, the ROLLBACK will roll back changes and the insert
+# which contains the case description will be missing from the SELECT f2
+# output at the end of the test.
+#
+# https://mariadb.com/kb/en/sql-statements-that-cause-an-implicit-commit/
+#
+# Omissions:
+# ALTER DATABASE ... UPGRADE DATA DIRECTORY NAME is used to
+#   upgrade from old versions and should not be relevant in 10.4 anymore.
+# CACHE INDEX, LOAD INDEX INTO CACHE.
+# CHANGE MASTER TO, SHUTDOWN, START SLAVE, STOP SLAVE
+#
+
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+--connection node_2
+
+CREATE TABLE t1 (f1 INT PRIMARY KEY AUTO_INCREMENT, f2 VARCHAR(64)) ENGINE=InnoDB;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER EVENT");
+--error ER_EVENT_DOES_NOT_EXIST
+ALTER EVENT non_existent DISABLE;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER FUNCTION");
+--error ER_SP_DOES_NOT_EXIST
+ALTER FUNCTION non_existent COMMENT "test";
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER SERVER");
+--error ER_FOREIGN_SERVER_DOESNT_EXIST
+ALTER SERVER non_existent OPTIONS (USER "test");
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER TABLE");
+--error ER_NO_SUCH_TABLE
+ALTER TABLE non_existent RENAME test;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ALTER VIEW");
+--error ER_NO_SUCH_TABLE
+ALTER VIEW non_existent AS SELECT f1 AS f3 FROM t1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("ANALYZE TABLE");
+--disable_result_log
+ANALYZE TABLE t1;
+--enable_result_log
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("BEGIN");
+BEGIN;
+--echo "Expect in transaction 1"
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+SELECT f2 FROM t1 WHERE f2 = "BEGIN";
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CHECK TABLE");
+CHECK TABLE t1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE DATABASE");
+CREATE DATABASE galera_commit_implicit;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP DATABASE galera_commit_implicit;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE EVENT");
+CREATE EVENT galera_commit_implicit ON SCHEDULE AT CURRENT_TIMESTAMP + INTERVAL 1 HOUR DO SELECT 1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP EVENT galera_commit_implicit;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE FUNCTION");
+CREATE FUNCTION galera_commit_implicit () RETURNS INT RETURN (1);
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP FUNCTION galera_commit_implicit;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE INDEX");
+CREATE INDEX t1_f2_index ON t1 (f2);
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP INDEX t1_f2_index ON t1;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE PROCEDURE");
+DELIMITER |;
+CREATE PROCEDURE galera_commit_implicit ()
+  BEGIN
+    SELECT 1;
+  END;
+|
+DELIMITER ;|
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP PROCEDURE galera_commit_implicit;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE INDEX");
+CREATE INDEX t1_f2_index ON t1 (f2);
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP INDEX t1_f2_index ON t1;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE ROLE");
+CREATE ROLE galera_commit_implicit;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP ROLE galera_commit_implicit;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE SERVER");
+CREATE SERVER galera_commit_implicit FOREIGN DATA WRAPPER not_supported OPTIONS (HOST "non_existent");
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP SERVER galera_commit_implicit;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE TABLE");
+CREATE TABLE t2 (f1 INT PRIMARY KEY);
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP TABLE t2;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE TRIGGER");
+CREATE TRIGGER galera_commit_implicit AFTER UPDATE ON t1 FOR EACH ROW SET @sum = 1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP TRIGGER galera_commit_implicit;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("CREATE VIEW");
+CREATE VIEW t1_view AS SELECT f2 FROM t1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+DROP VIEW t1_view;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP DATABASE");
+--error ER_DB_DROP_EXISTS
+DROP DATABASE non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP EVENT");
+--error ER_EVENT_DOES_NOT_EXIST
+DROP EVENT non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP FUNCTION");
+--error ER_SP_DOES_NOT_EXIST
+DROP FUNCTION non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP INDEX");
+--error ER_CANT_DROP_FIELD_OR_KEY
+DROP INDEX non_existent ON t1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP PROCEDURE");
+--error ER_SP_DOES_NOT_EXIST
+DROP PROCEDURE non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP ROLE");
+--error ER_CANNOT_USER
+DROP ROLE non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP SERVER");
+--error ER_FOREIGN_SERVER_DOESNT_EXIST
+DROP SERVER non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP TABLE");
+--error ER_BAD_TABLE_ERROR
+DROP TABLE non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP TRIGGER");
+--error ER_TRG_DOES_NOT_EXIST
+DROP TRIGGER non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP USER");
+--error ER_CANNOT_USER
+DROP USER non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("DROP VIEW");
+--error ER_UNKNOWN_VIEW
+DROP VIEW non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("FLUSH");
+FLUSH TABLES t1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("GRANT");
+--error ER_PASSWORD_NO_MATCH
+GRANT ALL PRIVILEGES ON *.* TO 'non_existent'@'%';
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("LOCK");
+LOCK TABLES t1 READ;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+UNLOCK TABLES;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("OPTIMIZE");
+OPTIMIZE TABLE t1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("RENAME TABLE");
+RENAME TABLE t1 TO t2;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+RENAME TABLE t2 TO t1;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("RENAME USER");
+--error ER_CANNOT_USER
+RENAME USER 'non_existent' TO 'another'@'localhost';
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("REPAIR TABLE");
+REPAIR TABLE t1;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("RESET");
+RESET QUERY CACHE;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("REVOKE");
+--error ER_REVOKE_GRANTS
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM non_existent;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("SET PASSWORD");
+--error ER_PASSWORD_NO_MATCH
+SET PASSWORD FOR non_existent = PASSWORD('passwd');
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("START TRANSACTION");
+START TRANSACTION;
+--echo "Expect in transaction 1"
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+START TRANSACTION;
+INSERT INTO t1 (f2) VALUES ("TRUNCATE TABLE");
+--error ER_NO_SUCH_TABLE
+TRUNCATE TABLE t2;
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+# Special case AUTOCOMMIT = 1 causes implicit commit if the value was 0.
+SET AUTOCOMMIT = 0;
+INSERT INTO t1 (f2) VALUES ("AUTOCOMMIT 1");
+SET AUTOCOMMIT = 1;
+--echo "Expect in transaction 1"
+SHOW VARIABLES LIKE "in_transaction";
+ROLLBACK;
+
+--connection node_1
+SELECT f2 FROM t1;
+DROP TABLE t1;

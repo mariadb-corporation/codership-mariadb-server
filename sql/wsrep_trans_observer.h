@@ -266,6 +266,18 @@ static inline int wsrep_before_commit(THD* thd, bool all)
   WSREP_DEBUG("wsrep_before_commit: %d, %lld",
               wsrep_is_real(thd, all),
               (long long)wsrep_thd_trx_seqno(thd));
+#ifdef DBUG_OFF
+  /* In production skip if already committed. Let the debug builds
+     however continue in order to generate assertions in
+     state sanity checks.
+  */
+  if (thd->wsrep_trx().state() == wsrep::transaction::s_committed)
+  {
+    WSREP_WARN("Skipping before_commit() with query: %s",
+               WSREP_QUERY(thd));
+    DBUG_RETURN(0);
+  }
+#endif /* DBUG_OFF */
   int ret= 0;
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   if ((ret= thd->wsrep_cs().before_commit()) == 0)
@@ -296,6 +308,18 @@ static inline int wsrep_ordered_commit(THD* thd,
 {
   DBUG_ENTER("wsrep_ordered_commit");
   WSREP_DEBUG("wsrep_ordered_commit: %d", wsrep_is_real(thd, all));
+#ifdef DBUG_OFF
+  /* In production skip if already committed. Let the debug builds
+     however continue in order to generate assertions in
+     state sanity checks.
+  */
+  if (thd->wsrep_trx().state() == wsrep::transaction::s_committed)
+  {
+    WSREP_WARN("Skipping ordered_commit() with query: %s",
+               WSREP_QUERY(thd));
+    DBUG_RETURN(0);
+  }
+#endif /* DBUG_OFF */
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   DBUG_RETURN(thd->wsrep_cs().ordered_commit());
 }
@@ -313,6 +337,18 @@ static inline int wsrep_after_commit(THD* thd, bool all)
               wsrep_is_active(thd),
               (long long)wsrep_thd_trx_seqno(thd),
               wsrep_has_changes(thd));
+#ifdef DBUG_OFF
+  /* In production skip if already committed. Let the debug builds
+     however continue in order to generate assertions in
+     state sanity checks.
+  */
+  if (thd->wsrep_trx().state() == wsrep::transaction::s_committed)
+  {
+    WSREP_WARN("Skipping after_commit() with query: %s",
+               WSREP_QUERY(thd));
+    DBUG_RETURN(0);
+  }
+#endif /* DBUG_OFF */
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   int ret= 0;
   if (thd->wsrep_trx().state() == wsrep::transaction::s_committing)
@@ -332,6 +368,18 @@ static inline int wsrep_after_commit(THD* thd, bool all)
 static inline int wsrep_before_rollback(THD* thd, bool all)
 {
   DBUG_ENTER("wsrep_before_rollback");
+#ifdef DBUG_OFF
+  /* In production skip if already rolled back. Let the debug builds
+     however continue in order to generate assertions in
+     state sanity checks.
+  */
+  if (thd->wsrep_trx().state() == wsrep::transaction::s_aborted)
+  {
+    WSREP_WARN("Skipping before_rollback() with query: %s",
+               WSREP_QUERY(thd));
+    DBUG_RETURN(0);
+  }
+#endif /* DBUG_OFF */
   int ret= 0;
   if (wsrep_is_active(thd))
   {
@@ -375,6 +423,18 @@ static inline int wsrep_before_rollback(THD* thd, bool all)
 static inline int wsrep_after_rollback(THD* thd, bool all)
 {
   DBUG_ENTER("wsrep_after_rollback");
+#ifdef DBUG_OFF
+  /* In production skip if already rolled back. Let the debug builds
+     however continue in order to generate assertions in
+     state sanity checks.
+  */
+  if (thd->wsrep_trx().state() == wsrep::transaction::s_aborted)
+  {
+    WSREP_WARN("Skipping after_rollback() with query: %s",
+               WSREP_QUERY(thd));
+    DBUG_RETURN(0);
+  }
+#endif /* DBUG_OFF */
   DBUG_RETURN((wsrep_is_real(thd, all) && wsrep_is_active(thd) &&
                thd->wsrep_cs().transaction().state() !=
                wsrep::transaction::s_aborted) ?
