@@ -3708,6 +3708,13 @@ mysql_execute_command(THD *thd)
       }
     }
     thd->transaction.stmt.mark_trans_did_ddl();
+#ifdef WITH_WSREP
+    /* Clean up the previous transaction on implicit commit */
+    if (wsrep_thd_is_local(thd) && wsrep_after_statement(thd))
+    {
+      goto error;
+    }
+#endif /* WITH_WSREP */
   }
 
 #ifndef DBUG_OFF
@@ -4982,6 +4989,12 @@ mysql_execute_command(THD *thd)
     thd->mdl_context.release_transactional_locks();
     if (res)
       goto error;
+
+#ifdef WITH_WSREP
+    /* Clean up the previous transaction on implicit commit. */
+    if (wsrep_on(thd) && !wsrep_not_committed(thd) && wsrep_after_statement(thd))
+      goto error;
+#endif
 
     /* We can't have any kind of table locks while backup is active */
     if (thd->current_backup_stage != BACKUP_FINISHED)

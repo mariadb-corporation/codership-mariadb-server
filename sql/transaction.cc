@@ -314,16 +314,6 @@ bool trans_commit_implicit(THD *thd)
 
   trans_track_end_trx(thd);
 
-#ifdef WITH_WSREP
-  /*
-    Implicit commit ends the transaction in WSREP world just as a
-    COMMIT statement would have been executed. Therefore we run
-    wsrep_after_statement() to properly terminate/cleanup the
-    transaction before the next statement.
-   */
-  if (WSREP(thd) && wsrep_thd_is_local(thd)) res= wsrep_after_statement(thd);
-#endif /* WITH_WSREP */
-
   DBUG_RETURN(res);
 }
 
@@ -407,16 +397,6 @@ bool trans_rollback_implicit(THD *thd)
   DBUG_ASSERT(! thd->transaction_rollback_request);
 
   trans_track_end_trx(thd);
-
-#ifdef WITH_WSREP
-  /*
-    Implicit rollback ends the transaction in WSREP world just as a
-    ROLLBACK statement would have been executed. Therefore we run
-    wsrep_after_statement() to properly terminate/cleanup the
-    transaction before the next statement.
-   */
-  if (WSREP(thd) && wsrep_thd_is_local(thd)) res= wsrep_after_statement(thd);
-#endif /* WITH_WSREP */
 
   DBUG_RETURN(MY_TEST(res));
 }
