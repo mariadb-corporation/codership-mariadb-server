@@ -1,0 +1,69 @@
+connection node_2;
+connection node_1;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE = INNODB;
+CREATE TABLE t2 (f1 INTEGER PRIMARY KEY) ENGINE = ROCKSDB;
+connection node_1;
+XA START 'trx';
+INSERT INTO t1 VALUES (1);
+INSERT INTO t2 VALUES (1);
+XA END 'trx';
+XA PREPARE 'trx';
+XA COMMIT 'trx';
+SELECT * FROM t1;
+f1
+1
+SELECT * FROM t2;
+f1
+1
+connection node_2;
+SELECT * FROM t1;
+f1
+1
+SELECT * FROM t2;
+f1
+connection node_1;
+XA START 'trx';
+INSERT INTO t1 VALUES (2);
+INSERT INTO t2 VALUES (2);
+XA END 'trx';
+XA COMMIT 'trx' ONE PHASE;
+SELECT * FROM t1;
+f1
+1
+2
+SELECT * FROM t2;
+f1
+1
+2
+connection node_2;
+SELECT * FROM t1;
+f1
+1
+2
+SELECT * FROM t2;
+f1
+connection node_1;
+XA START 'trx';
+INSERT INTO t1 VALUES (3);
+INSERT INTO t2 VALUES (3);
+XA END 'trx';
+XA PREPARE 'trx';
+XA ROLLBACK 'trx';
+SELECT * FROM t1;
+f1
+1
+2
+SELECT * FROM t2;
+f1
+1
+2
+connection node_2;
+SELECT * FROM t1;
+f1
+1
+2
+SELECT * FROM t2;
+f1
+DROP TABLE t1;
+DROP TABLE t2;

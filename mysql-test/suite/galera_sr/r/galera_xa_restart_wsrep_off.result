@@ -1,0 +1,45 @@
+connection node_2;
+connection node_1;
+connect trx1, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connect trx2, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+connection trx1;
+XA START 'trx1';
+INSERT INTO t1 VALUES (1);
+XA END 'trx1';
+XA PREPARE 'trx1';
+connection trx2;
+XA START 'trx2';
+INSERT INTO t1 VALUES (2);
+connection node_2;
+SET SESSION wsrep_sync_wait = 0;
+connection node_1;
+SET SESSION wsrep_sync_wait = 0;
+connection node_2;
+# restart: --wsrep_on=OFF
+connection trx1;
+Expect transaction trx1, trx2 should be gone
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	4	0	trx1
+connection node_2;
+# restart
+connection node_1;
+connection node_2;
+Expect transaction trx1 to still be there
+XA RECOVER;
+formatID	gtrid_length	bqual_length	data
+1	4	0	trx1
+XA COMMIT 'trx1';
+SELECT * FROM t1;
+f1
+1
+connection node_1;
+SELECT * FROM t1;
+f1
+1
+connection node_2;
+DROP TABLE t1;
+call mtr.add_suppression('Found 1 prepared XA transactions');
+call mtr.add_suppression('You need to use --log-bin to make --binlog-format work.');
+call mtr.add_suppression('Discovered discontinuity in recovered wsrep transaction XIDs.');

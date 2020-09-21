@@ -320,7 +320,9 @@ static void wsrep_xa_replay_process(THD *replayer, void *wsrep_args)
   mysql_mutex_lock(&thd->LOCK_thd_data);
   thd->reset_for_next_command();
   mysql_mutex_unlock(&thd->LOCK_thd_data);
+  DBUG_EXECUTE_IF("crash_xa_replay_before_rollback", DBUG_SUICIDE(););
   thd->wsrep_cs().client_service().bf_rollback();
+  DBUG_EXECUTE_IF("crash_xa_replay_after_rollback", DBUG_SUICIDE(););
   wsrep_reset_threadvars(thd);
   wsrep_store_threadvars(replayer);
   thd->wsrep_cs().xa_replay();

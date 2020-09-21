@@ -1,0 +1,94 @@
+#
+# Test the scenario where a cluster node is restarted
+# with galera disabled, with active / prepared XA transactions
+#
+
+--source include/galera_cluster.inc
+
+--connect trx1, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connect trx2, 127.0.0.1, root, , test, $NODE_MYPORT_2
+
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+
+
+#
+# Create a XA transaction up to PREPAREd state
+# 
+--connection trx1
+XA START 'trx1';
+INSERT INTO t1 VALUES (1);
+XA END 'trx1';
+XA PREPARE 'trx1';
+
+
+#
+# Create a XA transaction, do not PREPARE it
+#
+--connection trx2
+XA START 'trx2';
+INSERT INTO t1 VALUES (2);
+
+
+#
+# Shutdown node_2 and wait for cluster size to shrink to 1 on node_1
+#
+--connection node_2
+SET SESSION wsrep_sync_wait = 0;
+--source include/shutdown_mysqld.inc
+
+--connection node_1
+SET SESSION wsrep_sync_wait = 0;
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+
+#
+# Restart the node_2 with wsrep disabled
+#
+--connection node_2
+--let $restart_parameters=--wsrep_on=OFF
+--source include/start_mysqld.inc
+
+--connection trx1
+--enable_reconnect
+--source include/wait_until_connected_again.inc
+--disable_reconnect
+--echo Expect transaction trx1, trx2 should be gone
+XA RECOVER;
+
+
+#
+# Shutdown node_2 again and restart it with wsrep enabled
+#
+--connection node_2
+--source include/shutdown_mysqld.inc
+
+
+--let $restart_parameters= 
+--source include/start_mysqld.inc
+
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+
+--connection node_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+
+--connection node_2
+--echo Expect transaction trx1 to still be there
+XA RECOVER;
+XA COMMIT 'trx1';
+SELECT * FROM t1;
+
+--connection node_1
+SELECT * FROM t1;
+
+
+#
+# Cleanup
+#
+--connection node_2
+DROP TABLE t1;
+
+call mtr.add_suppression('Found 1 prepared XA transactions');
+call mtr.add_suppression('You need to use --log-bin to make --binlog-format work.');
+call mtr.add_suppression('Discovered discontinuity in recovered wsrep transaction XIDs.');
