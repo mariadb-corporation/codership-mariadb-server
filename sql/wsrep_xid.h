@@ -51,6 +51,12 @@ public:
                xid->bqual_length,
                xid->data)
   { }
+  Wsrep_xid(const Wsrep_xid& xid) :
+    wsrep::xid(xid.format_id_,
+               xid.gtrid_len_,
+               xid.bqual_len_,
+               xid.data_.data())
+  { }
   operator XID() const
   {
     XID xid;
