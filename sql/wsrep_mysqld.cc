@@ -2393,7 +2393,7 @@ static my_bool kill_remaining_threads(THD *thd, THD *caller_thd)
       thd != caller_thd)
   {
     WSREP_INFO("killing local connection: %lld", (longlong) thd->thread_id);
-    close_connection(thd, 0);
+    wsrep_close_thread(thd);
   }
 #endif
   return 0;
