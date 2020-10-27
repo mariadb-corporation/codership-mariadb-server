@@ -4668,9 +4668,39 @@ UNIV_INTERN void lock_cancel_waiting_and_release(lock_t* lock);
 
 /** Cancel any pending lock request associated with the current THD.
 @sa THD::awake() @sa ha_kill_query() */
-static void innobase_kill_query(handlerton*, THD *thd, enum thd_kill_levels)
+static void innobase_kill_query(handlerton*, THD *thd, enum thd_kill_levels level)
 {
   DBUG_ENTER("innobase_kill_query");
+  if (level == THD_WSREP_MARK_VICTIM)
+  {
+    if (trx_t *trx= thd_to_trx(thd))
+    {
+      /*
+        not a direct kill, but just marking the victim for
+        later aborting locking mutexes in agreed locking
+        order, last to lock is victim thd LOCK_thd_data
+        mutex victim thd's wsrep_aborter is set while holding
+        all mutexes. We miss to see if victim was already
+        marked for abort by some other killer but that does
+        not matter here.
+        Finally releasing all mutexes in reverse order
+      */
+      lock_mutex_enter();
+      //trx_sys_mutex_enter();
+      trx_mutex_enter(trx);
+      wsrep_thd_LOCK(thd);
+      if (wsrep_thd_set_wsrep_aborter(thd, thd))
+      {
+        WSREP_DEBUG("innodb kill transaction skipped");
+      }
+      wsrep_thd_UNLOCK(thd);
+      trx_mutex_exit(trx);
+      //trx_sys_mutex_exit();
+      lock_mutex_exit();
+      DBUG_VOID_RETURN;
+    }
+    else DBUG_VOID_RETURN;
+  }
 
   if (trx_t* trx= thd_to_trx(thd))
   {
@@ -18729,6 +18759,16 @@ wsrep_innobase_kill_one_trx(THD* bf_thd, trx_t *victim_trx,
 	for BF transaction (test: galera_many_columns)*/
 	trx_t* bf_trx= thd_to_trx(bf_thd);
 	DBUG_ASSERT(wsrep_on(bf_thd));
+
+	DBUG_EXECUTE_IF("sync.wsrep_innobase_kill_one_trx_before_LOCK_thd_data",
+                 {
+                   const char act[]=
+                     "now "
+                     "SIGNAL sync.wsrep_innobase_kill_one_trx_before_LOCK_thd_data "
+                     "WAIT_FOR signal.wsrep_innobase_kill_one_trx_before_LOCK_thd_data";
+                   DBUG_ASSERT(!debug_sync_set_action(bf_thd,
+                                                      STRING_WITH_LEN(act)));
+                 };);
 
 	wsrep_thd_LOCK(thd);
 
