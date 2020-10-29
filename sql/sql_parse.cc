@@ -1163,6 +1163,26 @@ static bool wsrep_tables_accessible_when_detached(const TABLE_LIST *tables)
   }
   return true;
 }
+
+static bool wsrep_command_no_result(char command)
+{
+  return (/* command == COM_STMT_PREPARE          || */
+          command == COM_STMT_FETCH            ||
+          command == COM_STMT_SEND_LONG_DATA   ||
+          command == COM_STMT_CLOSE);
+}
+
+/*
+  Make wsrep command hooks to skip result handling if the command
+  does not return result to the client. This makes BF aborted transaction
+  to roll back but keep the error state until next command which is
+  able to return result to the client is received.
+ */
+static void wsrep_command_check_no_result(THD *thd, char command)
+{
+  thd->wsrep_cs().keep_command_error(wsrep_command_no_result(command));
+}
+
 #endif /* WITH_WSREP */
 #ifndef EMBEDDED_LIBRARY
 
@@ -1285,13 +1305,18 @@ bool do_command(THD *thd)
 
 #ifdef WITH_WSREP
   DEBUG_SYNC(thd, "wsrep_before_before_command");
+  if (WSREP(thd))
+  {
+    wsrep_wait_rollback_complete_and_acquire_ownership(thd);
+    thd->store_globals();
+    wsrep_command_check_no_result(thd, command);
+  }
   /*
     Aborted by background rollbacker thread.
     Handle error here and jump straight to out
   */
   if (wsrep_before_command(thd))
   {
-    thd->store_globals();
     WSREP_LOG_THD(thd, "enter found BF aborted");
     DBUG_ASSERT(!thd->mdl_context.has_locks());
     DBUG_ASSERT(!thd->get_stmt_da()->is_set());
@@ -2383,12 +2408,7 @@ dispatch_end:
     WSREP_DEBUG("THD is killed at dispatch_end");
   }
   wsrep_after_command_before_result(thd);
-  if (wsrep_current_error(thd) &&
-      !(command == COM_STMT_PREPARE          ||
-        command == COM_STMT_FETCH            ||
-        command == COM_STMT_SEND_LONG_DATA   ||
-        command == COM_STMT_CLOSE
-        ))
+  if (wsrep_current_error(thd) && !wsrep_command_no_result(command))
   {
     /* todo: Pass wsrep client state current error to override */
     wsrep_override_error(thd, wsrep_current_error(thd),
