@@ -764,6 +764,26 @@ int wsrep_init_server()
     working_dir= wsrep_server_working_dir();
     initial_position= wsrep_server_initial_position();
 
+     /* check if previous SST is still shutting down */
+    std::string sst_progress_file(working_dir);
+    sst_progress_file += "/sst_in_progress";
+    MY_STAT f_stat;
+    uint sst_file_wait = 0;
+    memset(&f_stat, 0, sizeof(MY_STAT));
+    while (my_stat(sst_progress_file.c_str(), &f_stat, MYF(0)))
+    {
+      if (sst_file_wait == 10)
+      {
+        WSREP_INFO("SST appears to be in progress, waiting max 10 secs to complete...");
+      }
+      if (sst_file_wait++ > 10)
+      {
+        WSREP_WARN("SST still in progress, will not startup, check if file is pending: %s",
+                   sst_progress_file.c_str());
+        return 1;
+      }
+      sleep(1);
+    }
     Wsrep_server_state::init_once(server_name,
                                   incoming_address,
                                   node_address,
