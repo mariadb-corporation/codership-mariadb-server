@@ -1049,11 +1049,13 @@ static ssize_t sst_prepare_other (const char*  method,
                  "%s"
                  WSREP_SST_OPT_PARENT " '%d'"
                  "%s"
-                 "%s",
+                 "%s"
+                 " " WSREP_SST_OPT_PROGRESS_FILE " '%s' ",
                  method, addr_in, mysql_real_data_home,
                  wsrep_defaults_file,
                  (int)getpid(),
-                 binlog_opt_val, binlog_index_opt_val);
+                 binlog_opt_val, binlog_index_opt_val,
+                 WSREP_SST_PROGRESS_FILE);
   my_free(binlog_opt_val);
   my_free(binlog_index_opt_val);
 
@@ -1926,4 +1928,30 @@ int wsrep_sst_donate(const std::string& msg,
   }
 
   return (ret >= 0 ? 0 : 1);
+}
+
+bool wsrep_wait_for_sst_complete(std::string working_dir)
+{
+  /* check if previous SST is still shutting down */
+    std::string sst_progress_file(working_dir);
+    sst_progress_file += "/";
+    sst_progress_file += WSREP_SST_PROGRESS_FILE;
+    MY_STAT f_stat;
+    uint sst_file_wait = 0;
+    memset(&f_stat, 0, sizeof(MY_STAT));
+    while (my_stat(sst_progress_file.c_str(), &f_stat, MYF(0)))
+    {
+      if (sst_file_wait == 0)
+      {
+        WSREP_INFO("SST appears to be in progress, waiting max 10 secs to complete...");
+      }
+      if (sst_file_wait++ > 10)
+      {
+        WSREP_WARN("SST still in progress, will not startup, check if file is pending: %s",
+                   sst_progress_file.c_str());
+        return true;
+      }
+      sleep(1);
+    }
+    return false;
 }

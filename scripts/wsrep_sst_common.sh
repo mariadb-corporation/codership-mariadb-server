@@ -30,6 +30,7 @@ WSREP_SST_OPT_EXTRA_DEFAULT=""
 WSREP_SST_OPT_SUFFIX_DEFAULT=""
 WSREP_SST_OPT_SUFFIX_VALUE=""
 WSREP_SST_OPT_MYSQLD=""
+WSREP_SST_OPT_PROGRESS_FILE=""
 INNODB_DATA_HOME_DIR_ARG=""
 INNODB_LOG_GROUP_HOME_ARG=""
 INNODB_UNDO_DIR_ARG=""
@@ -245,6 +246,10 @@ case "$1" in
         readonly WSREP_SST_OPT_MYSQLD="$original_cmd"
         break
         ;;
+    '--progress-file')
+        readonly WSREP_SST_OPT_PROGRESS_FILE="$2"
+        shift
+        ;;
     *) # must be command
        # usage
        # exit 1
@@ -328,7 +333,7 @@ readonly WSREP_SST_OPT_PSWD
 
 if [ -n "${WSREP_SST_OPT_DATA:-}" ]
 then
-    SST_PROGRESS_FILE="$WSREP_SST_OPT_DATA/sst_in_progress"
+    SST_PROGRESS_FILE="$WSREP_SST_OPT_DATA/$WSREP_SST_OPT_PROGRESS_FILE"
 else
     SST_PROGRESS_FILE=""
 fi

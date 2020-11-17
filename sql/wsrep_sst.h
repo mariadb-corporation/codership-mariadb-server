@@ -33,6 +33,7 @@
 #define WSREP_SST_OPT_BINLOG   "--binlog"
 #define WSREP_SST_OPT_BINLOG_INDEX "--binlog-index"
 #define WSREP_SST_OPT_MYSQLD   "--mysqld-args"
+#define WSREP_SST_OPT_PROGRESS_FILE   "--progress-file"
 
 // mysqldump-specific options
 #define WSREP_SST_OPT_USER     "--user"
@@ -56,6 +57,7 @@
 #define WSREP_SST_DEFAULT      WSREP_SST_RSYNC
 #define WSREP_SST_ADDRESS_AUTO "AUTO"
 #define WSREP_SST_AUTH_MASK    "********"
+#define WSREP_SST_PROGRESS_FILE    "sst_in_progress"
 
 /* system variables */
 extern const char* wsrep_sst_method;
@@ -78,6 +80,7 @@ extern void wsrep_SE_init_wait();   /*! wait for SE init to complete */
 extern void wsrep_SE_init_done();   /*! signal that SE init is complte */
 extern void wsrep_SE_initialized(); /*! mark SE initialization complete */
 
+bool wsrep_wait_for_sst_complete(std::string working_dir);
 /**
    Return a string containing the state transfer request string.
    Note that the string may contain a '\0' in the middle.
