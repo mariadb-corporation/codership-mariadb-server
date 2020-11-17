@@ -402,6 +402,14 @@ then
 
     RSYNC_PID="$WSREP_SST_OPT_DATA/$MODULE.pid"
 
+    # give some time for lingering rsync from previous SST to complete
+    check_round=0
+    while check_pid $RSYNC_PID && [ $check_round -lt 10 ]
+    do
+        check_round=`expr $check_round + 1`
+        sleep 1
+    done
+
     if check_pid $RSYNC_PID
     then
         wsrep_log_error "rsync daemon already running."
