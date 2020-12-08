@@ -281,6 +281,25 @@ extern "C" my_bool wsrep_thd_is_aborting(const MYSQL_THD thd)
   return false;
 }
 
+extern "C" my_bool wsrep_thd_is_replaying(const MYSQL_THD thd)
+{
+  mysql_mutex_assert_owner(&thd->LOCK_thd_data);
+  if (thd != 0)
+  {
+    const wsrep::client_state& cs(thd->wsrep_cs());
+    const enum wsrep::transaction::state tx_state(cs.transaction().state());
+    switch (tx_state)
+    {
+    case wsrep::transaction::s_replaying:
+      return true;
+    default:
+      return false;
+    }
+  }
+  return false;
+}
+
+
 static inline enum wsrep::key::type
 map_key_type(enum Wsrep_service_key_type type)
 {
