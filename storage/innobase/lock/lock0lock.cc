@@ -762,6 +762,9 @@ lock_rec_has_to_wait(
 	}
 
 #ifdef WITH_WSREP
+	if (trx->wsrep_UK_scan && wsrep_thd_is_BF(lock2->trx->mysql_thd, false)) {
+		return false;
+	}
 	/* There should not be two conflicting locks that are
 	brute force. If there is it is a bug. */
 	wsrep_assert_no_bf_bf_wait(NULL, lock2, trx);
@@ -1743,6 +1746,9 @@ lock_rec_add_to_queue(
 		ut_error;
 	}
 
+#ifdef WITH_WSREP_OUT
+	if (!trx->wsrep_UK_scan && !wsrep_thd_is_BF(trx->mysql_thd, FALSE)) {
+#endif /* WITH_WSREP */
 	if (!(type_mode & (LOCK_WAIT | LOCK_GAP))) {
 		lock_mode	mode = (type_mode & LOCK_MODE_MASK) == LOCK_S
 			? LOCK_X
@@ -1765,6 +1771,9 @@ lock_rec_add_to_queue(
 #endif /* WITH_WSREP */
 		ut_ad(!other_lock);
 	}
+#ifdef WITH_WSREP_OUT
+        }
+#endif /* WITH_WSREP */
 #endif /* UNIV_DEBUG */
 
 	type_mode |= LOCK_REC;
@@ -1885,6 +1894,12 @@ lock_rec_lock(
 #endif
 	    lock_rec_other_has_conflicting(mode, block, heap_no, trx))
         {
+#ifdef WITH_WSREP_OUT
+          if (trx->wsrep_UK_scan && wsrep_thd_is_BF(c_lock->trx->mysql_thd, false)) {
+            ib::info() << "lock_rec_lock bail out " << trx->id;
+            err = DB_SUCCESS;
+        } else
+#endif /* WITH_WSREP */
           /*
             If another transaction has a non-gap conflicting
             request in the queue, as this transaction does not
@@ -5142,6 +5157,12 @@ lock_rec_insert_check_and_lock(
 	    lock_rec_other_has_conflicting(type_mode, block, heap_no, trx)) {
 		/* Note that we may get DB_SUCCESS also here! */
 		trx_mutex_enter(trx);
+#ifdef WITH_WSREP_OUT
+                if (trx->wsrep_UK_scan && wsrep_thd_is_BF(c_lock->trx->mysql_thd, false)) {
+                  ib::info() << "lock_rec_lock_insert_check bail out " << trx->id;
+                  err = DB_SUCCESS;
+                } else
+#endif /* WITH_WSREP */
 
 		err = lock_rec_enqueue_waiting(
 #ifdef WITH_WSREP
@@ -5436,9 +5457,19 @@ lock_clust_rec_modify_check_and_lock(
 		return DB_SUCCESS;
 	}
 
+#ifdef WITH_WSREP
+	trx_t *trx = thr_get_trx(thr);
+	if (wsrep_thd_is_BF(trx->mysql_thd, false))
+	{
+		trx->wsrep_UK_scan = true;
+	}
+#endif /* WITH_WSREP */
 	err = lock_rec_lock(TRUE, LOCK_X | LOCK_REC_NOT_GAP,
 			    block, heap_no, index, thr);
 
+#ifdef WITH_WSREP
+	trx->wsrep_UK_scan = false;
+#endif /* WITH_WSREP */
 	ut_ad(lock_rec_queue_validate(FALSE, block, rec, index, offsets));
 
 	if (err == DB_SUCCESS_LOCKED_REC) {
@@ -5491,8 +5522,18 @@ lock_sec_rec_modify_check_and_lock(
 	index record, and this would not have been possible if another active
 	transaction had modified this secondary index record. */
 
+#ifdef WITH_WSREP
+	trx_t *trx = thr_get_trx(thr);
+	if (wsrep_thd_is_BF(trx->mysql_thd, false))
+	{
+		trx->wsrep_UK_scan = true;
+	}
+#endif /* WITH_WSREP */
 	err = lock_rec_lock(TRUE, LOCK_X | LOCK_REC_NOT_GAP,
 			    block, heap_no, index, thr);
+#ifdef WITH_WSREP
+	trx->wsrep_UK_scan = false;
+#endif /* WITH_WSREP */
 
 #ifdef UNIV_DEBUG
 	{
@@ -5585,8 +5626,18 @@ lock_sec_rec_read_check_and_lock(
 		return DB_SUCCESS;
 	}
 
+#ifdef WITH_WSREP
+	trx_t *trx = thr_get_trx(thr);
+	if(wsrep_thd_is_BF(trx->mysql_thd, false))
+	{
+		trx->wsrep_UK_scan = true;
+	}
+#endif /* WITH_WSREP */
 	err = lock_rec_lock(FALSE, gap_mode | mode,
 			    block, heap_no, index, thr);
+#ifdef WITH_WSREP
+	thr_get_trx(thr)->wsrep_UK_scan = false;
+#endif /* WITH_WSREP */
 
 	ut_ad(lock_rec_queue_validate(FALSE, block, rec, index, offsets));
 
