@@ -83,14 +83,13 @@ INSERT INTO t1 VALUES (4, 4, 2);
 --source include/galera_wait_sync_point.inc
 --source include/galera_clear_sync_point.inc
 
-
 # Let the first applier to proceed and wait until it BF aborts the local victim
 # we set sync point right after the BF abort has happened
 --let $galera_sync_point = abort_trx_end
 --source include/galera_set_sync_point.inc
 --source include/galera_clear_sync_point.inc
 
-# set another sync point just before the applier commit
+# release the local transaction to continue with commit
 --let $galera_sync_point = commit_monitor_master_enter_sync
 --source include/galera_signal_sync_point.inc
 --source include/galera_clear_sync_point.inc
@@ -100,7 +99,6 @@ SET GLOBAL DEBUG_DBUG = "";
 SET DEBUG_SYNC = "now SIGNAL signal.wsrep_apply_cb";
 SET GLOBAL debug_dbug = NULL;
 SET debug_sync='RESET';
-
 
 --echo wait until first applier has done BF abort
 --let $galera_sync_point = abort_trx_end
