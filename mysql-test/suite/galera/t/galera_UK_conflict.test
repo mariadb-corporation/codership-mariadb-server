@@ -141,8 +141,8 @@ SELECT * FROM t1;
 
 # replicate some transactions, so that wsrep slave thread count can reach
 # original state in node 1
-INSERT INTO t VALUES (7,7,7);
-INSERT INTO t VALUES (8,8,8);
+INSERT INTO t1 VALUES (7,7,7);
+INSERT INTO t1 VALUES (8,8,8);
 
 DROP TABLE t1;
 
