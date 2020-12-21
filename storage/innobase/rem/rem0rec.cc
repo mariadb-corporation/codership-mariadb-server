@@ -2737,6 +2737,18 @@ wsrep_rec_get_foreign_key(
 			case DATA_BINARY:
 				memcpy(buf, data, len);
 				break;
+			case DATA_FLOAT:
+			{
+				float f = mach_float_read(data);
+				memcpy(buf, &f, sizeof(float));
+			}
+			break;
+			case DATA_DOUBLE:
+			{
+				double d = mach_double_read(data);
+				memcpy(buf, &d, sizeof(double));
+			}
+			break;
 			default:
 				break;
 			}

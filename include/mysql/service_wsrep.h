@@ -64,6 +64,7 @@ extern struct wsrep_service_st {
   long long                   (*wsrep_thd_trx_seqno_func)(const MYSQL_THD thd);
   void                        (*wsrep_thd_auto_increment_variables_func)(THD *thd, unsigned long long *offset, unsigned long long *increment);
   my_bool                     (*wsrep_thd_is_aborting_func)(const MYSQL_THD thd);
+  my_bool                     (*wsrep_thd_is_replaying_func)(const MYSQL_THD thd);
   void                        (*wsrep_set_data_home_dir_func)(const char *data_dir);
   my_bool                     (*wsrep_thd_is_BF_func)(const MYSQL_THD thd, my_bool sync);
   my_bool                     (*wsrep_thd_is_local_func)(const MYSQL_THD thd);
@@ -115,6 +116,7 @@ extern struct wsrep_service_st {
 #define wsrep_set_data_home_dir(A) wsrep_service->wsrep_set_data_home_dir_func(A)
 #define wsrep_thd_is_BF(T,S) wsrep_service->wsrep_thd_is_BF_func(T,S)
 #define wsrep_thd_is_aborting(T) wsrep_service->wsrep_thd_is_aborting_func(T)
+#define wsrep_thd_is_replaying(T) wsrep_service->wsrep_thd_is_replaying_func(T)
 #define wsrep_thd_is_local(T) wsrep_service->wsrep_thd_is_local_func(T)
 #define wsrep_thd_self_abort(T) wsrep_service->wsrep_thd_self_abort_func(T)
 #define wsrep_thd_append_key(T,W,N,K) wsrep_service->wsrep_thd_append_key_func(T,W,N,K)
@@ -212,7 +214,8 @@ extern "C" my_bool wsrep_thd_order_before(const MYSQL_THD left, const MYSQL_THD 
 extern "C" my_bool wsrep_thd_skip_locking(const MYSQL_THD thd);
 /* Return true if thd is aborting */
 extern "C" my_bool wsrep_thd_is_aborting(const MYSQL_THD thd);
-
+extern "C" my_bool wsrep_thd_is_replaying(const MYSQL_THD thd);
+ 
 struct wsrep_key;
 struct wsrep_key_array;
 extern "C" int wsrep_thd_append_key(MYSQL_THD thd,
