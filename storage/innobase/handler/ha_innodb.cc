@@ -160,6 +160,8 @@ static int
 wsrep_abort_transaction(handlerton* hton, THD *bf_thd, THD *victim_thd,
 			my_bool signal);
 static void
+wsrep_wait_until_initialized(handlerton* hton);
+static void
 wsrep_fake_trx_id(handlerton* hton, THD *thd);
 static int innobase_wsrep_set_checkpoint(handlerton* hton, const XID* xid);
 static int innobase_wsrep_get_checkpoint(handlerton* hton, XID* xid);
@@ -4125,7 +4127,8 @@ static int innodb_init(void* p)
 	innobase_hton->set_checkpoint=innobase_wsrep_set_checkpoint;
 	innobase_hton->get_checkpoint=innobase_wsrep_get_checkpoint;
 	innobase_hton->fake_trx_id=wsrep_fake_trx_id;
-#endif /* WITH_WSREP */
+	innobase_hton->wait_until_initialized=wsrep_wait_until_initialized;
+ #endif /* WITH_WSREP */
 
 	innobase_hton->tablefile_extensions = ha_innobase_exts;
 	innobase_hton->table_options = innodb_table_option_list;
@@ -18964,6 +18967,22 @@ wsrep_innobase_kill_one_trx(
 	}
 
 	DBUG_RETURN(0);
+}
+
+static
+void
+wsrep_wait_until_initialized(handlerton*)
+{
+	extern bool trx_rollback_is_active;
+	DBUG_ENTER("wsrep_wait_until_initialized");
+
+	WSREP_DEBUG("waiitng until innodb is initialized %d",
+		   trx_rollback_is_active);
+	while (trx_rollback_is_active) {
+		WSREP_DEBUG("innodb rollbacker still active");
+		sleep(1);
+	}
+	DBUG_VOID_RETURN;
 }
 
 static

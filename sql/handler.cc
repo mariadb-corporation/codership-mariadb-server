@@ -57,6 +57,9 @@
 #include "wsrep.h"
 #include "wsrep_xid.h"
 
+/* for updating local_seqno if node is doing xarecovery after SST donation */
+extern wsrep_seqno_t local_seqno;
+
 /*
   While we have legacy_db_type, we have this array to
   check for dups and to find handlerton from legacy_db_type.
@@ -1985,7 +1988,12 @@ static my_bool xarecover_handlerton(THD *unused, plugin_ref plugin,
       if (WSREP_ON)
       {
         wsrep_limit= wsrep_order_and_check_continuity(info->list, got);
-      }
+        if (wsrep_limit > 0) {
+          WSREP_DEBUG("updating local_seqno %llu -> %llu",
+                      local_seqno, wsrep_limit);
+          local_seqno = wsrep_limit;
+        }
+       }
 #endif /* WITH_WSREP */
 
       for (int i=0; i < got; i ++)
@@ -6770,6 +6778,14 @@ int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
 
   DBUG_RETURN(0);
 }
+
+#ifdef WITH_WSREP
+void wsrep_wait_until_innodb_initialized()
+{
+  handlerton *hton= installed_htons[DB_TYPE_INNODB];
+  if (hton)  hton->wait_until_initialized(hton);
+}
+#endif /* WITH_WSREP */
 
 void ha_fake_trx_id(THD *thd)
 {

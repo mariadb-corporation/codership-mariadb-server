@@ -1479,6 +1479,9 @@ struct handlerton
    int (*set_checkpoint)(handlerton *hton, const XID* xid);
    int (*get_checkpoint)(handlerton *hton, XID* xid);
    void (*fake_trx_id)(handlerton *hton, THD *thd);
+#ifdef WITH_WSREP
+  void (*wait_until_initialized)(handlerton *hton);
+#endif /* WITH_WSREP */
    /*
      Optional clauses in the CREATE/ALTER TABLE
    */
@@ -4827,9 +4830,10 @@ int ha_release_savepoint(THD *thd, SAVEPOINT *sv);
 #ifdef WITH_WSREP
 int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal);
 void ha_fake_trx_id(THD *thd);
-#else
+void wsrep_wait_until_innodb_initialized();
+ #else
 inline void ha_fake_trx_id(THD *thd) { }
-#endif
+#endif /* WITH_WSREP */
 
 /* these are called by storage engines */
 void trans_register_ha(THD *thd, bool all, handlerton *ht);

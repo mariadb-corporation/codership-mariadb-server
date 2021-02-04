@@ -365,6 +365,7 @@ bool wsrep_sst_received (wsrep_t*            const wsrep,
 // Let applier threads to continue
 bool wsrep_sst_continue ()
 {
+  wsrep_wait_until_innodb_initialized();
   if (sst_needed)
   {
     WSREP_INFO("Signalling provider to continue.");
