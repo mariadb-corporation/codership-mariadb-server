@@ -19,7 +19,7 @@
 # Setting gmcast.isolate=2 will force gcomm background thread to
 # throw exception.
 SET SESSION wsrep_sync_wait = 0;
-SET GLOBAL wsrep_provider_options="gmcast.isolate=2";
+SET GLOBAL wsrep_provider_gmcast_isolate="2";
 
 # Wait until wsrep_ready becomes 0.
 --let $wait_condition = SELECT VARIABLE_VALUE = 0 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME ='wsrep_ready'
@@ -32,7 +32,7 @@ SET SESSION wsrep_sync_wait = 0;
 --source include/wait_condition.inc
 SHOW STATUS LIKE 'wsrep_cluster_status';
 SET SESSION wsrep_sync_wait = default;
-SET GLOBAL wsrep_provider_options="pc.bootstrap=1";
+SET GLOBAL wsrep_provider_pc_bootstrap="1";
 
 # Restart node_2
 --connection node_2

@@ -5669,7 +5669,7 @@ static Sys_var_tz Sys_time_zone(
 
 static Sys_var_charptr_fscs Sys_wsrep_provider(
        "wsrep_provider", "Path to replication provider library",
-       PREALLOCATED GLOBAL_VAR(wsrep_provider), CMD_LINE(REQUIRED_ARG),
+       PREALLOCATED READ_ONLY GLOBAL_VAR(wsrep_provider), CMD_LINE(REQUIRED_ARG),
        DEFAULT(WSREP_NONE),
        NO_MUTEX_GUARD, NOT_IN_BINLOG,
        ON_CHECK(wsrep_provider_check), ON_UPDATE(wsrep_provider_update));
@@ -5677,7 +5677,7 @@ static Sys_var_charptr_fscs Sys_wsrep_provider(
 static Sys_var_charptr Sys_wsrep_provider_options(
        "wsrep_provider_options", "Semicolon (;) separated list of wsrep "
        "options (see wsrep_provider_options documentation).",
-       PREALLOCATED GLOBAL_VAR(wsrep_provider_options), 
+       PREALLOCATED READ_ONLY GLOBAL_VAR(wsrep_provider_options), 
        CMD_LINE(REQUIRED_ARG),
        DEFAULT(""), NO_MUTEX_GUARD, NOT_IN_BINLOG,
        ON_CHECK(wsrep_provider_options_check), 
@@ -6733,3 +6733,4 @@ static Sys_var_ulonglong Sys_max_rowid_filter_size(
        SESSION_VAR(max_rowid_filter_size), CMD_LINE(REQUIRED_ARG),
        VALID_RANGE(1024, (ulonglong)~(intptr)0), DEFAULT(128*1024),
        BLOCK_SIZE(1));
+

@@ -1,7 +1,7 @@
 connection node_2;
 connection node_1;
 connection node_1;
-SET GLOBAL wsrep_provider_options = 'repl.key_format=FLAT16';
+SET GLOBAL wsrep_provider_repl_key_format='FLAT16';
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (123);
 CREATE TABLE t2 (f1 VARCHAR(256)) ENGINE=InnoDB;

@@ -15,9 +15,9 @@ SET SESSION wsrep_sync_wait=DEFAULT;
 # Convert "N; ..." to "N"
 --let $pc_weight_value = `SELECT SUBSTR('$s1', 1, LOCATE(';', '$s1') - 1)`
 
-SET GLOBAL wsrep_provider_options = 'pc.weight=3';
+SET GLOBAL wsrep_provider_pc_weight='3';
 
 -- replace_regex /.*(pc\.weight = [0-9]+);.*/\1/
 SHOW GLOBAL VARIABLES LIKE 'wsrep_provider_options';
 
---eval SET GLOBAL wsrep_provider_options = 'pc.weight=$pc_weight_value'
+--eval SET GLOBAL wsrep_provider_pc_weight=DEFAULT;

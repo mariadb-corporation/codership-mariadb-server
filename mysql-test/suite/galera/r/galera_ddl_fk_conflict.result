@@ -60,7 +60,7 @@ EXPECT_2
 ######################################################################
 connection node_1;
 BEGIN;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 OPTIMIZE TABLE c1 ;
 Table	Op	Msg_type	Msg_text
@@ -69,12 +69,13 @@ test.c1	optimize	status	OK
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -105,7 +106,7 @@ BEGIN;
 connection node_1b;
 BEGIN;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 OPTIMIZE TABLE c2 ;
 Table	Op	Msg_type	Msg_text
@@ -114,7 +115,7 @@ test.c2	optimize	status	OK
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
@@ -122,7 +123,8 @@ connection node_1b;
 UPDATE p2 SET f2 = 'TO DEADLOCK' WHERE pk = 2;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -167,7 +169,7 @@ INSERT INTO c1 VALUES (1,1);
 ######################################################################
 connection node_1;
 BEGIN;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 CREATE TEMPORARY TABLE tmp (i int);
 OPTIMIZE TABLE c1, tmp ;
@@ -180,12 +182,13 @@ DROP TABLE tmp;
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -253,7 +256,7 @@ EXPECT_2
 ######################################################################
 connection node_1;
 BEGIN;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 REPAIR TABLE c1 ;
 Table	Op	Msg_type	Msg_text
@@ -261,12 +264,13 @@ test.c1	repair	note	The storage engine for the table doesn't support repair
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -297,7 +301,7 @@ BEGIN;
 connection node_1b;
 BEGIN;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 REPAIR TABLE c2 ;
 Table	Op	Msg_type	Msg_text
@@ -305,7 +309,7 @@ test.c2	repair	note	The storage engine for the table doesn't support repair
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
@@ -313,7 +317,8 @@ connection node_1b;
 UPDATE p2 SET f2 = 'TO DEADLOCK' WHERE pk = 2;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -358,7 +363,7 @@ INSERT INTO c1 VALUES (1,1);
 ######################################################################
 connection node_1;
 BEGIN;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 CREATE TEMPORARY TABLE tmp (i int);
 REPAIR TABLE c1, tmp ;
@@ -369,12 +374,13 @@ DROP TABLE tmp;
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -440,18 +446,19 @@ EXPECT_2
 ######################################################################
 connection node_1;
 BEGIN;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 ALTER TABLE c1 ENGINE=INNODB;
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -482,13 +489,13 @@ BEGIN;
 connection node_1b;
 BEGIN;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 ALTER TABLE c2 ENGINE=INNODB;
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
@@ -496,7 +503,8 @@ connection node_1b;
 UPDATE p2 SET f2 = 'TO DEADLOCK' WHERE pk = 2;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -573,18 +581,19 @@ EXPECT_2
 ######################################################################
 connection node_1;
 BEGIN;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 TRUNCATE TABLE c1 ;
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';
@@ -615,13 +624,13 @@ BEGIN;
 connection node_1b;
 BEGIN;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'dbug=d,apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_dbug='d,apply_monitor_slave_enter_sync';
 connection node_2;
 TRUNCATE TABLE c2 ;
 connection node_1a;
 SET SESSION wsrep_on = 0;
 SET SESSION wsrep_on = 1;
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';
 connection node_1;
 UPDATE p1 SET f2 = 'TO DEADLOCK' WHERE pk = 1;
 COMMIT;
@@ -629,7 +638,8 @@ connection node_1b;
 UPDATE p2 SET f2 = 'TO DEADLOCK' WHERE pk = 2;
 COMMIT;
 connection node_1a;
-SET GLOBAL wsrep_provider_options = 'signal=apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal='apply_monitor_slave_enter_sync';
+SET GLOBAL wsrep_provider_signal=DEFAULT;
 connection node_1;
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 SELECT 'I deadlocked';

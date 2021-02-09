@@ -33,7 +33,7 @@ CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 
 # Step #2. Force async slave to go non-primary
 
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_1
 --source include/wait_until_connected_again.inc
@@ -56,7 +56,7 @@ INSERT INTO t1 VALUES (1),(2),(3),(4),(5);
 
 # Step #4. Bring back the async slave and restart replication
 --connection node_2
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --connection node_1
 --source include/wait_until_connected_again.inc

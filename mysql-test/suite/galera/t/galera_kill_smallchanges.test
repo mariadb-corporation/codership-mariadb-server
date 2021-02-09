@@ -13,8 +13,7 @@
 
 # Enable the master to continue running during the split-brain situation that
 # occurs when the slave is killed
---let $wsrep_provider_options_orig = `SELECT @@wsrep_provider_options`
-SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
+SET GLOBAL wsrep_provider_pc_weight='2';
 
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 
@@ -37,7 +36,7 @@ SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_N
 
 --connection node_1
 --disable_query_log
---eval SET GLOBAL wsrep_provider_options = '$wsrep_provider_options_orig';
+--eval SET GLOBAL wsrep_provider_pc_weight=DEFAULT;
 --enable_query_log
 
 --let $node_2=node_2a

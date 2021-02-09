@@ -1,1 +1,1 @@
-SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_dbug='';

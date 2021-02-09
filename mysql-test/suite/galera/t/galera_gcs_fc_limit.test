@@ -15,8 +15,7 @@ INSERT INTO t1 VALUES (1,1);
 
 SELECT COUNT(*) FROM t1;
 
---let $wsrep_provider_options_orig = `SELECT @@wsrep_provider_options`
-SET GLOBAL wsrep_provider_options = 'gcs.fc_limit=1';
+SET GLOBAL wsrep_provider_gcs_fc_limit='1';
 
 # Block the slave applier thread
 LOCK TABLE t1 WRITE;
@@ -54,7 +53,7 @@ INSERT INTO t1 VALUES (NULL,6);
 SELECT COUNT(*) FROM t1;
 
 --disable_query_log
---eval SET GLOBAL wsrep_provider_options = '$wsrep_provider_options_orig';
+SET GLOBAL wsrep_provider_gcs_fc_limit = DEFAULT;
 --enable_query_log
 --source include/wait_until_connected_again.inc
 

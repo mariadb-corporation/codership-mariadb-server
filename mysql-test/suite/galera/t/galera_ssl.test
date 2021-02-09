@@ -23,3 +23,15 @@ SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_N
 SELECT COUNT(*) = 1 FROM t1;
 
 DROP TABLE t1;
+
+# Confirm that with explicitly configured SSL certificate peer
+# verification is on.
+--let $assert_text = SSL cert verify off
+--let $assert_select = SSL cert verify foo
+# Todo: Fix provider side to log only once
+--let $assert_count = 0
+--let $assert_only_after = loading provider library
+--let $assert_file = $MYSQLTEST_VARDIR/log/mysqld.1.err
+--source include/assert_grep.inc
+--let $assert_file = $MYSQLTEST_VARDIR/log/mysqld.2.err
+--source include/assert_grep.inc

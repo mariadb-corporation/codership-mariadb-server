@@ -14,7 +14,7 @@
 
 # Isolate node #3
 --connection node_3
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate = '1';
 
 # Wait for node #3 to leave cluster
 --connection node_1
@@ -40,7 +40,7 @@ DELETE FROM t1 WHERE f1 = 2;
 # Rejoin node #3
 --connection node_3
 --source include/wsrep_wait_disconnect.inc
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+SET GLOBAL wsrep_provider_gmcast_isolate = '0';
 --source include/galera_wait_ready.inc
 
 --let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';

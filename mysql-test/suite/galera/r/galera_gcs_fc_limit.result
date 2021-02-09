@@ -6,7 +6,7 @@ connection node_2;
 SELECT COUNT(*) FROM t1;
 COUNT(*)
 1
-SET GLOBAL wsrep_provider_options = 'gcs.fc_limit=1';
+SET GLOBAL wsrep_provider_gcs_fc_limit='1';
 LOCK TABLE t1 WRITE;
 connection node_1;
 FLUSH STATUS;

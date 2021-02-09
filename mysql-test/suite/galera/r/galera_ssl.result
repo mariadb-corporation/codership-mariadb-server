@@ -19,3 +19,5 @@ SELECT COUNT(*) = 1 FROM t1;
 COUNT(*) = 1
 1
 DROP TABLE t1;
+include/assert_grep.inc [SSL cert verify off]
+include/assert_grep.inc [SSL cert verify off]

@@ -16,6 +16,8 @@
 
 #include "sql_plugin.h"                         /* wsrep_plugins_pre_init() */
 #include "my_global.h"
+
+#include "wsrep/tls_context.hpp" /* wsrep::tls_context*/
 #include "wsrep_server_state.h"
 
 #include "mariadb.h"
@@ -272,6 +274,11 @@ char* wsrep_cluster_capabilities    = NULL;
 /* End wsrep status variables */
 
 wsp::Config_state *wsrep_config_state;
+
+/**
+   Handle for controlling provider SSL/TLS settings.
+ */
+static std::unique_ptr<wsrep::tls_context> wsrep_tls_context;
 
 void WSREP_LOG(void (*fun)(const char* fmt, ...), const char* fmt, ...)
 {
@@ -813,6 +820,8 @@ void wsrep_deinit_server()
 {
   wsrep_deinit_schema();
   Wsrep_server_state::destroy();
+  extern void wsrep_plugin_deinit_provider_options();
+  wsrep_plugin_deinit_provider_options();
 }
 
 int wsrep_init()
@@ -874,13 +883,15 @@ int wsrep_init()
   WSREP_ON_= wsrep_provider && strcmp(wsrep_provider, WSREP_NONE);
   wsrep_service_started= 1;
 
+  // wsrep_init_provider_sysvars();
+  extern int wsrep_plugin_init_provider_options();
+  wsrep_plugin_init_provider_options();
   wsrep_init_provider_status_variables();
   wsrep_capabilities_export(Wsrep_server_state::instance().provider().capabilities(),
                             &wsrep_provider_capabilities);
 
   WSREP_DEBUG("SR storage init for: %s",
               (wsrep_SR_store_type == WSREP_SR_STORE_TABLE) ? "table" : "void");
-
   return 0;
 }
 

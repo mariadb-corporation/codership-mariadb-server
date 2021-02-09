@@ -13,8 +13,7 @@ CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 INSERT INTO t1 VALUES (1);
 
 --connection node_2
---let $wsrep_provider_options_orig = `SELECT @@wsrep_provider_options`
-SET GLOBAL wsrep_provider_options = 'gcs.fc_limit=1';
+SET GLOBAL wsrep_provider_gcs_fc_limit='1';
 
 # Block the slave applier thread 
 FLUSH TABLES WITH READ LOCK;
@@ -39,7 +38,7 @@ SET SESSION wsrep_sync_wait = 0;
 SELECT COUNT(*) = 1 FROM t1;
 
 --disable_query_log
---eval SET GLOBAL wsrep_provider_options = '$wsrep_provider_options_orig';
+SET GLOBAL wsrep_provider_gcs_fc_limit=DEFAULT;
 --enable_query_log
 UNLOCK TABLES;
 

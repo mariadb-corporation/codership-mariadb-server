@@ -9,7 +9,7 @@
 
 # Isolate node #2 
 --connection node_2
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate = '1';
 
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -39,7 +39,7 @@ INSERT INTO t1 VALUES (10);
 # Restore node #2, IST is performed
 
 --connection node_2
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+SET GLOBAL wsrep_provider_gmcast_isolate = '0';
 
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
