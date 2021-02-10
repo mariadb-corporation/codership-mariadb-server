@@ -749,6 +749,31 @@ static void wsrep_init_provider_status_variables()
           provider.vendor().c_str(),  sizeof(provider_vendor) - 1);
 }
 
+#include "wsrep/tls_context.hpp"
+static std::unique_ptr<wsrep::tls_context> wsrep_tls_context;
+
+static void wsrep_init_ssl()
+{
+    wsrep_tls_context = std::unique_ptr<wsrep::tls_context>(
+        Wsrep_server_state::instance().provider().make_tls_context());
+    if (!wsrep_tls_context->is_enabled())
+    {
+        wsrep_tls_context->enable();
+        /* If user has not configured SSL, we use certificates generated
+           by server installer. As these certificates are not synchronized
+           over the cluster by default, we turn off verification. */
+        wsrep::tls_context::conf conf{
+            false, "", "", "", ""
+        };
+        wsrep_tls_context->configure(conf);
+    }
+}
+
+static  void wsrep_deinit_ssl()
+{
+    wsrep_tls_context = nullptr;
+}
+
 int wsrep_init_server()
 {
   wsrep::log::logger_fn(wsrep_log_cb);
@@ -983,6 +1008,7 @@ void wsrep_deinit(bool free_options)
   DBUG_ASSERT(wsrep_inited == 1);
   WSREP_DEBUG("wsrep_deinit");
 
+  wsrep_deinit_ssl();
   Wsrep_server_state::instance().unload_provider();
   provider_name[0]=    '\0';
   provider_version[0]= '\0';
@@ -1158,6 +1184,7 @@ bool wsrep_start_replication()
     {
       std::string opts= Wsrep_server_state::instance().provider().options();
       wsrep_provider_options_init(opts.c_str());
+      wsrep_init_ssl();
     }
     catch (const wsrep::runtime_error&)
     {
