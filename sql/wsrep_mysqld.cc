@@ -16,6 +16,8 @@
 
 #include "sql_plugin.h"                         /* wsrep_plugins_pre_init() */
 #include "my_global.h"
+
+#include "wsrep/tls_context.hpp" /* wsrep::tls_context*/
 #include "wsrep_server_state.h"
 
 #include "mariadb.h"
@@ -272,6 +274,11 @@ char* wsrep_cluster_capabilities    = NULL;
 /* End wsrep status variables */
 
 wsp::Config_state *wsrep_config_state;
+
+/**
+   Handle for controlling provider SSL/TLS settings.
+ */
+static std::unique_ptr<wsrep::tls_context> wsrep_tls_context;
 
 void WSREP_LOG(void (*fun)(const char* fmt, ...), const char* fmt, ...)
 {
@@ -749,9 +756,6 @@ static void wsrep_init_provider_status_variables()
           provider.vendor().c_str(),  sizeof(provider_vendor) - 1);
 }
 
-#include "wsrep/tls_context.hpp"
-static std::unique_ptr<wsrep::tls_context> wsrep_tls_context;
-
 static void wsrep_init_ssl()
 {
     wsrep_tls_context = std::unique_ptr<wsrep::tls_context>(
@@ -760,11 +764,15 @@ static void wsrep_init_ssl()
     {
         WSREP_INFO("Enforcing SSL on provider");
         wsrep_tls_context->enable();
-        /* If user has not configured SSL, we use certificates generated
-           by server installer. As these certificates are not synchronized
-           over the cluster by default, we turn off verification. */
+        /*
+          If user has not configured SSL, we use certificates generated
+          by server installer. As these certificates are not synchronized
+          over the cluster by default, we turn off verification.
+
+          As the cert is likely to be self signed, we don't set CA either.
+        */
         wsrep::tls_context::conf conf{
-            false, opt_ssl_ca, opt_ssl_cert, opt_ssl_key, ""
+            false, "", opt_ssl_cert, opt_ssl_key, ""
         };
         wsrep_tls_context->configure(conf);
         wsrep_tls_context->reload();
