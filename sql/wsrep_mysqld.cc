@@ -756,28 +756,56 @@ static void wsrep_init_provider_status_variables()
           provider.vendor().c_str(),  sizeof(provider_vendor) - 1);
 }
 
-static void wsrep_init_ssl()
+static int wsrep_init_ssl()
 {
-    wsrep_tls_context = std::unique_ptr<wsrep::tls_context>(
-        Wsrep_server_state::instance().provider().make_tls_context());
-    wsrep_tls_context->get_configuration();
-    if (!wsrep_tls_context->is_enabled())
-    {
-        WSREP_INFO("Enforcing SSL on provider");
-        wsrep_tls_context->enable();
-        /*
-          If user has not configured SSL, we use certificates generated
-          by server installer. As these certificates are not synchronized
-          over the cluster by default, we turn off verification.
+  auto context= std::unique_ptr<wsrep::tls_context>(
+    Wsrep_server_state::instance().provider().make_tls_context());
+  if (!context)
+  {
+    WSREP_ERROR("Could not create control SSL context for provider");
+    return 1;
+  }
 
-          As the cert is likely to be self signed, we don't set CA either.
-        */
-        wsrep::tls_context::conf conf{
-            false, "", opt_ssl_cert, opt_ssl_key, ""
-        };
-        wsrep_tls_context->configure(conf);
-        wsrep_tls_context->reload();
+  context->get_configuration();
+
+  if (!context->supports_tls())
+  {
+    WSREP_ERROR("Provider does not support SSL");
+    return 1;
+  }
+
+  if (!context->is_enabled())
+  {
+    WSREP_INFO("Enforcing SSL on provider");
+    if (context->enable())
+    {
+      WSREP_ERROR("Could not enable SSL on provider");
+      return 1;
     }
+    /*
+      If user has not configured SSL, we use certificates generated
+      by server installer. As these certificates are not synchronized
+      over the cluster by default, we turn off verification.
+
+      As the cert is likely to be self signed, we don't set CA either.
+    */
+    wsrep::tls_context::conf conf{
+      false, "", opt_ssl_cert, opt_ssl_key, ""
+        };
+    if (context->configure(conf))
+    {
+      WSREP_ERROR("Could not set SSL configuration on provider");
+      return 1;
+    }
+
+    if (context->reload())
+    {
+      WSREP_ERROR("SSL reload on provider failed");
+      return 1;
+    }
+  }
+  wsrep_tls_context = std::move(context);
+  return 0;
 }
 
 static  void wsrep_deinit_ssl()
@@ -905,6 +933,13 @@ int wsrep_init()
     return 1;
   }
 
+  if ( wsrep_init_ssl())
+  {
+    WSREP_ERROR("Could not initialize SSL on provider");
+    Wsrep_server_state::instance().unload_provider();
+    return 1;
+  }
+
   /* Now WSREP is fully initialized */
   global_system_variables.wsrep_on= 1;
   WSREP_ON_= wsrep_provider && strcmp(wsrep_provider, WSREP_NONE);
@@ -916,7 +951,6 @@ int wsrep_init()
 
   WSREP_DEBUG("SR storage init for: %s",
               (wsrep_SR_store_type == WSREP_SR_STORE_TABLE) ? "table" : "void");
-  wsrep_init_ssl();
   return 0;
 }
 
