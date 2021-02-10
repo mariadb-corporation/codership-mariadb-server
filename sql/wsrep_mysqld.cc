@@ -760,6 +760,7 @@ static void wsrep_init_ssl()
 {
     wsrep_tls_context = std::unique_ptr<wsrep::tls_context>(
         Wsrep_server_state::instance().provider().make_tls_context());
+    wsrep_tls_context->get_configuration();
     if (!wsrep_tls_context->is_enabled())
     {
         WSREP_INFO("Enforcing SSL on provider");
