@@ -756,10 +756,17 @@ static void wsrep_init_provider_status_variables()
           provider.vendor().c_str(),  sizeof(provider_vendor) - 1);
 }
 
+#include "wsrep/provider_options.hpp"
+static std::unique_ptr<wsrep::provider_options> tls_options_proxy;
+
 static int wsrep_init_ssl()
 {
+  auto& provider= Wsrep_server_state::instance().provider();
+  auto tmp_options_proxy= std::unique_ptr<wsrep::provider_options>(
+                                                                   new wsrep::provider_options(provider));
+  tmp_options_proxy->initial_options(provider.options());
   auto context= std::unique_ptr<wsrep::tls_context>(
-    Wsrep_server_state::instance().provider().make_tls_context());
+    provider.make_tls_context(*tmp_options_proxy));
   if (!context)
   {
     WSREP_ERROR("Could not create control SSL context for provider");
@@ -805,6 +812,7 @@ static int wsrep_init_ssl()
     }
   }
   wsrep_tls_context = std::move(context);
+  tls_options_proxy = std::move(tmp_options_proxy);
   return 0;
 }
 
