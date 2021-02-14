@@ -10,3 +10,8 @@
 #
 ##############################################################################
 
+MDEV-23092: MDEV-22570 wsrep_provider is read only starting from 10.6
+mdev_6832: MDEV-22570 wsrep_provider is read only starting from 10.6
+variables: MDEV-22570 wsrep_provider is read only starting from 10.6
+variables_debug: MDEV-22570 wsrep_provider is read only starting from 10.6
+wsrep_variables_no_provider: MDEV-22570 wsrep_provider is read only starting from 10.6
