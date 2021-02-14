@@ -33,6 +33,7 @@ SET SESSION wsrep_sync_wait = 0;
 SHOW STATUS LIKE 'wsrep_cluster_status';
 SET SESSION wsrep_sync_wait = default;
 SET GLOBAL wsrep_provider_pc_bootstrap="1";
+SET GLOBAL wsrep_provider_pc_bootstrap=DEFAULT;
 
 # Restart node_2
 --connection node_2

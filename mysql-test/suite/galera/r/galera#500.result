@@ -4,14 +4,15 @@ connection node_1;
 connection node_2;
 connection node_2;
 SET SESSION wsrep_sync_wait = 0;
-SET GLOBAL wsrep_provider_options="gmcast.isolate=2";
+SET GLOBAL wsrep_provider_gmcast_isolate="2";
 connection node_1;
 SET SESSION wsrep_sync_wait = 0;
 SHOW STATUS LIKE 'wsrep_cluster_status';
 Variable_name	Value
 wsrep_cluster_status	non-Primary
 SET SESSION wsrep_sync_wait = default;
-SET GLOBAL wsrep_provider_options="pc.bootstrap=1";
+SET GLOBAL wsrep_provider_pc_bootstrap="1";
+SET GLOBAL wsrep_provider_pc_bootstrap=DEFAULT;
 connection node_2;
 SET SESSION wsrep_on=0;
 connection node_2;
