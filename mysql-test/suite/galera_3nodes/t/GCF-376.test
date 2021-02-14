@@ -29,7 +29,7 @@ LOCK TABLE t1 WRITE;
 --connection node_1
 INSERT INTO t1 VALUES (1, 'b');
 
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 SET SESSION wsrep_sync_wait=0;
 
 # Wait until node #1 leaves the cluster
@@ -63,7 +63,7 @@ SELECT * FROM t1;
 
 # reconnect node #1
 --connection node_1
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 # reconnect node #2
 --connection node_2

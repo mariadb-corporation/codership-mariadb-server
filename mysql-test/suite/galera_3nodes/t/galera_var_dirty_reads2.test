@@ -23,7 +23,7 @@ INSERT INTO t1 VALUES (1);
 --let $wait_condition = SELECT COUNT(*) = 1 FROM t1;
 --source include/wait_condition.inc
 
-SET GLOBAL wsrep_provider_options='gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -112,7 +112,7 @@ EXECUTE stmt_select;
 SELECT COUNT(*) > 0 FROM INFORMATION_SCHEMA.PROCESSLIST;
 
 # Restore cluster
-SET GLOBAL wsrep_provider_options='gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 --source include/galera_wait_ready.inc
 
 --connection node_1

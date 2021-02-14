@@ -35,7 +35,7 @@ SELECT COUNT(*) > 0 FROM mysql.wsrep_streaming_log;
 
 --connection node_1a
 # Force node #1 to go non-primary
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 SET SESSION wsrep_on = OFF;
 --let $wait_condition = SELECT VARIABLE_VALUE = 'non-Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
@@ -69,7 +69,7 @@ SELECT COUNT(*) > 0 FROM mysql.wsrep_streaming_log;
 
 --connection node_1a
 --sleep 6
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --connection node_3
 --let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'

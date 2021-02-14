@@ -38,10 +38,10 @@ INSERT INTO t1 VALUES (31);
 INSERT INTO t1 VALUES (32);
 
 --connection node_2a
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_3a
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_1a
 # wait until cluster is partitioned
@@ -69,11 +69,11 @@ SET SESSION wsrep_sync_wait = DEFAULT;
 
 --connection node_2a
 # reconnect node 2
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --connection node_3a
 # reconnect node 3
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 # wait for the cluster to whole again
 --connection node_1a

@@ -34,7 +34,7 @@ SELECT COUNT(*) `expect 6` FROM mysql.wsrep_streaming_log;
 
 # isolate node 2
 --connection node_2a
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 SET SESSION wsrep_sync_wait = 0;
 --let $wait_condition = SELECT VARIABLE_VALUE = 'OFF' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_ready'
 --source include/wait_condition.inc
@@ -52,7 +52,7 @@ SET SESSION wsrep_sync_wait = DEFAULT;
 
 --connection node_2a
 # reconnect node 2
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 --source include/galera_wait_ready.inc
 SHOW STATUS LIKE 'wsrep_cluster_size';
 

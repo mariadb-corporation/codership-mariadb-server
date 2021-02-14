@@ -28,7 +28,7 @@ SET GLOBAL wsrep_sync_wait=0;
 --connection node_1
 INSERT INTO t1 VALUES (1);
 SET GLOBAL wsrep_sync_wait=0;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_3
 # wait for node_1 to disappear
@@ -48,7 +48,7 @@ UNLOCK TABLES;
 --source include/wait_condition.inc
 
 --connection node_1
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 --source include/galera_wait_ready.inc
 SET GLOBAL wsrep_sync_wait=15;
 DROP TABLE test.t1;

@@ -29,7 +29,7 @@ INSERT INTO t1 VALUES (1, 1);
 # Isolate node_1 and update cluster state to force node 1 into joiner mode
 #
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -58,7 +58,7 @@ SET wsrep_on = OFF;
 --source include/galera_set_sync_point.inc
 
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -81,7 +81,7 @@ INSERT INTO t1 VALUES (3, 2);
 # and commit one more action, so that node_1 loses JOINER state
 #
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -103,7 +103,7 @@ INSERT INTO t1 VALUES (4, 3);
 # THIS IS PC2
 #
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -144,7 +144,7 @@ INSERT INTO t1 VALUES (5, 2);
 # It still is blocked before sending state transfer request in PC2.
 #
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -175,7 +175,7 @@ INSERT INTO t1 VALUES (6, 3);
 --source include/wait_condition.inc
 
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -207,7 +207,7 @@ INSERT INTO t1 VALUES (7, 2);
 # Now disconnect and reconnect node_1 again to generate PC4.
 #
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
@@ -224,7 +224,7 @@ INSERT INTO t1 VALUES (8, 3);
 --source include/wait_condition.inc
 
 --connection node_1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --connection node_2
 --let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';

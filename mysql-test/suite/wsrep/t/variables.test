@@ -4,7 +4,6 @@
 
 call mtr.add_suppression("WSREP: Initial position was provided by configuration or SST, avoiding override");
 
-SET @wsrep_provider_options_saved= @@global.wsrep_provider_options;
 SET @wsrep_cluster_address_saved= @@global.wsrep_cluster_address;
 
 --echo
@@ -160,7 +159,6 @@ SET @@global.wsrep_sst_auth= @wsrep_sst_auth_saved;
 SET GLOBAL wsrep_slave_threads= @wsrep_slave_threads_saved;
 eval SET GLOBAL wsrep_provider= '$WSREP_PROVIDER';
 SET GLOBAL wsrep_cluster_address= @wsrep_cluster_address_saved;
-SET GLOBAL wsrep_provider_options= @wsrep_provider_options_saved;
 --enable_query_log
 
 --source include/galera_wait_ready.inc

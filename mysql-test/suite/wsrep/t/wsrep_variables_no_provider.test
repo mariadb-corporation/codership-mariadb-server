@@ -5,7 +5,6 @@ SELECT @@wsrep_on;
 
 SET @wsrep_slave_threads_global_saved = @@global.wsrep_slave_threads;
 SET @wsrep_debug_saved = @@global.wsrep_debug;
-SET @wsrep_provider_options_saved= @@global.wsrep_provider_options;
 SET @wsrep_cluster_address_saved= @@global.wsrep_cluster_address;
 
 SET GLOBAL wsrep_provider=none;
@@ -31,7 +30,6 @@ SELECT @@session.wsrep_trx_fragment_unit;
 --disable_query_log
 eval SET GLOBAL wsrep_provider= '$WSREP_PROVIDER';
 SET GLOBAL wsrep_cluster_address= @wsrep_cluster_address_saved;
-SET GLOBAL wsrep_provider_options= @wsrep_provider_options_saved;
 --source include/galera_wait_ready.inc
 SET @@global.wsrep_slave_threads = @wsrep_slave_threads_global_saved;
 SET @@global.wsrep_debug = @wsrep_debug_saved;

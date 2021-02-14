@@ -9,11 +9,11 @@
 
 --connection node_1
 SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_weight';
-SET GLOBAL wsrep_provider_options = 'pc.weight=3';
+SET GLOBAL wsrep_provider_pc_weight='3';
 SELECT VARIABLE_VALUE AS expect_5 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_weight';
 
 # Isolate node_1 from the cluster.
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 
 --connection node_2
 # Do not wait for causality as we are no longer in the primary component
@@ -69,12 +69,12 @@ SELECT VARIABLE_VALUE AS expect_ON FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE V
 SELECT VARIABLE_VALUE AS expect_4 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_state';
 SELECT VARIABLE_VALUE AS expect_Synced FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_state_comment';
 
-SET GLOBAL wsrep_provider_options = 'pc.weight=1';
+SET GLOBAL wsrep_provider_pc_weight='1';
 SELECT VARIABLE_VALUE AS expect_1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_weight';
 
 # Resume cluster connectivity on node_1
 --connection node_1
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 
 --let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'
 --source include/wait_condition.inc
@@ -124,8 +124,8 @@ SELECT VARIABLE_VALUE AS expect_ON FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE V
 SELECT VARIABLE_VALUE AS expect_4 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_state';
 SELECT VARIABLE_VALUE AS expect_Synced FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_state_comment';
 
-SET GLOBAL wsrep_provider_options = 'pc.weight=1';
---let $wait_condition = SELECT @@wsrep_provider_options LIKE '%pc.weight = 1%'
+SET GLOBAL wsrep_provider_pc_weight='1';
+--let $wait_condition = SELECT @@wsrep_provider_pc_weight LIKE '1'
 --source include/wait_condition.inc
 
 CALL mtr.add_suppression('WSREP: gcs_caused\\(\\) returned -1');
