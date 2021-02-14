@@ -96,25 +96,33 @@ MYSQL_SYSVAR_STR(wsrep_provider_sysvar_proto,
 static void wsrep_plugin_append_var(wsrep::provider_options::option* opt)
 {
   mysql_sysvar_wsrep_provider_sysvar_proto.name = opt->name();
-  char** val= (char**)::malloc(sizeof(char*));
+  char** val= (char**)my_malloc(PSI_NOT_INSTRUMENTED, sizeof(char*), MYF(0));
   *val = (char*)opt->value();
   mysql_sysvar_wsrep_provider_sysvar_proto.value = val;
   mysql_sysvar_wsrep_provider_sysvar_proto.def_val = opt->default_value();
   st_mysql_sys_var* var= (st_mysql_sys_var*)
-    malloc(sizeof(mysql_sysvar_wsrep_provider_sysvar_proto));
+    my_malloc(PSI_NOT_INSTRUMENTED,
+              sizeof(mysql_sysvar_wsrep_provider_sysvar_proto), MYF(0));
   memcpy(var, &mysql_sysvar_wsrep_provider_sysvar_proto,
          sizeof(mysql_sysvar_wsrep_provider_sysvar_proto));
   sysvars.push_back(var);
   var_to_opt.insert(std::make_pair(var, opt));
 }
 
-static void wsrep_plugin_free_var(st_mysql_sys_var* var)
+static char* wsrep_plugin_get_var_value_ptr(st_mysql_sys_var* var)
 {
   size_t val_ptr_off= (char*)&mysql_sysvar_wsrep_provider_sysvar_proto.value -
     (char*)&mysql_sysvar_wsrep_provider_sysvar_proto;
   char** ptr= (char**)((char*)var + val_ptr_off);
-  free(*ptr);
-  ::free(var);
+  if (ptr) return *ptr;
+  return 0;
+}
+
+static void wsrep_plugin_free_var(st_mysql_sys_var* var)
+{
+
+  my_free(wsrep_plugin_get_var_value_ptr(var));
+  my_free(var);
 }
 
 static int wsrep_plugin_init(void *p)
