@@ -21,7 +21,8 @@ INSERT INTO t1 VALUES ('node2_committed_before');
 INSERT INTO t1 VALUES ('node2_committed_before');
 COMMIT;
 
---source suite/galera/include/galera_unload_provider.inc
+--let $orig_wsrep_cluster_address = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES WHERE VARIABLE_NAME = 'wsrep_cluster_address'`
+SET GLOBAL wsrep_cluster_address = '';
 
 --connection node_1
 --let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'
@@ -53,7 +54,10 @@ INSERT INTO t1 VALUES ('node1_to_be_rollbacked_after');
 INSERT INTO t1 VALUES ('node1_to_be_rollbacked_after');
 
 --connection node_2
---source suite/galera/include/galera_load_provider.inc
+--disable_query_log
+--eval SET GLOBAL wsrep_cluster_address = '$orig_wsrep_cluster_address'
+--enable_query_log
+--source include/galera_wait_ready.inc
 
 #
 # client connections were killed by provider load, so have to re-open here

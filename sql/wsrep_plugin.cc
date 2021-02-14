@@ -21,7 +21,6 @@
 #include "wsrep/provider_options.hpp"
 #include "wsrep_server_state.h"
 
-std::unique_ptr<wsrep::provider_options> options;
 std::vector<st_mysql_sys_var*> sysvars;
 std::map<st_mysql_sys_var*, wsrep::provider_options::option*> var_to_opt;
 
@@ -29,6 +28,12 @@ static int wsrep_provider_sysvar_check(THD *, struct st_mysql_sys_var *var,
                                        void *save, struct st_mysql_value *value)
 {
   WSREP_INFO("Sysvar check");
+  auto options= Wsrep_server_state::get_options();
+  if (!options)
+  {
+    WSREP_ERROR("Provider options not initialized in plugin sysvar check");
+    return 1;
+  }
   auto varopt= var_to_opt.find(var);
   if (varopt == var_to_opt.end())
   {
@@ -42,15 +47,22 @@ static int wsrep_provider_sysvar_check(THD *, struct st_mysql_sys_var *var,
   return 0;
 }
 
-#include "my_stacktrace.h"
-
 static void wsrep_provider_sysvar_update(THD *thd, struct st_mysql_sys_var *var,
                                          void *var_ptr, const void *save)
 {
+  auto options= Wsrep_server_state::get_options();
+  if (!options)
+  {
+    WSREP_ERROR("Provider options not initialized in plugin sysvar update");
+    my_error(ER_UNKNOWN_ERROR, MYF(0));
+    return;
+  }
+
   auto varopt= var_to_opt.find(var);
   if (varopt == var_to_opt.end())
   {
     WSREP_ERROR("Could not match var to option");
+    my_error(ER_UNKNOWN_ERROR, MYF(0));
     return;
   }
   /*
@@ -170,9 +182,12 @@ maria_declare_plugin_end;
 
 int wsrep_plugin_init_provider_options()
 {
-  auto& provider= Wsrep_server_state::instance().provider();
-  options = std::unique_ptr<wsrep::provider_options>(new wsrep::provider_options(provider));
-  options->initial_options(provider.options());
+  auto options= Wsrep_server_state::get_options();
+  if (!options)
+  {
+    WSREP_ERROR("Provider options not initialized before provider plugin init");
+    return 1;
+  }
   options->for_each([](wsrep::provider_options::option* opt)
                     {
                       wsrep_plugin_append_var(opt);
@@ -189,5 +204,4 @@ void wsrep_plugin_deinit_provider_options()
     if (i) wsrep_plugin_free_var(i);
   }
   sysvars.clear();
-  options = nullptr;
 }

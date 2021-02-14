@@ -55,7 +55,6 @@
 #include <sstream>
 
 /* wsrep-lib */
-Wsrep_server_state* Wsrep_server_state::m_instance;
 
 my_bool wsrep_emulate_bin_log= FALSE; // activating parts of binlog interface
 my_bool wsrep_preordered_opt= FALSE;
@@ -836,7 +835,8 @@ int wsrep_init()
   {
     // enable normal operation in case no provider is specified
     global_system_variables.wsrep_on= 0;
-    int err= Wsrep_server_state::instance().load_provider(wsrep_provider, wsrep_provider_options ? wsrep_provider_options : "");
+    int err= Wsrep_server_state::init_provider_and_options(
+        wsrep_provider, wsrep_provider_options ? wsrep_provider_options : "");
     if (err)
     {
       DBUG_PRINT("wsrep",("wsrep::init() failed: %d", err));
@@ -858,10 +858,9 @@ int wsrep_init()
   if (!wsrep_data_home_dir || strlen(wsrep_data_home_dir) == 0)
     wsrep_data_home_dir= mysql_real_data_home;
 
-  if (Wsrep_server_state::instance().load_provider(wsrep_provider,
-                                                   wsrep_provider_options))
+  if (Wsrep_server_state::init_provider_and_options(wsrep_provider,
+                                                    wsrep_provider_options))
   {
-    WSREP_ERROR("Failed to load provider");
     return 1;
   }
 
@@ -874,7 +873,7 @@ int wsrep_init()
                 "wsrep_trx_fragment_size to 0 or use wsrep_provider that "
                 "supports streaming replication.",
                 wsrep_provider, global_system_variables.wsrep_trx_fragment_size);
-    Wsrep_server_state::instance().unload_provider();
+    Wsrep_server_state::instance().deinit_provider();
     return 1;
   }
 
@@ -994,7 +993,7 @@ void wsrep_deinit(bool free_options)
   DBUG_ASSERT(wsrep_inited == 1);
   WSREP_DEBUG("wsrep_deinit");
 
-  Wsrep_server_state::instance().unload_provider();
+  Wsrep_server_state::deinit_provider();
   provider_name[0]=    '\0';
   provider_version[0]= '\0';
   provider_vendor[0]=  '\0';

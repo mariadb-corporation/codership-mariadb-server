@@ -26,6 +26,9 @@ PSI_mutex_key key_LOCK_wsrep_server_state;
 PSI_cond_key  key_COND_wsrep_server_state;
 #endif
 
+Wsrep_server_state* Wsrep_server_state::m_instance;
+std::unique_ptr<wsrep::provider_options> Wsrep_server_state::m_options;
+
 Wsrep_server_state::Wsrep_server_state(const std::string& name,
                                        const std::string& incoming_address,
                                        const std::string& address,
@@ -70,6 +73,36 @@ void Wsrep_server_state::init_once(const std::string& name,
                                         initial_position,
                                         max_protocol_version);
   }
+}
+
+int Wsrep_server_state::init_provider_and_options(const std::string& provider,
+                                                  const std::string& options)
+{
+  DBUG_ASSERT(m_instance);
+  int ret= m_instance->load_provider(provider, options);
+  if (ret)
+  {
+    WSREP_ERROR("Failed to load provider");
+    return ret;
+  }
+
+  m_options= std::unique_ptr<wsrep::provider_options>(
+     new wsrep::provider_options(m_instance->provider()));
+  ret= m_options->initial_options(m_instance->provider().options());
+  if (ret)
+  {
+    WSREP_ERROR("Failed to initialize provider options");
+    m_options = nullptr;
+    m_instance->unload_provider();
+    return ret;
+  }
+  return 0;
+}
+
+void Wsrep_server_state::deinit_provider()
+{
+  m_options = nullptr;
+  m_instance->unload_provider();
 }
 
 void Wsrep_server_state::destroy()
