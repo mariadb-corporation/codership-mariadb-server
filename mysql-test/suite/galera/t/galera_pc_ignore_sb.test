@@ -12,12 +12,11 @@
 
 --connection node_1
 SET @wsrep_cluster_address_orig = @@GLOBAL.wsrep_cluster_address;
-SET @wsrep_provider_options_orig = @@GLOBAL.wsrep_provider_options;
 
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'
 --source include/wait_condition.inc
 
-SET GLOBAL wsrep_provider_options ='pc.ignore_sb=true';
+SET GLOBAL wsrep_provider_pc_ignore_sb='true';
 
 --connection node_2
 --source include/kill_galera.inc
@@ -46,7 +45,7 @@ SET GLOBAL wsrep_cluster_address = @wsrep_cluster_address_orig;
 --let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'
 --source include/wait_condition.inc
 
-SET GLOBAL wsrep_provider_options = @wsrep_provider_options_orig;
+SET GLOBAL wsrep_provider_ignore_sb=DEFAULT;
 
 # Restore original auto_increment_offset values.
 --source include/auto_increment_offset_restore.inc

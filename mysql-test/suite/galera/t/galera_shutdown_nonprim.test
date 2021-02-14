@@ -12,11 +12,11 @@
 --connection node_1
 # Set higher weight for node_1 to keep it in primary
 # while node_2 is isolated.
-SET GLOBAL wsrep_provider_options = 'pc.weight=2';
+SET GLOBAL wsrep_provider_pc.weight='2';
 
 --connection node_2
 # Isolate node_2 from the group and wait until wsrep_ready becomes OFF.
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 SET SESSION wsrep_sync_wait = 0;
 --let $wait_condition = SELECT VARIABLE_VALUE = 'OFF' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_ready'
 --source include/wait_condition.inc
@@ -32,5 +32,5 @@ SET SESSION wsrep_sync_wait = 0;
 --source include/wait_condition.inc
 
 # Restore original settings.
-SET GLOBAL wsrep_provider_options = 'pc.weight = 1';
+SET GLOBAL wsrep_provider_pc_weight='1';
 --source include/auto_increment_offset_restore.inc

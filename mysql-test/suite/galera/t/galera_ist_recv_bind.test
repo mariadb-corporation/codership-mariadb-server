@@ -8,10 +8,10 @@
 --source include/big_test.inc
 
 --connection node_1
-SELECT @@wsrep_provider_options LIKE '%ist.recv_bind = 127.0.0.1%';
+SELECT @@wsrep_provider_ist_recv_bind LIKE '%127.0.0.1%';
 
 --connection node_2
-SELECT @@wsrep_provider_options LIKE '%ist.recv_bind = 127.0.0.1%';
+SELECT @@wsrep_provider_ist_recv_bind LIKE '%127.0.0.1%';
 
 # Isolate node #2 
 

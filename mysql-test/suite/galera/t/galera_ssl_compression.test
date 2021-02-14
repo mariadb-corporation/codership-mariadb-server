@@ -20,7 +20,7 @@ SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_N
 
 # Check that the socket.ssl_compression provider option is not dynamic
 --error ER_WRONG_ARGUMENTS
-SET GLOBAL wsrep_provider_options_socket_ssl_compression="No";
+SET GLOBAL wsrep_provider_socket_ssl_compression="No";
 
 CREATE TABLE t1 (f1 VARCHAR(333) PRIMARY KEY, f2 BLOB) Engine=InnoDB;
 INSERT INTO t1 VALUES (REPEAT('a', 333), REPEAT('b', 65535));
