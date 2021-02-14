@@ -40,7 +40,8 @@ SET GLOBAL wsrep_max_ws_size = 20000;
 --enable_query_log
 
 --disable_query_log
---eval SET GLOBAL wsrep_max_ws_size = $wsrep_max_ws_size_orig
+SET GLOBAL wsrep_max_ws_size=DEFAULT;
+SET GLOBAL wsrep_provider_repl_max_ws_size=DEFAULT;
 --enable_query_log
 
 DROP TABLE t1;

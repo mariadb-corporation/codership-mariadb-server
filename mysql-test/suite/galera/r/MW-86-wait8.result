@@ -11,7 +11,7 @@ connection node_1;
 CREATE TABLE t_wait8 (f1 INTEGER) ENGINE=InnoDB;
 INSERT INTO t_wait8 VALUES (1);
 connection node_2;
-SET GLOBAL wsrep_provider_options = "repl.causal_read_timeout=PT0.1S";
+SET GLOBAL wsrep_provider_repl_causal_read_timeout="PT0.1S";
 SET SESSION debug_sync = "now WAIT_FOR sync.wsrep_apply_cb_reached";
 SHOW BINARY LOGS;
 SHOW BINLOG EVENTS;

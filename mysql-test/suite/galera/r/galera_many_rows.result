@@ -12,7 +12,7 @@ INSERT INTO t1 (f2) SELECT a1.f1 FROM ten AS a1, ten AS a2, ten AS a3, ten AS a4
 connection node_2;
 SET SESSION wsrep_sync_wait = 0;
 SET SESSION wsrep_sync_wait = 15;
-SET GLOBAL wsrep_provider_options = 'repl.causal_read_timeout=PT1H';
+SET GLOBAL wsrep_provider_repl_causal_read_timeout='PT1H';
 SELECT COUNT(*) FROM t1;
 COUNT(*)
 100000

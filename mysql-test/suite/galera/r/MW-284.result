@@ -5,7 +5,7 @@ call mtr.add_suppression("\\[ERROR\\] Error reading packet from server: WSREP ha
 call mtr.add_suppression("WSREP has not yet prepared node for application use");
 connection node_1;
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
-SET GLOBAL wsrep_provider_options='gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 SET SESSION wsrep_on = OFF;
 SET SESSION wsrep_on = ON;
 SET global wsrep_sync_wait=0;
@@ -16,7 +16,7 @@ SELECT @@wsrep_on;
 START SLAVE;
 include/wait_for_slave_param.inc [Slave_IO_Running]
 connection node_1;
-SET GLOBAL wsrep_provider_options='gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 connection node_3;
 include/wait_for_slave_to_start.inc
 connection node_1;

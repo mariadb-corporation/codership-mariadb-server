@@ -1,7 +1,7 @@
 connection node_2;
 connection node_1;
 connection node_1;
-SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
+SET GLOBAL wsrep_provider_pc_weight='2';
 SET SESSION wsrep_trx_fragment_size = 1;
 CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 connection node_2;

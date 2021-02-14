@@ -7,7 +7,7 @@ connection node_1;
 CREATE TABLE t1 (f1 INTEGER) ENGINE=INNODB;
 INSERT INTO t1 VALUES (1);
 connection node_2;
-SET GLOBAL wsrep_provider_options='gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 connection node_1;
 connection node_2;
 SET SESSION wsrep_sync_wait = 0;
@@ -53,7 +53,7 @@ ERROR 08S01: WSREP has not yet prepared node for application use
 SELECT COUNT(*) > 0 FROM INFORMATION_SCHEMA.PROCESSLIST;
 COUNT(*) > 0
 1
-SET GLOBAL wsrep_provider_options='gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 connection node_1;
 connection node_2;
 DROP TABLE t1;

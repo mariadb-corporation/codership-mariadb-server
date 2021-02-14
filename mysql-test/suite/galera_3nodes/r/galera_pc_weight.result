@@ -4,11 +4,11 @@ connection node_1;
 SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_weight';
 VARIABLE_VALUE = 3
 1
-SET GLOBAL wsrep_provider_options = 'pc.weight=3';
+SET GLOBAL wsrep_provider_pc_weight='3';
 SELECT VARIABLE_VALUE AS expect_5 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_weight';
 expect_5
 5
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 connection node_2;
 SET SESSION wsrep_sync_wait=0;
 SET SESSION wsrep_on=OFF;
@@ -78,12 +78,12 @@ expect_4
 SELECT VARIABLE_VALUE AS expect_Synced FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_state_comment';
 expect_Synced
 Synced
-SET GLOBAL wsrep_provider_options = 'pc.weight=1';
+SET GLOBAL wsrep_provider_pc_weight='1';
 SELECT VARIABLE_VALUE AS expect_1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_weight';
 expect_1
 1
 connection node_1;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 connection node_2;
 connection node_3;
 connection node_2;
@@ -153,7 +153,7 @@ expect_4
 SELECT VARIABLE_VALUE AS expect_Synced FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_state_comment';
 expect_Synced
 Synced
-SET GLOBAL wsrep_provider_options = 'pc.weight=1';
+SET GLOBAL wsrep_provider_pc_weight='1';
 CALL mtr.add_suppression('WSREP: gcs_caused\\(\\) returned -1');
 connection node_2;
 CALL mtr.add_suppression('SYNC message from member');

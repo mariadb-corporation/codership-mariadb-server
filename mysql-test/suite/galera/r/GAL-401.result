@@ -1,15 +1,15 @@
 connection node_2;
 connection node_1;
-SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=true';
+SET GLOBAL wsrep_provider_pc_weight='2';
 connection node_2;
 SET @@global.wsrep_desync = 1;
 SET SESSION wsrep_dirty_reads=1;
 SET SESSION wsrep_sync_wait=0;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY, f2 CHAR(1));
 connection node_2;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate=0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 SET wsrep_dirty_reads=0;
 SHOW STATUS LIKE 'wsrep_desync_count';
 Variable_name	Value
@@ -26,4 +26,4 @@ t1	CREATE TABLE `t1` (
 DROP TABLE t1;
 CALL mtr.add_suppression("WSREP: Protocol violation. JOIN message sender (.*) is not in state transfer \\(SYNCED\\). Message ignored.");
 connection node_1;
-SET GLOBAL wsrep_provider_options = 'pc.ignore_sb=false';
+SET GLOBAL wsrep_provider_pc_weight=DEFAULT;

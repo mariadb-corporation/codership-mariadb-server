@@ -24,9 +24,9 @@ BEGIN;
 INSERT INTO t1 VALUES (31);
 INSERT INTO t1 VALUES (32);
 connection node_2a;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 connection node_3a;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+SET GLOBAL wsrep_provider_gmcast_isolate='1';
 connection node_1a;
 SET SESSION wsrep_sync_wait = 0;
 SHOW STATUS LIKE 'wsrep_cluster_status';
@@ -46,9 +46,9 @@ Variable_name	Value
 wsrep_cluster_status	non-Primary
 SET SESSION wsrep_sync_wait = DEFAULT;
 connection node_2a;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 connection node_3a;
-SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+SET GLOBAL wsrep_provider_gmcast_isolate='0';
 connection node_1a;
 connection node_2a;
 connection node_3a;
