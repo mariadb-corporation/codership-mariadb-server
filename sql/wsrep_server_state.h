@@ -1,4 +1,4 @@
-/* Copyright 2018 Codership Oy <info@codership.com>
+/* Copyright 2018-2021 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -65,6 +65,20 @@ public:
     return (get_provider().capabilities() & capability);
   }
 
+  /* Append system variable mapped to provider option. */
+  static void append_sysvar(st_mysql_sys_var *var,
+                            wsrep::provider_options::option* opt);
+
+  /* Return provider option corresponding to system variable. */
+  static wsrep::provider_options::option*
+  sysvar_to_option(st_mysql_sys_var *var);
+
+  /* Return array of system variables corresponding to wsrep provider
+     options. */
+  static st_mysql_sys_var** sysvars()
+  {
+    return &m_sysvars[0];
+  }
 private:
   Wsrep_server_state(const std::string& name,
                      const std::string& incoming_address,
@@ -78,7 +92,8 @@ private:
   Wsrep_server_service m_service;
   static Wsrep_server_state* m_instance;
   static std::unique_ptr<wsrep::provider_options> m_options;
-
+  static std::vector<st_mysql_sys_var*> m_sysvars;
+  static std::map<st_mysql_sys_var*, wsrep::provider_options::option*> m_var_to_opt;
 };
 
 #endif // WSREP_SERVER_STATE_H

@@ -28,6 +28,9 @@ PSI_cond_key  key_COND_wsrep_server_state;
 
 Wsrep_server_state* Wsrep_server_state::m_instance;
 std::unique_ptr<wsrep::provider_options> Wsrep_server_state::m_options;
+std::vector<st_mysql_sys_var*> Wsrep_server_state::m_sysvars;
+std::map<st_mysql_sys_var*, wsrep::provider_options::option*>
+Wsrep_server_state::m_var_to_opt;
 
 Wsrep_server_state::Wsrep_server_state(const std::string& name,
                                        const std::string& incoming_address,
@@ -114,5 +117,30 @@ void Wsrep_server_state::destroy()
     m_instance= 0;
     mysql_mutex_destroy(&LOCK_wsrep_server_state);
     mysql_cond_destroy(&COND_wsrep_server_state);
+    m_var_to_opt.clear();
+    for (auto var : m_sysvars)
+    {
+      my_free(var);
+    }
+    m_sysvars.clear();
   }
+}
+
+void Wsrep_server_state::append_sysvar(st_mysql_sys_var *var,
+                                       wsrep::provider_options::option* opt)
+{
+  m_sysvars.push_back(var);
+  if (opt) /* Allow null termination of m_sysvars */
+    m_var_to_opt.insert(std::make_pair(var, opt));
+}
+
+wsrep::provider_options::option*
+Wsrep_server_state::sysvar_to_option(st_mysql_sys_var *var)
+{
+  auto i= m_var_to_opt.find(var);
+  if (i != m_var_to_opt.end())
+  {
+    return i->second;
+  }
+  return nullptr;
 }

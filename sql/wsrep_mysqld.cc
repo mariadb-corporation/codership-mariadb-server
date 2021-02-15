@@ -812,8 +812,6 @@ void wsrep_deinit_server()
 {
   wsrep_deinit_schema();
   Wsrep_server_state::destroy();
-  extern void wsrep_plugin_deinit_provider_options();
-  wsrep_plugin_deinit_provider_options();
 }
 
 int wsrep_init()
@@ -875,9 +873,6 @@ int wsrep_init()
   WSREP_ON_= wsrep_provider && strcmp(wsrep_provider, WSREP_NONE);
   wsrep_service_started= 1;
 
-  // wsrep_init_provider_sysvars();
-  extern int wsrep_plugin_init_provider_options();
-  wsrep_plugin_init_provider_options();
   wsrep_init_provider_status_variables();
   wsrep_capabilities_export(Wsrep_server_state::instance().provider().capabilities(),
                             &wsrep_provider_capabilities);
