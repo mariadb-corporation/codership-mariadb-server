@@ -1,0 +1,22 @@
+Copy gvwstate from node_1
+Shutdown node_2
+Move gvwstate under node_2 datadir
+Start node_2, should fail
+Start node_2, should succeed
+Copy gvwstate from node_1
+Kill node_2
+# Kill the server
+Move gvwstate under node_2 datadir
+Start node_2, should fail
+Start node_2, should succeed
+Copy gvwstate from node_3
+Shutdown node_2
+Move gvwstate under node_2 datadir
+Start node_2, should fail
+Start node_2, should succeed
+Copy gvwstate from node_3
+Kill node_2
+# Kill the server
+Move gvwstate under node_2 datadir
+Start node_2, should fail
+Start node_2, should succeed
