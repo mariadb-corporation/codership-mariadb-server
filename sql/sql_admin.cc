@@ -447,7 +447,7 @@ dbug_err:
   */
 static bool wsrep_toi_replication(THD *thd, TABLE_LIST *tables)
 {
-  if (!WSREP(thd) || !WSREP_CLIENT(thd)) return false;
+  if (!WSREP(thd)) return true;
 
   LEX *lex= thd->lex;
   /* only handle OPTIMIZE and REPAIR here */
