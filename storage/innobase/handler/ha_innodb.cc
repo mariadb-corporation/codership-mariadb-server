@@ -18917,7 +18917,7 @@ wsrep_innobase_kill_one_trx(
 	{
 	  WSREP_DEBUG("innodb kill transaction skipped due to wsrep_aborter set");
 	  wsrep_thd_UNLOCK(thd);
-	  DBUG_RETURN(0);
+	  DBUG_VOID_RETURN;
 	}
 
 	if (wsrep_thd_exec_mode(thd) != LOCAL_STATE) {
