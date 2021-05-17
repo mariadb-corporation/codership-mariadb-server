@@ -6808,10 +6808,18 @@ int handler::ha_update_row(const uchar *old_data, const uchar *new_data)
     rows_changed++;
     error= binlog_log_row(table, old_data, new_data, log_func);
 #ifdef WITH_WSREP
+    THD *thd = ha_thd();
     if (table_share->tmp_table == NO_TMP_TABLE &&
-        WSREP(ha_thd()) && (error= wsrep_after_row(ha_thd())))
+        WSREP(thd) && (error= wsrep_after_row(thd)))
     {
       return error;
+    }
+    if (WSREP(thd) && (!table->s->primary_key || table->s->primary_key == MAX_KEY))
+    {
+      if (thd->wsrep_cs().mark_transaction_pa_unsafe())
+      {
+	WSREP_DEBUG("session does not have active transaction, can not mark as PA unsafe");
+      }
     }
 #endif /* WITH_WSREP */
   }
@@ -6870,10 +6878,18 @@ int handler::ha_delete_row(const uchar *buf)
     rows_changed++;
     error= binlog_log_row(table, buf, 0, log_func);
 #ifdef WITH_WSREP
+    THD *thd = ha_thd();
     if (table_share->tmp_table == NO_TMP_TABLE &&
-        WSREP(ha_thd()) && (error= wsrep_after_row(ha_thd())))
+        WSREP(thd) && (error= wsrep_after_row(thd)))
     {
       return error;
+    }
+    if (WSREP(thd) && (!table->s->primary_key || table->s->primary_key == MAX_KEY))
+    {
+      if (thd->wsrep_cs().mark_transaction_pa_unsafe())
+      {
+	WSREP_DEBUG("session does not have active transaction, can not mark as PA unsafe");
+      }
     }
 #endif /* WITH_WSREP */
   }
@@ -6944,6 +6960,18 @@ void handler::use_hidden_primary_key()
 {
   /* fallback to use all columns in the table to identify row */
   table->column_bitmaps_set(&table->s->all_set, table->write_set);
+#ifdef WITH_WSREP
+  /* update/delete with no explicit primary key, will fall back to full table
+     scanning in replication applying. This scanning involves excessive row
+     locking, which hard to handle in parallel applying control. We therefore
+     disable parallel applying for this transaction
+  */
+  THD *thd= table->in_use;
+  if (WSREP(thd)) {
+    thd->wsrep_PA_safe= false;
+    WSREP_INFO("PA SAFE skipped");
+  }
+#endif /* WITH_WSREP */
 }
 
 
