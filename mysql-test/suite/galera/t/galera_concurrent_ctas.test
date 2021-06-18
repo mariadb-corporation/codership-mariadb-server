@@ -1,5 +1,7 @@
 --source include/galera_cluster.inc
 --source include/big_test.inc
+--source include/have_debug_sync.inc
+--source include/galera_have_debug_sync.inc
 
 --write_file $MYSQLTEST_VARDIR/tmp/galera_concurrent.sql
 CREATE table t1 as SELECT SLEEP(0.1);
@@ -52,6 +54,38 @@ while($run)
 
 --remove_file $MYSQLTEST_VARDIR/tmp/galera_concurrent.sql
 
---source include/galera_end.inc
---echo # End of test
 
+
+--echo *****************************************************************
+--echo Second test scenario
+--echo *****************************************************************
+
+
+SET GLOBAL wsrep_slave_threads = 2;
+SET SESSION wsrep_sync_wait = 0;
+
+# sync point for first transaction
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_set_sync_point.inc
+
+--connection node_2
+START TRANSACTION;
+CREATE TABLE t1 as SELECT SLEEP(0.1);
+--send COMMIT;
+
+# wait for first transaction to reach sync point
+--connection node_1
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_wait_sync_point.inc
+--source include/galera_clear_sync_point.inc
+
+CREATE TABLE t1 as SELECT SLEEP(0.1);
+
+--sleep 5
+
+# release first transaction
+--let $galera_sync_point = apply_monitor_slave_enter_sync
+--source include/galera_signal_sync_point.inc
+--source include/galera_clear_sync_point.inc
+
+SET GLOBAL wsrep_slave_threads = DEFAULT;
