@@ -60,8 +60,7 @@ while($run)
 --echo Second test scenario
 --echo *****************************************************************
 
-
-SET GLOBAL wsrep_slave_threads = 2;
+--connection node_1
 SET SESSION wsrep_sync_wait = 0;
 
 # sync point for first transaction
@@ -69,9 +68,8 @@ SET SESSION wsrep_sync_wait = 0;
 --source include/galera_set_sync_point.inc
 
 --connection node_2
-START TRANSACTION;
 CREATE TABLE t1 as SELECT SLEEP(0.1);
---send COMMIT;
+
 
 # wait for first transaction to reach sync point
 --connection node_1
@@ -79,7 +77,7 @@ CREATE TABLE t1 as SELECT SLEEP(0.1);
 --source include/galera_wait_sync_point.inc
 --source include/galera_clear_sync_point.inc
 
-CREATE TABLE t1 as SELECT SLEEP(0.1);
+CREATE TABLE t1 as SELECT SLEEP(0.2);
 
 --sleep 5
 
@@ -88,4 +86,5 @@ CREATE TABLE t1 as SELECT SLEEP(0.1);
 --source include/galera_signal_sync_point.inc
 --source include/galera_clear_sync_point.inc
 
-SET GLOBAL wsrep_slave_threads = DEFAULT;
+
+DROP TABLE t1;
