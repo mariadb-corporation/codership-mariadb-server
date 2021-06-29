@@ -1748,7 +1748,7 @@ MDL_lock::can_grant_lock(enum_mdl_type type_arg,
   bitmap_t waiting_incompat_map= incompatible_waiting_types_bitmap()[type_arg];
   bitmap_t granted_incompat_map= incompatible_granted_types_bitmap()[type_arg];
 
-#ifdef WITH_WSREP
+#ifdef WITH_WSREP_OUT
   /*
     Approve lock request in BACKUP namespace for BF threads.
     We should get rid of this code and forbid FTWRL/BACKUP statements

@@ -2331,6 +2331,14 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
       ticket->wsrep_report(wsrep_debug);
       mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
     }
+    else if (granted_thd->lex->sql_command == SQLCOM_BACKUP ||
+             granted_thd->lex->sql_command == SQLCOM_BACKUP_LOCK)
+      //             granted_thd->mdl_context.has_explicit_locks())
+    {
+      WSREP_DEBUG("BF thread waiting for BACKUP");
+      ticket->wsrep_report(wsrep_debug);
+      mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+    }
     else if (request_thd->lex->sql_command == SQLCOM_DROP_TABLE)
     {
       WSREP_DEBUG("DROP caused BF abort, conf %s",
