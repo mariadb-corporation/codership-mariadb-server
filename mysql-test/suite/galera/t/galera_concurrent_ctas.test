@@ -60,7 +60,8 @@ while($run)
 --echo Second test scenario
 --echo *****************************************************************
 
---connection node_1
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1a
 SET SESSION wsrep_sync_wait = 0;
 
 # sync point for first transaction
@@ -70,21 +71,28 @@ SET SESSION wsrep_sync_wait = 0;
 --connection node_2
 CREATE TABLE t1 as SELECT SLEEP(0.1);
 
-
 # wait for first transaction to reach sync point
---connection node_1
+--connection node_1a
 --let $galera_sync_point = apply_monitor_slave_enter_sync
 --source include/galera_wait_sync_point.inc
 --source include/galera_clear_sync_point.inc
 
-CREATE TABLE t1 as SELECT SLEEP(0.2);
+--connection node_1
+# in 10.4 CTAS will be retried, making sure retrying will not happen now
+SET SESSION wsrep_retry_autocommit = 0;
+--send CREATE TABLE t1 as SELECT SLEEP(0.2);
 
 --sleep 5
 
 # release first transaction
+--connection node_1a
 --let $galera_sync_point = apply_monitor_slave_enter_sync
 --source include/galera_signal_sync_point.inc
 --source include/galera_clear_sync_point.inc
+
+--connection node_1
+--error ER_LOCK_DEADLOCK
+--reap
 
 
 DROP TABLE t1;
