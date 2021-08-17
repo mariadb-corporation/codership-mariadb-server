@@ -9157,6 +9157,18 @@ static
 void sql_kill(THD *thd, longlong id, killed_state state, killed_type type)
 {
   uint error;
+#ifdef WITH_WSREP
+  if (WSREP(thd))
+  {
+    WSREP_INFO("sql_kill called");
+    if (thd->wsrep_applier)
+    {
+      WSREP_INFO("KILL in applying, bailing out here");
+      return;
+    }
+    WSREP_TO_ISOLATION_BEGIN(WSREP_MYSQL_DB, NULL, NULL)
+  }
+#endif /* WITH_WSREP */
   if (likely(!(error= kill_one_thread(thd, id, state, type))))
   {
     if (!thd->killed)
@@ -9166,6 +9178,11 @@ void sql_kill(THD *thd, longlong id, killed_state state, killed_type type)
   }
   else
     my_error(error, MYF(0), id);
+#ifdef WITH_WSREP
+  return;
+ wsrep_error_label:
+  my_error(ER_CANNOT_USER, MYF(0), id);
+#endif /* WITH_WSREP */
 }
 
 
