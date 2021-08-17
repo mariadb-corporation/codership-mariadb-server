@@ -18824,7 +18824,6 @@ wsrep_innobase_kill_one_trx(
 	trx_t *victim_trx,
 	ibool signal)
 {
-        bool awake 		   = false;
         ut_ad(bf_thd);
         ut_ad(victim_trx);
         ut_ad(lock_mutex_own());
@@ -18867,7 +18866,8 @@ wsrep_innobase_kill_one_trx(
 	if (wsrep_thd_query_state(thd) == QUERY_EXITING) {
 		WSREP_DEBUG("kill trx EXITING for " TRX_ID_FMT,
 			    victim_trx->id);
-                goto ret_unlock;
+               wsrep_thd_UNLOCK(thd);
+               DBUG_VOID_RETURN;
 	}
 
 	if (wsrep_thd_exec_mode(thd) != LOCAL_STATE) {
@@ -18883,13 +18883,18 @@ wsrep_innobase_kill_one_trx(
         case MUST_ABORT:
 		WSREP_DEBUG("victim " TRX_ID_FMT " in MUST ABORT state",
 			    victim_trx->id);
-                goto ret_awake;
+               wsrep_thd_UNLOCK(thd);
+               wsrep_thd_awake(thd, signal);
+               DBUG_VOID_RETURN;
+               break;
 	case ABORTED:
 	case ABORTING: // fall through
 	default:
 		WSREP_DEBUG("victim " TRX_ID_FMT " in state %d",
 			    victim_trx->id, wsrep_thd_get_conflict_state(thd));
-                goto ret_unlock;
+               wsrep_thd_UNLOCK(thd);
+               DBUG_VOID_RETURN;
+               break;
 	}
 
 	switch (wsrep_thd_query_state(thd)) {
@@ -18917,7 +18922,10 @@ wsrep_innobase_kill_one_trx(
 					    TRX_ID_FMT,
 					    victim_trx->id);
 				wsrep_thd_awake(thd, signal);
-				goto ret_awake;
+                               wsrep_thd_UNLOCK(thd);
+                               wsrep_thd_awake(thd, signal);
+                               DBUG_VOID_RETURN;
+                               break;
 			case WSREP_OK:
 				break;
 			default:
@@ -18986,7 +18994,7 @@ wsrep_innobase_kill_one_trx(
 			wsrep_thd_UNLOCK(thd);
 			wsrep_abort_slave_trx(bf_seqno,
 					      wsrep_thd_trx_seqno(thd));
-			goto ret_unlock;
+                       DBUG_VOID_RETURN;
 		}
 
 		if (wsrep_aborting_thd_contains(thd)) {
@@ -19021,7 +19029,8 @@ wsrep_innobase_kill_one_trx(
 			DBUG_PRINT("wsrep",("signalling wsrep rollbacker"));
 			WSREP_DEBUG("signaling aborter");
 			wsrep_unlock_rollback();
-			goto ret_unlock;
+                        wsrep_thd_UNLOCK(thd);
+                        break;
                 }
 
 		break;
@@ -19029,23 +19038,11 @@ wsrep_innobase_kill_one_trx(
 	default:
 		WSREP_WARN("bad wsrep query state: %d",
 			  wsrep_thd_query_state(thd));
-		goto ret_unlock;
-                break;
+               wsrep_thd_UNLOCK(thd);
+               break;
 	}
 
-
-ret_awake:
-	awake= true;
-
-ret_unlock:
-	trx_mutex_exit(victim_trx);
-	lock_mutex_exit();
-	if (awake)
-		wsrep_thd_awake(thd, KILL_QUERY);
-	wsrep_thd_kill_UNLOCK(thd);
-
 	DBUG_VOID_RETURN;
-
 }
 
 static
