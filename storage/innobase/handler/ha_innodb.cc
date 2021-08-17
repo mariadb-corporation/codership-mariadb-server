@@ -156,7 +156,7 @@ wsrep_ws_handle(THD* thd, const trx_t* trx) {
 }
 
 extern void wsrep_cleanup_transaction(THD *thd);
-static void wsrep_abort_transaction(handlerton*, THD *, THD *, my_bool, int kill_signal=-1);
+static void wsrep_abort_transaction(handlerton*, THD *, THD *, my_bool);
 static void wsrep_fake_trx_id(handlerton* hton, THD *thd);
 static int innobase_wsrep_set_checkpoint(handlerton* hton, const XID* xid);
 static int innobase_wsrep_get_checkpoint(handlerton* hton, XID* xid);
@@ -18822,9 +18822,9 @@ wsrep_innobase_kill_one_trx(
 	MYSQL_THD const bf_thd,
 	const trx_t * const bf_trx,
 	trx_t *victim_trx,
-	ibool signal,
-	int kill_signal= KILL_QUERY)
+	ibool signal)
 {
+        bool awake 		   = false;
         ut_ad(bf_thd);
         ut_ad(victim_trx);
         ut_ad(lock_mutex_own());
@@ -18867,8 +18867,7 @@ wsrep_innobase_kill_one_trx(
 	if (wsrep_thd_query_state(thd) == QUERY_EXITING) {
 		WSREP_DEBUG("kill trx EXITING for " TRX_ID_FMT,
 			    victim_trx->id);
-		wsrep_thd_UNLOCK(thd);
-		DBUG_VOID_RETURN;
+                goto ret_unlock;
 	}
 
 	if (wsrep_thd_exec_mode(thd) != LOCAL_STATE) {
@@ -18884,18 +18883,13 @@ wsrep_innobase_kill_one_trx(
         case MUST_ABORT:
 		WSREP_DEBUG("victim " TRX_ID_FMT " in MUST ABORT state",
 			    victim_trx->id);
-		wsrep_thd_UNLOCK(thd);
-		wsrep_thd_awake(thd, signal, kill_signal);
-		DBUG_VOID_RETURN;
-		break;
+                goto ret_awake;
 	case ABORTED:
 	case ABORTING: // fall through
 	default:
 		WSREP_DEBUG("victim " TRX_ID_FMT " in state %d",
 			    victim_trx->id, wsrep_thd_get_conflict_state(thd));
-		wsrep_thd_UNLOCK(thd);
-		DBUG_VOID_RETURN;
-		break;
+                goto ret_unlock;
 	}
 
 	switch (wsrep_thd_query_state(thd)) {
@@ -18922,10 +18916,8 @@ wsrep_innobase_kill_one_trx(
 				WSREP_DEBUG("cancel commit warning: "
 					    TRX_ID_FMT,
 					    victim_trx->id);
-				wsrep_thd_UNLOCK(thd);
-				wsrep_thd_awake(thd, signal, kill_signal);
-				DBUG_VOID_RETURN;
-				break;
+				wsrep_thd_awake(thd, signal);
+				goto ret_awake;
 			case WSREP_OK:
 				break;
 			default:
@@ -18942,7 +18934,7 @@ wsrep_innobase_kill_one_trx(
 			}
 		}
 		wsrep_thd_UNLOCK(thd);
-		wsrep_thd_awake(thd, signal, kill_signal);
+		wsrep_thd_awake(thd, signal);
 		break;
 	case QUERY_EXEC:
 		/* it is possible that victim trx is itself waiting for some
@@ -18965,7 +18957,7 @@ wsrep_innobase_kill_one_trx(
 			}
 
 			wsrep_thd_UNLOCK(thd);
-			wsrep_thd_awake(thd, signal, kill_signal);
+			wsrep_thd_awake(thd, signal);
 		} else {
 			/* abort currently executing query */
 			DBUG_PRINT("wsrep",("sending KILL_QUERY to: %lu",
@@ -18975,7 +18967,7 @@ wsrep_innobase_kill_one_trx(
 			/* Note that innobase_kill_query will take lock_mutex
 			and trx_mutex */
 			wsrep_thd_UNLOCK(thd);
-			wsrep_thd_awake(thd, signal, kill_signal);
+			wsrep_thd_awake(thd, signal);
 
 			/* for BF thd, we need to prevent him from committing */
 			if (wsrep_thd_exec_mode(thd) == REPL_RECV) {
@@ -18994,30 +18986,26 @@ wsrep_innobase_kill_one_trx(
 			wsrep_thd_UNLOCK(thd);
 			wsrep_abort_slave_trx(bf_seqno,
 					      wsrep_thd_trx_seqno(thd));
-			DBUG_VOID_RETURN;
+			goto ret_unlock;
 		}
 
-		/* in the following, a background rollbacker thread is assigned
-		   to do the rollback on behalf the the idle victim.
-		   however, if this is execution manual kill command, and the
-		   kill state is not KILL_QUERY, rollback is not proper treatment
-		   for the victim, and we fall back to THD::awake with wanted
-		   kill state
-		*/
-
-		if (kill_signal != KILL_QUERY) {
-			/* manual kill command */
-			WSREP_DEBUG("Manual kill command: %d", kill_signal);
-			wsrep_thd_UNLOCK(thd);
-			wsrep_thd_awake(thd, signal, kill_signal);
-		} else {
+		if (wsrep_aborting_thd_contains(thd)) {
+			WSREP_WARN("duplicate thd aborter %lu",
+			           (ulong) thd_get_thread_id(thd));
+                } else {
+                	wsrep_aborting_thd_enqueue(thd);
+			DBUG_PRINT("wsrep",("enqueuing trx abort for %lu",
+			                    thd_get_thread_id(thd)));
+			WSREP_DEBUG("enqueuing trx abort for (%lu)",
+			            thd_get_thread_id(thd));
 			/* wsrep_thd_UNLOCK, will release the victim to proceed
 			   after net_read(), we set victim's state to ABORTING,
 			   which keeps the victim waiting */
-			wsrep_thd_set_conflict_state(thd, ABORTING);
-
-			/* brute force abort */
-			wsrep_lock_rollback();
+                
+                         /* This will lock thd from proceeding after net_read() */
+                        wsrep_thd_set_conflict_state(thd, ABORTING);
+                        /* brute force abort */
+                        wsrep_lock_rollback();
 
 			if (wsrep_aborting_thd_contains(thd)) {
 				WSREP_WARN("duplicate thd aborter %lu",
@@ -19033,19 +19021,31 @@ wsrep_innobase_kill_one_trx(
 			DBUG_PRINT("wsrep",("signalling wsrep rollbacker"));
 			WSREP_DEBUG("signaling aborter");
 			wsrep_unlock_rollback();
-			wsrep_thd_UNLOCK(thd);
-		}
+			goto ret_unlock;
+                }
 
 		break;
 	}
 	default:
 		WSREP_WARN("bad wsrep query state: %d",
 			  wsrep_thd_query_state(thd));
-		wsrep_thd_UNLOCK(thd);
-		break;
+		goto ret_unlock;
+                break;
 	}
 
+
+ret_awake:
+	awake= true;
+
+ret_unlock:
+	trx_mutex_exit(victim_trx);
+	lock_mutex_exit();
+	if (awake)
+		wsrep_thd_awake(thd, KILL_QUERY);
+	wsrep_thd_kill_UNLOCK(thd);
+
 	DBUG_VOID_RETURN;
+
 }
 
 static
@@ -19055,8 +19055,7 @@ wsrep_abort_transaction(
 	handlerton*,
 	THD *bf_thd,
 	THD *victim_thd,
-	my_bool signal,
-	int kill_signal)
+	my_bool signal)
 {
 	DBUG_ENTER("wsrep_abort_transaction");
 
@@ -19071,7 +19070,7 @@ wsrep_abort_transaction(
 	if (victim_trx) {
 		lock_mutex_enter();
 		trx_mutex_enter(victim_trx);
-		wsrep_innobase_kill_one_trx(bf_thd, bf_trx, victim_trx, signal, kill_signal);
+		wsrep_innobase_kill_one_trx(bf_thd, bf_trx, victim_trx, signal);
 		lock_mutex_exit();
 		trx_mutex_exit(victim_trx);
 		wsrep_srv_conc_cancel_wait(victim_trx);
@@ -19082,8 +19081,8 @@ wsrep_abort_transaction(
 		wsrep_thd_LOCK(victim_thd);
 		wsrep_thd_set_conflict_state(victim_thd, MUST_ABORT);
 		wsrep_thd_UNLOCK(victim_thd);
-		wsrep_thd_awake(victim_thd, signal, kill_signal);
-		//wsrep_thd_kill_UNLOCK(victim_thd);
+		wsrep_thd_awake(victim_thd, signal);
+		wsrep_thd_kill_UNLOCK(victim_thd);
 	}
 
 	DBUG_VOID_RETURN;
