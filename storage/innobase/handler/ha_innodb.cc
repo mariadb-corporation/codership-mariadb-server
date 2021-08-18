@@ -18997,9 +18997,11 @@ wsrep_innobase_kill_one_trx(
                        DBUG_VOID_RETURN;
 		}
 
+                wsrep_lock_rollback();
 		if (wsrep_aborting_thd_contains(thd)) {
 			WSREP_WARN("duplicate thd aborter %lu",
 			           (ulong) thd_get_thread_id(thd));
+			wsrep_unlock_rollback();
                 } else {
                 	wsrep_aborting_thd_enqueue(thd);
 			DBUG_PRINT("wsrep",("enqueuing trx abort for %lu",
@@ -19012,19 +19014,6 @@ wsrep_innobase_kill_one_trx(
                 
                          /* This will lock thd from proceeding after net_read() */
                         wsrep_thd_set_conflict_state(thd, ABORTING);
-                        /* brute force abort */
-                        wsrep_lock_rollback();
-
-			if (wsrep_aborting_thd_contains(thd)) {
-				WSREP_WARN("duplicate thd aborter %lu",
-					   (ulong) thd_get_thread_id(thd));
-			} else {
-				wsrep_aborting_thd_enqueue(thd);
-				DBUG_PRINT("wsrep",("queuing trx abort for %lu",
-						    thd_get_thread_id(thd)));
-				WSREP_DEBUG("enqueuing trx abort for (%lu)",
-					    thd_get_thread_id(thd));
-			}
 
 			DBUG_PRINT("wsrep",("signalling wsrep rollbacker"));
 			WSREP_DEBUG("signaling aborter");
