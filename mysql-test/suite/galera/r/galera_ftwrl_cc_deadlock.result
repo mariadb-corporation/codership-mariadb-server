@@ -1,0 +1,25 @@
+connection node_2;
+connection node_1;
+connection node_1;
+connection node_2;
+connection node_1;
+SET GLOBAL wsrep_sync_wait = 0;
+SET GLOBAL wsrep_provider_options = 'dbug=d,local_monitor_enter_sync';
+connection node_2;
+SET SESSION wsrep_sync_wait=0;
+Unloading wsrep provider ...
+SET GLOBAL wsrep_cluster_address = '';
+connection node_1;
+SET SESSION wsrep_on = OFF;
+SET SESSION wsrep_on = 1;
+FLUSH TABLES WITH READ LOCK;;
+connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+SET SESSION wsrep_on = 0;
+SET SESSION wsrep_on = 1;
+SET GLOBAL wsrep_provider_options = 'dbug=';
+SET GLOBAL wsrep_provider_options = 'signal=local_monitor_enter_sync';
+connection node_1;
+UNLOCK TABLES;
+SET GLOBAL wsrep_sync_wait = 15;;
+connection node_2;
+connection node_1;

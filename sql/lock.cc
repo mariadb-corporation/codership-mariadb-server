@@ -1021,6 +1021,29 @@ bool Global_read_lock::lock_global_read_lock(THD *thd)
 {
   DBUG_ENTER("lock_global_read_lock");
 
+#ifdef WITH_WSREP
+  /* A guard to make sure we resume provider in case of a failure to acquire
+     the lock */
+  class return_guard
+  {
+  public:
+    enum return_type { NONE, RESUME, RESUME_AND_SYNC };
+    return_guard() : rt_(NONE) {}
+    void set(return_type const rt) { rt_ = rt; }
+    ~return_guard()
+    {
+      switch (rt_)
+      {
+      case NONE: return;
+      case RESUME: Wsrep_server_state::instance().resume(); return;
+      case RESUME_AND_SYNC: Wsrep_server_state::instance().resume_and_resync();
+        return;
+      }
+    }
+  private:
+    return_type rt_;
+  } rg;
+#endif /* WITH_WSREP */
   if (!m_state)
   {
     MDL_deadlock_and_lock_abort_error_handler mdl_deadlock_handler;
@@ -1047,6 +1070,34 @@ bool Global_read_lock::lock_global_read_lock(THD *thd)
     mdl_request.init(MDL_key::BACKUP, "", "", MDL_BACKUP_FTWRL1,
                      MDL_EXPLICIT);
 
+#ifdef WITH_WSREP
+    /* Native threads should bail out before wsrep operations to follow.
+       Donor servicing thread is an exception, it should pause provider
+       but not desync, as it is already desynced in donor state.
+       Desync should be called only when we are in synced state.
+    */
+    Wsrep_server_state& server_state= Wsrep_server_state::instance();
+    wsrep::seqno paused_seqno(0);
+    if (server_state.state() == Wsrep_server_state::s_donor ||
+        (WSREP_NNULL(thd) &&
+         server_state.state() != Wsrep_server_state::s_synced))
+    {
+      paused_seqno= server_state.pause();
+      rg.set(return_guard::RESUME);
+    }
+    else if (WSREP_NNULL(thd) &&
+             server_state.state() == Wsrep_server_state::s_synced)
+    {
+      paused_seqno= server_state.desync_and_pause();
+      rg.set(return_guard::RESUME_AND_SYNC);
+    }
+    if (paused_seqno.get() < 0)
+    {
+      WSREP_ERROR("Failed to pause provider: %lld", paused_seqno.get());
+      rg.set(return_guard::NONE);
+      DBUG_RETURN(true);
+    }
+#endif /* WITH_WSREP */
     do
     {
       mdl_deadlock_handler.init();
@@ -1061,6 +1112,14 @@ bool Global_read_lock::lock_global_read_lock(THD *thd)
 
     m_mdl_global_read_lock= mdl_request.ticket;
     m_state= GRL_ACQUIRED;
+#ifdef WITH_WSREP
+    if (paused_seqno.get() > 0)
+    {
+      rg.set(return_guard::NONE);
+      WSREP_INFO("Server paused at: %lld", paused_seqno.get());
+      wsrep_locked_seqno= paused_seqno.get();
+    }
+#endif /* WITH_WSREP */
   }
   /*
     We DON'T set global_read_lock_blocks_commit now, it will be set after
@@ -1162,35 +1221,6 @@ bool Global_read_lock::make_global_read_lock_block_commit(THD *thd)
 
   m_state= GRL_ACQUIRED_AND_BLOCKS_COMMIT;
 
-#ifdef WITH_WSREP
-  /* Native threads should bail out before wsrep operations to follow.
-     Donor servicing thread is an exception, it should pause provider
-     but not desync, as it is already desynced in donor state.
-     Desync should be called only when we are in synced state.
-  */
-  Wsrep_server_state& server_state= Wsrep_server_state::instance();
-  wsrep::seqno paused_seqno;
-  if (server_state.state() == Wsrep_server_state::s_donor ||
-      (WSREP_NNULL(thd) &&
-       server_state.state() != Wsrep_server_state::s_synced))
-  {
-    paused_seqno= server_state.pause();
-  }
-  else if (WSREP_NNULL(thd) &&
-           server_state.state() == Wsrep_server_state::s_synced)
-  {
-    paused_seqno= server_state.desync_and_pause();
-  }
-  else
-  {
-    DBUG_RETURN(FALSE);
-  }
-  WSREP_INFO("Server paused at: %lld", paused_seqno.get());
-  if (paused_seqno.get() >= 0)
-  {
-    wsrep_locked_seqno= paused_seqno.get();
-  }
-#endif /* WITH_WSREP */
   DBUG_RETURN(FALSE);
 }
 

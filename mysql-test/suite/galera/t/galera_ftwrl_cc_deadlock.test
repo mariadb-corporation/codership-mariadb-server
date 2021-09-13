@@ -1,0 +1,82 @@
+#
+# Test the possibility of dealock between configuration change and FTWRL
+#
+# 1. block applier before entering local monitor (local_monitor_enter_sync)
+# 2. generate configuration change event that blocks on local monitor enter
+# 3. issue FTWRL, it will also block on local monitor (with a greater seqno)
+# 4. local monitor is unblocked
+# 5. configuration change proceeds to acquire MDL
+# 6. if bug is present, GRL is held by FTWRL thread and we have deadlock
+#
+# Not using the standard include/galera_wait_sync_point.inc here because
+# at the point we need it, it blocks in SELECT.
+
+--source include/galera_cluster.inc
+--source include/have_debug_sync.inc
+--source include/galera_have_debug_sync.inc
+
+# Save original auto_increment_offset values.
+--let $node_1=node_1
+--let $node_2=node_2
+--source ../include/auto_increment_offset_save.inc
+
+# Block local monitor
+--connection node_1
+--let $wsrep_sync_wait_orig = `SELECT @@wsrep_sync_wait`
+SET GLOBAL wsrep_sync_wait = 0;
+--let $wsrep_on_saved = `SELECT @@wsrep_on`
+
+--let $galera_sync_point = local_monitor_enter_sync
+--source include/galera_set_sync_point.inc
+
+# Disconnect node_2 to generate CC
+--connection node_2
+SET SESSION wsrep_sync_wait=0;
+--source suite/galera/include/galera_stop_replication.inc
+
+# Since we blocked CC processing, we can't use INFORMATION_SCHEMA to check
+# membership. Instead wait until applier is blocked
+--connection node_1
+#--source include/galera_wait_sync_point.inc
+SET SESSION wsrep_on = OFF;
+--let $wait_condition = SELECT 1 FROM INFORMATION_SCHEMA.global_status WHERE VARIABLE_NAME = 'wsrep_debug_sync_waiters' AND VARIABLE_VALUE = 'local_monitor_enter_sync'
+--source include/wait_condition.inc
+--eval SET SESSION wsrep_on = $wsrep_on_saved
+
+# This shall block in local monitor too
+--send FLUSH TABLES WITH READ LOCK;
+
+# Wait for the second local_monitor_enter_sync waiter
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--let $wsrep_on_saved = `SELECT @@wsrep_on`
+SET SESSION wsrep_on = 0;
+--let $wait_condition = SELECT 1 FROM INFORMATION_SCHEMA.global_status WHERE VARIABLE_NAME = 'wsrep_debug_sync_waiters' AND VARIABLE_VALUE = 'local_monitor_enter_sync local_monitor_enter_sync'
+--source include/wait_condition.inc
+--eval SET SESSION wsrep_on = $wsrep_on_saved
+#SELECT * FROM INFORMATION_SCHEMA.global_status WHERE VARIABLE_NAME = 'wsrep_debug_sync_waiters';
+
+# now that FTWRL ordered after CC at local monitor entrance, open the monitor
+--source include/galera_clear_sync_point.inc
+--source include/galera_signal_sync_point.inc
+
+# Reap FTWRL
+--connection node_1
+--reap
+UNLOCK TABLES;
+
+# restore wsrep_sync_wait value
+--eval SET GLOBAL wsrep_sync_wait = $wsrep_sync_wait_orig;
+
+# Restarst node_2
+--connection node_2
+--disable_query_log
+--eval SET GLOBAL wsrep_cluster_address = '$wsrep_cluster_address_orig';
+--enable_query_log
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.global_status WHERE VARIABLE_NAME = 'wsrep_cluster_size'
+--source include/wait_condition.inc
+
+--connection node_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.global_status WHERE VARIABLE_NAME = 'wsrep_cluster_size'
+--source include/wait_condition.inc
+--source ../include/auto_increment_offset_restore.inc
+
