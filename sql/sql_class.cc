@@ -656,7 +656,8 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
    wsrep_po_handle(WSREP_PO_INITIALIZER),
    wsrep_po_cnt(0),
    wsrep_apply_format(0),
-   wsrep_ignore_table(false)
+   wsrep_ignore_table(false),
+   wsrep_aborter(0)
 #endif
 {
   ulong tmp;
@@ -1245,6 +1246,7 @@ void THD::init()
   wsrep_replicate_GTID    = false;
   wsrep_skip_wsrep_GTID   = false;
   wsrep_split_flag        = false;
+  wsrep_aborter           = 0;
 #endif /* WITH_WSREP */
 
   if (variables.sql_log_bin)
@@ -2076,6 +2078,11 @@ void THD::reset_killed()
     killed_err= 0;
     mysql_mutex_unlock(&LOCK_thd_kill);
   }
+#ifdef WITH_WSREP
+    mysql_mutex_lock(&LOCK_thd_data);
+    wsrep_aborter= 0;
+    mysql_mutex_unlock(&LOCK_thd_data);
+#endif /* WITH_WSREP */
   DBUG_VOID_RETURN;
 }
 
