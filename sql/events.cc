@@ -34,6 +34,9 @@
 #include "sp_head.h" // for Stored_program_creation_ctx
 #include "set_var.h"
 #include "lock.h"   // lock_object_name
+#ifdef WITH_WSREP
+#include "wsrep_mysqld.h"
+#endif
 
 /**
   @addtogroup Event_Scheduler

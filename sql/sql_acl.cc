@@ -56,6 +56,9 @@
 #include "password.h"
 
 #include "sql_plugin_compat.h"
+#ifdef WITH_WSREP
+#include "wsrep_mysqld.h"
+#endif
 
 #define MAX_SCRAMBLE_LENGTH 1024
 
