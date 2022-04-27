@@ -452,7 +452,8 @@ static int sequence_initialize(void *p)
                                HTON_HIDDEN |
                                HTON_TEMPORARY_NOT_SUPPORTED |
                                HTON_ALTER_NOT_SUPPORTED |
-                               HTON_NO_PARTITION);
+                               HTON_NO_PARTITION |
+                               HTON_WSREP_REPLICATION);
   DBUG_RETURN(0);
 }
 
