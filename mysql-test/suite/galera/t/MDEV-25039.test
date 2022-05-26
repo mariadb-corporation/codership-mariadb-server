@@ -1,0 +1,90 @@
+#
+#  MDEV-25039: MDL BF-BF conflict because of foreign key
+#
+
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+--source include/have_debug_sync.inc
+--source include/galera_have_debug_sync.inc
+
+# node 2 control connection
+--connect node_1_ctrl, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1_ctrl
+SET SESSION wsrep_sync_wait=0;
+
+# node 2 control connection
+--connect node_2_ctrl, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection node_2_ctrl
+SET SESSION wsrep_sync_wait=0;
+
+--connection node_1
+
+CREATE TABLE parent(f1 INT NOT NULL PRIMARY KEY, f2 INT);
+CREATE TABLE child(f1 INT NOT NULL PRIMARY KEY, f2 INT, fk INT, FOREIGN KEY(fk) REFERENCES parent(f1));
+
+INSERT INTO parent VALUES (1, 1), (2, 2);
+INSERT INTO child VALUES (1, 1, 1), (2, 2, 2);
+
+## BF - BF conflict // node2
+
+--connection node_1_ctrl
+# Setup galera debug sync before replications for DML (INSERT)
+--let $galera_sync_point = before_replicate_sync
+--source include/galera_set_sync_point.inc
+
+--connection node_1
+--send INSERT INTO parent VALUES (3, 3);
+
+--connection node_1_ctrl
+# Setup galera debug sync before replications for DDL (CREATE INDEX)
+--let $galera_sync_point = before_replicate_sync
+--source include/galera_wait_sync_point.inc
+
+
+# We are going to synchnorize DDL thread so it is replicated before DML
+# First weare going to wait on `before_replicate_sync` and after that
+# will be waiting on `after_replicate_sync`
+
+--connection node_2_ctrl
+# Setup wait on `before_replicate-sync`
+--let $galera_sync_point = before_replicate_sync
+--source include/galera_set_sync_point.inc
+
+--connection node_2
+--send CREATE INDEX idx ON child (f2, fk);
+
+--connection node_2_ctrl
+# Wait for `before_replicate_sync` is reached
+--let $galera_sync_point = before_replicate_sync
+--source include/galera_wait_sync_point.inc
+
+# Now set next debug point - `after_replicate_sync`
+--let $galera_sync_point = after_replicate_sync
+--source include/galera_set_sync_point.inc
+
+# Signal `before_replicate_sync`
+--let $galera_sync_point = before_replicate_sync
+--source include/galera_signal_sync_point.inc
+
+# ... and wait until `after_replicate_sync` is reached 
+# and than release all debug points so execution can continue
+--let $galera_sync_point = after_replicate_sync
+--source include/galera_wait_sync_point.inc
+--source include/galera_signal_sync_point.inc
+
+--source include/galera_clear_sync_point.inc
+
+--connection node_1_ctrl
+# Now continue DML execution
+--let $galera_sync_point = before_replicate_sync
+--source include/galera_signal_sync_point.inc
+--source include/galera_clear_sync_point.inc
+
+--connection node_2
+--reap
+
+--connection node_1
+--reap
+
+DROP TABLE child;
+DROP TABLE parent;

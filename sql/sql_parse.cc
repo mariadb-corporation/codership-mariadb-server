@@ -4230,7 +4230,24 @@ mysql_execute_command(THD *thd)
     DBUG_ASSERT(first_table == all_tables && first_table != 0);
     if (check_one_table_access(thd, INDEX_ACL, all_tables))
       goto error; /* purecov: inspected */
-    WSREP_TO_ISOLATION_BEGIN(first_table->db.str, first_table->table_name.str, NULL);
+
+#ifdef WITH_WSREP
+  if (WSREP(thd) &&
+      (!thd->is_current_stmt_binlog_format_row() ||
+       !thd->find_temporary_table(first_table)))
+  {
+    wsrep::key_array keys;
+    wsrep_append_fk_parent_table(thd, first_table, &keys);
+
+    WSREP_TO_ISOLATION_BEGIN_ALTER(first_table->db.str,
+                                   first_table->table_name.str,
+                                   first_table, &alter_info, &keys)
+    {
+      WSREP_WARN("CREATE INDEX isolation failure");
+      goto error;
+    }
+  }
+#endif
 
     bzero((char*) &create_info, sizeof(create_info));
     create_info.db_type= 0;
