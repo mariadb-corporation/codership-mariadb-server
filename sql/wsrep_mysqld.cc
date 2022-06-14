@@ -3073,6 +3073,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
       THD_STAGE_INFO(request_thd, stage_waiting_ddl);
       ticket->wsrep_report(wsrep_debug);
       mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+      wsrep_abort_thd(request_thd, granted_thd, 1);
     }
     else if (request_thd->lex->sql_command == SQLCOM_DROP_TABLE)
     {

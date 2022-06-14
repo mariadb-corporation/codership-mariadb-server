@@ -364,7 +364,7 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
 
     switch (victim_thd->wsrep_trx().state()) {
     case wsrep::transaction::s_aborting: /* fall through */
-    case wsrep::transaction::s_aborted:
+      //case wsrep::transaction::s_aborted:
       WSREP_DEBUG("victim is aborting or has aborted");
       break;
     default: break;
@@ -373,6 +373,7 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
        have acquired MDL locks (due to DDL execution), and this has caused BF conflict.
        such case does not require aborting in wsrep or replication provider state.
     */
+    victim_thd->awake(KILL_CONNECTION);
     return false;
   }
 

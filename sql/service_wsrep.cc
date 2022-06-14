@@ -277,7 +277,7 @@ extern "C" my_bool wsrep_thd_is_aborting(const MYSQL_THD thd)
       return (cs.state() == wsrep::client_state::s_exec ||
               cs.state() == wsrep::client_state::s_result);
     case wsrep::transaction::s_aborting:
-    case wsrep::transaction::s_aborted:
+      //case wsrep::transaction::s_aborted:
       return true;
     default:
       return false;
