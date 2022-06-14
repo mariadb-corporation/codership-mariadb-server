@@ -373,7 +373,9 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
        have acquired MDL locks (due to DDL execution), and this has caused BF conflict.
        such case does not require aborting in wsrep or replication provider state.
     */
-    victim_thd->awake(KILL_CONNECTION);
+    mysql_mutex_lock(&victim_thd->LOCK_thd_data);
+    victim_thd->awake_no_mutex(KILL_CONNECTION);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
     return false;
   }
 

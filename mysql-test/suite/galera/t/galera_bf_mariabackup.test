@@ -31,7 +31,6 @@ SET GLOBAL DEBUG_DBUG = "d,sync.wsrep_after_mdl_block_ddl";
 CREATE TABLE t2 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 
 --connection node_1
---sleep 30
 --let $targetdir=$MYSQLTEST_VARDIR/tmp/backup
 set wsrep_sync_wait=0;
 
