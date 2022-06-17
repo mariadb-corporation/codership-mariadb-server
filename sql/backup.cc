@@ -288,12 +288,12 @@ static bool backup_block_ddl(THD *thd)
   (void) flush_tables(thd, FLUSH_NON_TRANS_TABLES);
   thd->clear_error();
 
-#ifdef WITH_WSREP_OUT
+#ifdef WITH_WSREP
   /*
     We desync the node for BACKUP STAGE because applier threads
     bypass backup MDL locks (see MDL_lock::can_grant_lock)
   */
-  if (WSREP_NNULL(thd))
+  if (WSREP_NNULL(thd) && !wsrep_check_mode(WSREP_MODE_BF_MARIABACKUP))
   {
     Wsrep_server_state &server_state= Wsrep_server_state::instance();
     if (server_state.desync_and_pause().is_undefined()) {
@@ -355,7 +355,6 @@ static bool backup_block_ddl(THD *thd)
                                                       STRING_WITH_LEN(act)));
                   };);
   WSREP_DEBUG("BLOCK_DDL after");
-  sleep(1);
 #endif /* WITH_WSREP */
 
   DBUG_RETURN(0);
@@ -416,8 +415,9 @@ bool backup_end(THD *thd)
     backup_flush_ticket= 0;
     thd->current_backup_stage= BACKUP_FINISHED;
     thd->mdl_context.release_lock(old_ticket);
-#ifdef WITH_WSREP_OUT
-    if (WSREP_NNULL(thd) && thd->wsrep_desynced_backup_stage)
+#ifdef WITH_WSREP
+    if (WSREP_NNULL(thd) && thd->wsrep_desynced_backup_stage &&
+	!wsrep_check_mode(WSREP_MODE_BF_MARIABACKUP))
     {
       Wsrep_server_state &server_state= Wsrep_server_state::instance();
       THD_STAGE_INFO(thd, stage_waiting_flow);

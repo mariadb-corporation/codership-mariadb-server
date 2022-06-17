@@ -30,15 +30,20 @@ SET GLOBAL DEBUG_DBUG = "d,sync.wsrep_after_mdl_block_ddl";
 --connection node_2
 CREATE TABLE t2 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 
---connection node_1
+--connect node_1b, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1b
 --let $targetdir=$MYSQLTEST_VARDIR/tmp/backup
 set wsrep_sync_wait=0;
+let outfile=$MYSQLTEST_VARDIR/tmp/backup.out;
+SET @@global.wsrep_mode=BF_ABORT_MARIABACKUP;
+--error 1,ER_CONNECTION_KILLED
+--exec $XTRABACKUP --defaults-file=$MYSQLTEST_VARDIR/my.cnf --backup  --target-dir=$targetdir  2>&1 >$outfile
 
---exec $XTRABACKUP --defaults-file=$MYSQLTEST_VARDIR/my.cnf --backup  --target-dir=$targetdir
-
+--connection node_1
+set @@global.wsrep_mode=default;
+set global wsrep_sync_wait=default;
+SET GLOBAL DEBUG_DBUG = "";
 
 --connection node_1a
-show processlist;
 
-DROP TABLE t1;
 drop table t2;
