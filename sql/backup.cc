@@ -342,11 +342,17 @@ static bool backup_block_ddl(THD *thd)
 #ifdef WITH_WSREP
     // Allow tests to block the applier thread using the DBUG facilities
   WSREP_DEBUG("BLOCK_DDL before");
+  //                     "WAIT_FOR wsrep_after_mdl_block_ddl_wait_continue";
         
-  //                   const char act[]=
-  //                   "now "
-  //                   "wait_for signal.wsrep_after_mdl_block_ddl";
-  DBUG_EXECUTE_IF("sync.wsrep_after_mdl_block_ddl",
+  DBUG_EXECUTE_IF("sync.wsrep_after_mdl_block_ddl_wait",
+                  {
+                   const char act[]=
+                     "now "
+                     "SIGNAL wsrep_after_mdl_block_ddl_wait_reached";
+                   DBUG_ASSERT(!debug_sync_set_action(thd,
+                                                      STRING_WITH_LEN(act)));
+                  };);
+  DBUG_EXECUTE_IF("sync.wsrep_after_mdl_block_ddl_signal",
                   {
                    const char act[]=
                      "now "
