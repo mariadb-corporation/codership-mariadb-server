@@ -342,16 +342,25 @@ static bool backup_block_ddl(THD *thd)
 #ifdef WITH_WSREP
     // Allow tests to block the applier thread using the DBUG facilities
   WSREP_DEBUG("BLOCK_DDL before");
-  //                     "WAIT_FOR wsrep_after_mdl_block_ddl_wait_continue";
-        
+
+  /* this sync point is for signaling that execution has gained BLOCK_DDL MDL lock
+     the thread is not stopped here, so thta the test knows that the MDL lock will be held
+     until wsrep_after_mdl_block_ddl_wait_continue is signaled
+ */
   DBUG_EXECUTE_IF("sync.wsrep_after_mdl_block_ddl_wait",
                   {
                    const char act[]=
                      "now "
-                     "SIGNAL wsrep_after_mdl_block_ddl_wait_reached";
+                     "SIGNAL wsrep_after_mdl_block_ddl_wait_reached "
+                     "WAIT_FOR wsrep_after_mdl_block_ddl_wait_continue";
                    DBUG_ASSERT(!debug_sync_set_action(thd,
                                                       STRING_WITH_LEN(act)));
                   };);
+  /* this sync point is for signaling replication applier thread to continue
+     from the sync point before TOI applying, where the applier was stopped
+     Such automatic signaling is useful when mtr test is executing external
+     mariabackup process, which cannot send dbug signals 
+  */
   DBUG_EXECUTE_IF("sync.wsrep_after_mdl_block_ddl_signal",
                   {
                    const char act[]=

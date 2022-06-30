@@ -568,7 +568,7 @@ int Wsrep_applier_service::apply_write_set(const wsrep::ws_meta& ws_meta,
                    const char act[]=
                      "now "
                      "SIGNAL sync.wsrep_apply_cb_reached "
-                     "WAIT_FOR sync.wsrep_apply_cb";
+                     "WAIT_FOR signal.wsrep_apply_cb";
                    DBUG_ASSERT(!debug_sync_set_action(thd,
                                                       STRING_WITH_LEN(act)));
                  };);
