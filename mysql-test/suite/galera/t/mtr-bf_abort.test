@@ -1,0 +1,42 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+#
+# Test a local transaction being aborted by a slave one
+#
+--connection node_1
+
+CREATE TABLE t1 (id INTEGER PRIMARY KEY, node CHAR(6)) ENGINE=InnoDB;
+INSERT INTO t1 VALUES (1,'void'),(2,'void');
+
+# start a transaction and update two rows, but not commit yet
+BEGIN;
+UPDATE t1 SET node='node1' WHERE id=1;
+UPDATE t1 SET node='node1' WHERE id=2;
+
+# update one of the wors in node_2
+--connection node_2
+UPDATE t1 SET node='node2' WHERE id=2;
+
+# this update was 'autocommit' so it is directly committed and replicated.
+# as the change was for the same row as the ongoing transaction in node_1
+# there will happen a conflict, which node_1 will lose
+
+# take a look what we have in t1, in node_2
+SELECT * FROM t1;
+
+# change back to node_1
+--connection node_1
+# this transaction has already rolled back, tell mtr that we are epxecting an error code
+# from next SQL statement
+--error ER_LOCK_DEADLOCK
+SELECT * FROM t1;
+
+# try the same select again, it will succeed now,
+# and show same result as the select issued in node_2
+SELECT * FROM t1;
+
+
+# cleanup the table
+DROP TABLE t1;
+
