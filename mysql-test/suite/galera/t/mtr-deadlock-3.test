@@ -1,0 +1,47 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connect node_1b, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connect node_1c, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+CREATE TABLE t1 (i int primary key, j int);
+INSERT INTO t1 VALUES (1,0),(2,0),(3,0);
+
+--connection node_1a
+BEGIN;
+UPDATE t1 SET j=11 WHERE i=1;
+
+--connection node_1b
+BEGIN;
+UPDATE t1 SET j=22 WHERE i=2;
+
+--connection node_1c
+BEGIN;
+UPDATE t1 SET j=33 WHERE i=3;
+
+--connection node_1a
+--send UPDATE t1 SET j=11 WHERE i=2;
+
+--connection node_1b
+--send UPDATE t1 SET j=22 WHERE i=3;
+
+--connection node_1c
+--error ER_LOCK_DEADLOCK
+UPDATE t1 SET j=33 WHERE i=1;
+
+--connection node_1b
+--reap
+COMMIT;
+
+SELECT * FROM t1;
+
+--connection node_1a
+--reap
+COMMIT;
+SELECT * FROM t1;
+
+--connection node_1c
+SELECT * FROM t1;
+
+DROP TABLE t1;
