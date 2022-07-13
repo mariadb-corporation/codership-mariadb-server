@@ -95,3 +95,59 @@ i	j
 3	22
 4	200
 DROP TABLE t;
+===============================
+Test phase 3: faster deadlock
+===============================
+CREATE TABLE t (i int primary key, j int);
+INSERT INTO t VALUES (1,0),(2,0),(3,0),(4,0);
+connection node_1c;
+BEGIN;
+UPDATE t SET j=33 WHERE i=3;
+UPDATE t SET j=44 WHERE i=4;
+connection node_1a;
+BEGIN;
+UPDATE t SET j=11 WHERE i=1;
+connection node_1b;
+BEGIN;
+UPDATE t SET j=22 WHERE i=2;
+connection node_1a;
+UPDATE t SET j=11 WHERE i=2;;
+connection node_1b;
+UPDATE t SET j=22 WHERE i=3;;
+connection node_2;
+UPDATE t SET j=200 WHERE i=4;;
+connection node_1c;
+UPDATE t SET j=33 WHERE i=1;
+ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
+connection node_1b;
+COMMIT;
+SELECT * FROM t;
+i	j
+1	0
+2	0
+3	0
+4	200
+connection node_1a;
+COMMIT;
+SELECT * FROM t;
+i	j
+1	11
+2	11
+3	0
+4	200
+connection node_1c;
+SELECT * FROM t;
+i	j
+1	11
+2	11
+3	0
+4	200
+connection node_2;
+COMMIT;
+SELECT * FROM t;
+i	j
+1	11
+2	11
+3	0
+4	200
+DROP TABLE t;
