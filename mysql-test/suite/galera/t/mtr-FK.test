@@ -1,0 +1,30 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+
+--echo =====================================
+--echo Test phase 1
+--echo =====================================
+
+
+CREATE TABLE parent(a_id INT, PRIMARY KEY(a_id));
+CREATE TABLE child (b_id INT, a_id int, PRIMARY KEY(b_id), FOREIGN KEY (a_id) REFERENCES parent(a_id) ON DELETE CASCADE);
+
+INSERT INTO parent VALUES (1),(2),(3),(4),(5);
+INSERT INTO child VALUES (11,4),(22,2),(33,5),(44,1),(55,3);  
+
+SELECT * FROM parent;
+SELECT * FROM child;
+
+--send DELETE FROM parent;
+
+--connection node_2
+--error 0,ER_LOCK_DEADLOCK,ER_KEY_NOT_FOUND
+DELETE FROM child WHERE a_id=3;
+
+--connection node_1 
+--error 0,ER_LOCK_DEADLOCK
+--reap
+
+DROP TABLE child;
+DROP TABLE parent;

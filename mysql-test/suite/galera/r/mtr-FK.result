@@ -1,0 +1,29 @@
+connection node_2;
+connection node_1;
+=====================================
+Test phase 1
+=====================================
+CREATE TABLE parent(a_id INT, PRIMARY KEY(a_id));
+CREATE TABLE child (b_id INT, a_id int, PRIMARY KEY(b_id), FOREIGN KEY (a_id) REFERENCES parent(a_id) ON DELETE CASCADE);
+INSERT INTO parent VALUES (1),(2),(3),(4),(5);
+INSERT INTO child VALUES (11,4),(22,2),(33,5),(44,1),(55,3);
+SELECT * FROM parent;
+a_id
+1
+2
+3
+4
+5
+SELECT * FROM child;
+b_id	a_id
+44	1
+22	2
+55	3
+11	4
+33	5
+DELETE FROM parent;;
+connection node_2;
+DELETE FROM child WHERE a_id=3;
+connection node_1;
+DROP TABLE child;
+DROP TABLE parent;
