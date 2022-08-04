@@ -104,3 +104,109 @@ connection node_1a;
 connection node_1c;
 DROP TABLE child;
 DROP TABLE parent;
+=====================================
+Test phase 5
+=====================================
+CREATE TABLE gparent (a_id INT, PRIMARY KEY(a_id));
+CREATE TABLE parent (b_id INT, a_id INT, PRIMARY KEY(b_id), FOREIGN KEY (a_id) REFERENCES gparent(a_id) ON DELETE CASCADE);
+CREATE TABLE child (c_id INT, b_id INT, PRIMARY KEY(c_id), FOREIGN KEY (b_id) REFERENCES parent(b_id) ON DELETE CASCADE);
+INSERT INTO gparent VALUES (1),(2),(3);
+INSERT INTO parent VALUES (11,1),(22,2),(33,3);
+INSERT INTO child VALUES (111,11),(222,22),(333,33);
+SELECT * FROM gparent;
+a_id
+1
+2
+3
+SELECT * FROM parent;
+b_id	a_id
+11	1
+22	2
+33	3
+SELECT * FROM child;
+c_id	b_id
+111	11
+222	22
+333	33
+DELETE FROM gparent WHERE a_id = 2;
+connection node_2;
+SELECT * FROM gparent;
+a_id
+1
+3
+SELECT * FROM parent;
+b_id	a_id
+11	1
+33	3
+SELECT * FROM child;
+c_id	b_id
+111	11
+333	33
+connection node_1;
+SELECT * FROM gparent;
+a_id
+1
+3
+SELECT * FROM parent;
+b_id	a_id
+11	1
+33	3
+SELECT * FROM child;
+c_id	b_id
+111	11
+333	33
+DROP TABLE child;
+DROP TABLE parent;
+DROP TABLE gparent;
+=====================================
+Test phase 6
+=====================================
+CREATE TABLE gparent (a_id INT, PRIMARY KEY(a_id));
+CREATE TABLE parent (b_id INT, a_id INT, PRIMARY KEY(b_id), FOREIGN KEY (a_id) REFERENCES gparent(a_id) ON DELETE CASCADE);
+CREATE TABLE child (c_id INT, b_id INT, PRIMARY KEY(c_id), FOREIGN KEY (b_id) REFERENCES parent(b_id) ON DELETE CASCADE);
+INSERT INTO gparent VALUES (1),(2),(3);
+INSERT INTO parent VALUES (11,1),(22,2),(33,3);
+INSERT INTO child VALUES (111,11),(222,22),(333,33);
+SELECT * FROM gparent;
+a_id
+1
+2
+3
+SELECT * FROM parent;
+b_id	a_id
+11	1
+22	2
+33	3
+SELECT * FROM child;
+c_id	b_id
+111	11
+222	22
+333	33
+DELETE FROM gparent WHERE a_id = 2;;
+connection node_2;
+DELETE FROM child;
+connection node_1;
+SELECT * FROM gparent;
+a_id
+1
+3
+SELECT * FROM parent;
+b_id	a_id
+11	1
+33	3
+SELECT * FROM child;
+c_id	b_id
+connection node_2;
+SELECT * FROM gparent;
+a_id
+1
+3
+SELECT * FROM parent;
+b_id	a_id
+11	1
+33	3
+SELECT * FROM child;
+c_id	b_id
+DROP TABLE child;
+DROP TABLE parent;
+DROP TABLE gparent;

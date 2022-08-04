@@ -136,3 +136,77 @@ SET GLOBAL wsrep_slave_threads=default;
 
 DROP TABLE child;
 DROP TABLE parent;
+
+
+--echo =====================================
+--echo Test phase 5
+--echo =====================================
+
+
+CREATE TABLE gparent (a_id INT, PRIMARY KEY(a_id));
+CREATE TABLE parent (b_id INT, a_id INT, PRIMARY KEY(b_id), FOREIGN KEY (a_id) REFERENCES gparent(a_id) ON DELETE CASCADE);
+CREATE TABLE child (c_id INT, b_id INT, PRIMARY KEY(c_id), FOREIGN KEY (b_id) REFERENCES parent(b_id) ON DELETE CASCADE);
+
+INSERT INTO gparent VALUES (1),(2),(3);
+INSERT INTO parent VALUES (11,1),(22,2),(33,3);
+INSERT INTO child VALUES (111,11),(222,22),(333,33);
+
+SELECT * FROM gparent;
+SELECT * FROM parent;
+SELECT * FROM child;
+
+DELETE FROM gparent WHERE a_id = 2;
+
+--connection node_2
+SELECT * FROM gparent;
+SELECT * FROM parent;
+SELECT * FROM child;
+
+--connection node_1
+SELECT * FROM gparent;
+SELECT * FROM parent;
+SELECT * FROM child;
+
+DROP TABLE child;
+DROP TABLE parent;
+DROP TABLE gparent;
+
+
+--echo =====================================
+--echo Test phase 6
+--echo =====================================
+
+
+CREATE TABLE gparent (a_id INT, PRIMARY KEY(a_id));
+CREATE TABLE parent (b_id INT, a_id INT, PRIMARY KEY(b_id), FOREIGN KEY (a_id) REFERENCES gparent(a_id) ON DELETE CASCADE);
+CREATE TABLE child (c_id INT, b_id INT, PRIMARY KEY(c_id), FOREIGN KEY (b_id) REFERENCES parent(b_id) ON DELETE CASCADE);
+
+INSERT INTO gparent VALUES (1),(2),(3);
+INSERT INTO parent VALUES (11,1),(22,2),(33,3);
+INSERT INTO child VALUES (111,11),(222,22),(333,33);
+
+SELECT * FROM gparent;
+SELECT * FROM parent;
+SELECT * FROM child;
+
+--send DELETE FROM gparent WHERE a_id = 2;
+
+--connection node_2
+--error 0,ER_LOCK_DEADLOCK
+DELETE FROM child;
+
+--connection node_1
+--error 0,ER_LOCK_DEADLOCK
+--reap
+SELECT * FROM gparent;
+SELECT * FROM parent;
+SELECT * FROM child;
+
+--connection node_2
+SELECT * FROM gparent;
+SELECT * FROM parent;
+SELECT * FROM child;
+
+DROP TABLE child;
+DROP TABLE parent;
+DROP TABLE gparent;
