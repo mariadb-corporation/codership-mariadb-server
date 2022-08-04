@@ -1,0 +1,30 @@
+connection node_2;
+connection node_1;
+connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connect node_1b, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connect node_1c, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+CREATE TABLE parent(a_id INT, PRIMARY KEY(a_id));
+CREATE TABLE child (b_id INT, a_id int, PRIMARY KEY(b_id), FOREIGN KEY (a_id) REFERENCES parent(a_id) ON DELETE CASCADE);
+connection node_2;
+SET GLOBAL wsrep_slave_threads=2;
+INSERT INTO parent VALUES (1),(2);
+INSERT INTO child VALUES (11,1);
+SELECT * FROM parent;
+a_id
+1
+2
+SELECT * FROM child;
+b_id	a_id
+11	1
+connection node_1c;
+DELETE FROM parent;
+connection node_1a;
+TRUNCATE child;;
+connection node_1b;
+INSERT INTO child VALUES (11,1);
+connection node_2;
+SET GLOBAL wsrep_slave_threads=default;
+connection node_1a;
+connection node_1c;
+DROP TABLE child;
+DROP TABLE parent;
