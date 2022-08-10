@@ -1,0 +1,11 @@
+connection node_2;
+connection node_1;
+connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+CREATE TABLE t (i int primary key);
+INSERT INTO t VALUES (1);
+connection node_1a;
+TRUNCATE TABLE t;
+connection node_2;
+SELECT * FROM t;
+i
+DROP TABLE t;

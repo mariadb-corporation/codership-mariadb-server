@@ -1,0 +1,15 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+CREATE TABLE t (i int primary key);
+INSERT INTO t VALUES (1);
+
+--connection node_1a
+TRUNCATE TABLE t;
+
+--connection node_2
+SELECT * FROM t;
+
+DROP TABLE t;
