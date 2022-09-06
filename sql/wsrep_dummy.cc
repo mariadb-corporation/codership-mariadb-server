@@ -86,6 +86,9 @@ bool wsrep_thd_ignore_table(THD *)
 long long wsrep_thd_trx_seqno(const THD *)
 { return -1; }
 
+long long wsrep_thd_depends_on(const THD *)
+{ return -1; }
+
 my_bool wsrep_thd_is_aborting(const THD *)
 { return 0; }
 

@@ -156,6 +156,7 @@ static struct wsrep_service_st wsrep_handler = {
   wsrep_thd_retry_counter,
   wsrep_thd_ignore_table,
   wsrep_thd_trx_seqno,
+  wsrep_thd_depends_on,
   wsrep_thd_is_aborting,
   wsrep_set_data_home_dir,
   wsrep_thd_is_BF,
