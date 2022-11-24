@@ -20,7 +20,6 @@ galera_encrypt_tmp_files : Get error failed to enable encryption of temporary fi
 galera_gcache_recover_manytrx : MDEV-18834 Galera test failure
 galera_parallel_simple : MDEV-20318 galera.galera_parallel_simple fails
 galera_pc_recovery : MDEV-25199 cluster fails to start up
-galera_shutdown_nonprim : MDEV-21493 galera.galera_shutdown_nonprim
 galera_var_ignore_apply_errors : MDEV-26770 galera_var_ignore_apply_errors fails Server did not transition to READY state
 galera_var_node_address : MDEV-20485 Galera test failure
 galera_var_retry_autocommit: MDEV-18181 Galera test failure on galera.galera_var_retry_autocommit
