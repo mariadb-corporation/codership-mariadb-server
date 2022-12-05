@@ -10118,6 +10118,11 @@ wsrep_append_key(
 )
 {
 	DBUG_ENTER("wsrep_append_key");
+	if (trx->is_bulk_insert())
+	{
+		DBUG_RETURN(0);
+	}
+
 	DBUG_PRINT("enter",
 		    ("thd: %lu trx: %lld", thd_get_thread_id(thd),
 		    (long long)trx->id));
