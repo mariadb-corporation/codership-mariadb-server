@@ -2758,7 +2758,7 @@ static void wsrep_TOI_end(THD *thd) {
     wsrep::mutable_buffer err;
 
     thd->wsrep_last_written_gtid_seqno= thd->wsrep_current_gtid_seqno;
-    wsrep_set_SE_checkpoint(client_state.toi_meta().gtid(), wsrep_gtid_server.gtid());
+    wsrep_set_SE_checkpoint(client_state.toi_meta().gtid(), wsrep_gtid_server.gtid(), false);
 
     if (thd->is_error() && !wsrep_must_ignore_error(thd))
     {

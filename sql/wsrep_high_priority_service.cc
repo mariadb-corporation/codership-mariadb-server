@@ -425,7 +425,7 @@ int Wsrep_high_priority_service::apply_toi(const wsrep::ws_meta& ws_meta,
   thd->lex->sql_command= SQLCOM_END;
 
   wsrep_gtid_server.signal_waiters(thd->wsrep_current_gtid_seqno, false);
-  wsrep_set_SE_checkpoint(client_state.toi_meta().gtid(), wsrep_gtid_server.gtid());
+  wsrep_set_SE_checkpoint(client_state.toi_meta().gtid(), wsrep_gtid_server.gtid(), false);
 
   must_exit_= check_exit_status();
 
@@ -496,7 +496,7 @@ int Wsrep_high_priority_service::log_dummy_write_set(const wsrep::ws_handle& ws_
       m_thd->wait_for_prior_commit();
     }
 
-    wsrep_set_SE_checkpoint(ws_meta.gtid(), wsrep_gtid_server.gtid());
+    wsrep_set_SE_checkpoint(ws_meta.gtid(), wsrep_gtid_server.gtid(), true);
 
     if (!WSREP_EMULATE_BINLOG(m_thd))
     {

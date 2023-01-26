@@ -1987,7 +1987,7 @@ static void innodb_disable_internal_writes(bool disable)
 }
 
 static void wsrep_abort_transaction(handlerton*, THD *, THD *, my_bool);
-static int innobase_wsrep_set_checkpoint(handlerton* hton, const XID* xid);
+static int innobase_wsrep_set_checkpoint(handlerton* hton, const XID* xid, bool for_rolback);
 static int innobase_wsrep_get_checkpoint(handlerton* hton, XID* xid);
 #endif /* WITH_WSREP */
 
@@ -18767,13 +18767,14 @@ int
 innobase_wsrep_set_checkpoint(
 /*==========================*/
 	handlerton* hton,
-	const XID* xid)
+	const XID* xid,
+	bool for_rollback)
 {
 	DBUG_ASSERT(hton == innodb_hton_ptr);
 
 	if (wsrep_is_wsrep_xid(xid)) {
 
-		trx_rseg_update_wsrep_checkpoint(xid);
+		trx_rseg_update_wsrep_checkpoint(xid, for_rollback);
 		innobase_flush_logs(hton, false);
 		return 0;
 	} else {

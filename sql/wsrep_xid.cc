@@ -112,9 +112,15 @@ wsrep::seqno wsrep_xid_seqno(const XID& xid)
   return wsrep::seqno(wsrep_xid_seqno(&xid));
 }
 
+struct wsrep_checkpoint_arg_t {
+  struct xid_t *xid;
+  bool for_rollback;
+};
+
 static my_bool set_SE_checkpoint(THD* unused, plugin_ref plugin, void* arg)
 {
-  XID* xid= static_cast<XID*>(arg);
+  XID* xid= static_cast<wsrep_checkpoint_arg_t *>(arg)->xid;
+  bool for_rollback= static_cast<wsrep_checkpoint_arg_t *>(arg)->for_rollback;
   handlerton* hton= plugin_data(plugin, handlerton *);
 
   if (hton->set_checkpoint)
@@ -124,22 +130,23 @@ static my_bool set_SE_checkpoint(THD* unused, plugin_ref plugin, void* arg)
     wsrep_uuid_print((const wsrep_uuid_t*)uuid, uuid_str, sizeof(uuid_str));
     WSREP_DEBUG("Set WSREPXid for InnoDB:  %s:%lld",
                 uuid_str, (long long)wsrep_xid_seqno(xid));
-    hton->set_checkpoint(hton, xid);
+    hton->set_checkpoint(hton, xid, for_rollback);
   }
   return FALSE;
 }
 
-bool wsrep_set_SE_checkpoint(XID& xid)
+bool wsrep_set_SE_checkpoint(XID& xid, bool for_rollback)
 {
+  wsrep_checkpoint_arg_t arg {&xid, for_rollback};
   return plugin_foreach(NULL, set_SE_checkpoint, MYSQL_STORAGE_ENGINE_PLUGIN,
-                        &xid);
+                        &arg);
 }
 
-bool wsrep_set_SE_checkpoint(const wsrep::gtid& wsgtid, const wsrep_server_gtid_t& gtid)
+bool wsrep_set_SE_checkpoint(const wsrep::gtid& wsgtid, const wsrep_server_gtid_t& gtid, bool for_rollback)
 {
   XID xid;
   wsrep_xid_init(&xid, wsgtid, gtid);
-  return wsrep_set_SE_checkpoint(xid);
+  return wsrep_set_SE_checkpoint(xid, for_rollback);
 }
 
 static my_bool get_SE_checkpoint(THD* unused, plugin_ref plugin, void* arg)

@@ -1532,7 +1532,7 @@ struct handlerton
 
    void (*abort_transaction)(handlerton *hton, THD *bf_thd,
 			    THD *victim_thd, my_bool signal);
-   int (*set_checkpoint)(handlerton *hton, const XID* xid);
+   int (*set_checkpoint)(handlerton *hton, const XID* xid, bool for_rollback);
    int (*get_checkpoint)(handlerton *hton, XID* xid);
   /**
      Check if the version of the table matches the version in the .frm

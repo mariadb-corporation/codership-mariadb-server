@@ -29,7 +29,7 @@ const wsrep::id& wsrep_xid_uuid(const XID&);
 wsrep::seqno wsrep_xid_seqno(const XID&);
 
 template<typename T> T wsrep_get_SE_checkpoint();
-bool wsrep_set_SE_checkpoint(const wsrep::gtid& gtid, const wsrep_server_gtid_t&);
+bool wsrep_set_SE_checkpoint(const wsrep::gtid& gtid, const wsrep_server_gtid_t&, bool for_rollback= false);
 //void wsrep_get_SE_checkpoint(XID&);             /* uncomment if needed */
 //void wsrep_set_SE_checkpoint(XID&);             /* uncomment if needed */
 

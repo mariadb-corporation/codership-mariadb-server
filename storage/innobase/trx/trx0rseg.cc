@@ -106,7 +106,8 @@ void
 trx_rseg_update_wsrep_checkpoint(
 	buf_block_t*	rseg_header,
 	const XID*	xid,
-	mtr_t*		mtr)
+	mtr_t*		mtr,
+	bool for_rollback)
 {
 	ut_ad(wsrep_is_wsrep_xid(xid));
 
@@ -117,7 +118,7 @@ trx_rseg_update_wsrep_checkpoint(
 
 	if (xid_seqno != -1
 	    && !memcmp(xid_uuid, wsrep_uuid, sizeof wsrep_uuid)) {
-		ut_ad(xid_seqno > wsrep_seqno);
+		ut_ad(for_rollback || xid_seqno > wsrep_seqno);
 	} else {
 		memcpy(wsrep_uuid, xid_uuid, sizeof wsrep_uuid);
 	}
@@ -126,7 +127,7 @@ trx_rseg_update_wsrep_checkpoint(
 	trx_rseg_write_wsrep_checkpoint(rseg_header, xid, mtr);
 }
 
-static dberr_t trx_rseg_update_wsrep_checkpoint(const XID* xid, mtr_t* mtr)
+static dberr_t trx_rseg_update_wsrep_checkpoint(const XID* xid, mtr_t* mtr, bool for_rollback)
 {
   dberr_t err;
   buf_block_t *rseg_header = trx_sys.rseg_array[0].get(mtr, &err);
@@ -145,7 +146,7 @@ static dberr_t trx_rseg_update_wsrep_checkpoint(const XID* xid, mtr_t* mtr)
                                      rseg_header->page.frame)))
     trx_rseg_format_upgrade(rseg_header, mtr);
 
-  trx_rseg_update_wsrep_checkpoint(rseg_header, xid, mtr);
+  trx_rseg_update_wsrep_checkpoint(rseg_header, xid, mtr, for_rollback);
 
   if (must_clear_rsegs)
     /* Because the UUID part of the WSREP XID differed from
@@ -166,11 +167,11 @@ If the UUID part of the WSREP XID does not match to the UUIDs of XIDs already
 stored into rollback segments, the WSREP XID in all the remaining rollback
 segments will be reset.
 @param[in]	xid		WSREP XID */
-void trx_rseg_update_wsrep_checkpoint(const XID* xid)
+void trx_rseg_update_wsrep_checkpoint(const XID* xid, bool for_rollback)
 {
 	mtr_t	mtr;
 	mtr.start();
-	trx_rseg_update_wsrep_checkpoint(xid, &mtr);
+	trx_rseg_update_wsrep_checkpoint(xid, &mtr, for_rollback);
 	mtr.commit();
 }
 
@@ -642,7 +643,8 @@ dberr_t trx_rseg_array_init()
 		mtr.start();
 
 		if (!wsrep_xid_in_rseg_found) {
-			trx_rseg_update_wsrep_checkpoint(&wsrep_sys_xid, &mtr);
+			trx_rseg_update_wsrep_checkpoint(&wsrep_sys_xid, &mtr,
+							 false);
 		}
 
 		/* Finally, clear WSREP XID in TRX_SYS page. */
