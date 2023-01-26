@@ -1,0 +1,17 @@
+#
+# MDEV-28198 Test that CTAS with REPLACE doesn't crash the server
+# when using statement-based replication and a duplicate key is found,
+# causing update_row() to be executed instead of write_row().
+#
+
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+CALL mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT");
+
+SET @@GLOBAL.wsrep_forced_binlog_format = STATEMENT;
+CREATE TABLE t1 (a INT UNIQUE) REPLACE SELECT 1 AS a, 2 AS b UNION SELECT 1 AS a, 3 AS b;
+
+# Cleanup
+SET @@GLOBAL.wsrep_forced_binlog_format = NONE;
+DROP TABLE t1;

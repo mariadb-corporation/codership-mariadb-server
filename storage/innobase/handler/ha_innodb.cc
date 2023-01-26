@@ -8718,7 +8718,9 @@ func_exit:
 #ifdef WITH_WSREP
 	if (error == DB_SUCCESS && trx->is_wsrep()
 	    && wsrep_thd_is_local(m_user_thd)
-	    && !wsrep_thd_ignore_table(m_user_thd)) {
+	    && !wsrep_thd_ignore_table(m_user_thd)
+	    /* MDEV-28198: CTAS with REPLACE having duplicate keys. */
+	    && (thd_sql_command(m_user_thd) != SQLCOM_CREATE_TABLE)) {
 		DBUG_PRINT("wsrep", ("update row key"));
 
 		if (wsrep_append_keys(m_user_thd,
