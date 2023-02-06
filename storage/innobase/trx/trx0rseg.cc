@@ -46,10 +46,8 @@ Created 3/26/1996 Heikki Tuuri
 /** WSREP XID data (XIDDATASIZE bytes) */
 # define TRX_RSEG_WSREP_XID_DATA      TRX_RSEG_WSREP_XID_INFO + 12
 
-# ifdef UNIV_DEBUG
 /** The latest known WSREP XID sequence number */
 static long long wsrep_seqno = -1;
-# endif /* UNIV_DEBUG */
 /** The latest known WSREP XID UUID */
 static unsigned char wsrep_uuid[16];
 
@@ -111,19 +109,24 @@ trx_rseg_update_wsrep_checkpoint(
 {
 	ut_ad(wsrep_is_wsrep_xid(xid));
 
-#ifdef UNIV_DEBUG
 	/* Check that seqno is monotonically increasing */
 	long long xid_seqno = wsrep_xid_seqno(xid);
 	const byte* xid_uuid = wsrep_xid_uuid(xid);
 
 	if (xid_seqno != -1
 	    && !memcmp(xid_uuid, wsrep_uuid, sizeof wsrep_uuid)) {
+		/* a safety measure, make sure that certification failure
+		does not record a checkpoint too far ahead, this would
+		show that the node has committed seqno wsrep_seqno+1,
+		although it is still processing */
+		if (for_rollback && xid_seqno > wsrep_seqno + 1) {
+			return;
+		}
 		ut_ad(for_rollback || xid_seqno > wsrep_seqno);
 	} else {
 		memcpy(wsrep_uuid, xid_uuid, sizeof wsrep_uuid);
 	}
 	wsrep_seqno = xid_seqno;
-#endif /* UNIV_DEBUG */
 	trx_rseg_write_wsrep_checkpoint(rseg_header, xid, mtr);
 }
 
