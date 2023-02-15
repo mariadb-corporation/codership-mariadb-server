@@ -1,0 +1,93 @@
+#
+# Test . . .
+#
+
+--source include/galera_cluster.inc
+--connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connect node_1b, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connect node_1c, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connect node_2b, 127.0.0.1, root, , test, $NODE_MYPORT_2
+
+
+
+
+--sleep 30
+
+DELIMITER |;
+CREATE PROCEDURE proc_kill (repeat_count INT)
+BEGIN
+        DECLARE current_num int;
+	DECLARE victim_connection_id INT DEFAULT 0;
+	DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN END;
+	SET current_num = 1;
+	WHILE current_num < repeat_count do
+		SELECT ID INTO victim_connection_id FROM INFORMATION_SCHEMA.PROCESSLIST WHERE user='root' AND info LIKE 'INSERT%' LIMIT 1;
+		KILL CONNECTION victim_connection_id;
+		SELECT sleep(0.2); 
+                SET current_num = current_num + 1;
+        END WHILE;
+END|
+DELIMITER ;|
+
+
+--connection node_1a
+--disable_query_log
+--send CALL proc_kill(1200)
+
+--connection node_1b
+--send CALL proc_kill(1200)
+
+--connection node_1c
+--send CALL proc_kill(1200)
+
+--connection node_2
+--send CALL proc_kill(1200)
+
+--connection node_2a
+--send CALL proc_kill(1200)
+
+--connection node_2b
+--send CALL proc_kill(1200)
+
+
+# shutdown node 3
+--connection node_3
+--sleep 1
+--let $count = 6
+while ($count)
+{
+	--echo Shutting down server ...
+	--source include/shutdown_mysqld.inc
+	--sleep 1
+	# restart node 3
+	--connection node_3
+	--source include/start_mysqld.inc
+	--source include/wait_until_connected_again.inc
+	--dec $count
+}
+
+
+--connection node_2
+--reap
+
+--connection node_1b
+--reap
+
+--connection node_1c
+--reap
+
+--connection node_2a
+--reap
+
+--connection node_2b
+--reap
+
+--connection node_1a
+--reap
+--enable_query_log
+
+
+--connection node_1
+DROP PROCEDURE proc_kill;
