@@ -921,6 +921,9 @@ static my_bool kill_handlerton(THD *thd, plugin_ref plugin,
 void ha_kill_query(THD* thd, enum thd_kill_levels level)
 {
   DBUG_ENTER("ha_kill_query");
+#ifdef WITH_WSREP
+    DEBUG_SYNC(thd, "wsrep_before_kill_handlerton");
+#endif /* WITH_WSREP */
   plugin_foreach(thd, kill_handlerton, MYSQL_STORAGE_ENGINE_PLUGIN, &level);
   DBUG_VOID_RETURN;
 }
