@@ -257,10 +257,17 @@ extern "C" my_bool wsrep_thd_bf_abort(THD *bf_thd, THD *victim_thd,
     }
 
     victim_thd->wsrep_aborter= bf_thd->thread_id;
-    victim_thd->awake_no_mutex(KILL_QUERY_HARD);
+    /* for KILL command, use the chosen kill signal,
+       BF aborting uses KILL_QUERY_HARD
+    */
+    if (wsrep_thd_is_local(bf_thd) && bf_thd->lex->sql_command == SQLCOM_KILL)
+      victim_thd->awake_no_mutex(bf_thd->lex->kill_signal);
+    else
+      victim_thd->awake_no_mutex(KILL_QUERY_HARD);
   }
   else
-    WSREP_DEBUG("wsrep_thd_bf_abort skipped awake for %llu", thd_get_thread_id(victim_thd));
+    WSREP_DEBUG("wsrep_thd_bf_abort skipped awake for %llu",
+                thd_get_thread_id(victim_thd));
 
   wsrep_thd_UNLOCK(victim_thd);
   return ret;
@@ -399,6 +406,10 @@ extern "C" bool wsrep_thd_set_wsrep_aborter(THD *bf_thd, THD *victim_thd)
     return true;
   }
   victim_thd->wsrep_aborter= bf_thd->thread_id;
+  if (wsrep_thd_is_local(bf_thd) && bf_thd->lex->sql_command == SQLCOM_KILL)
+  {
+    victim_thd->wsrep_abort_by_kill= bf_thd->lex->kill_signal;
+  }
   WSREP_DEBUG("wsrep_thd_set_wsrep_aborter setting wsrep_aborter %u",
               victim_thd->wsrep_aborter);
   return false;

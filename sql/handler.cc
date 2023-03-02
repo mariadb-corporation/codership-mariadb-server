@@ -7602,6 +7602,7 @@ int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
   if (!WSREP(bf_thd) &&
       !(bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU &&
         wsrep_thd_is_toi(bf_thd))) {
+    wsrep_thd_UNLOCK(victim_thd);
     DBUG_RETURN(0);
   }
 
@@ -7612,6 +7613,7 @@ int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
   }
   else
   {
+    wsrep_thd_UNLOCK(victim_thd);
     WSREP_WARN("Cannot abort InnoDB transaction");
   }
 

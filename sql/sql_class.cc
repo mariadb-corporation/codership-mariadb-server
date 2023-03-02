@@ -1305,6 +1305,7 @@ void THD::init()
   wsrep_affected_rows     = 0;
   m_wsrep_next_trx_id     = WSREP_UNDEFINED_TRX_ID;
   wsrep_aborter           = 0;
+  wsrep_abort_by_kill     = NOT_KILLED;
   wsrep_desynced_backup_stage= false;
 #endif /* WITH_WSREP */
 
@@ -1656,6 +1657,9 @@ void THD::reset_for_reuse()
 #endif
 #ifdef WITH_WSREP
   wsrep_free_status(this);
+  wsrep_cs().reset_error();
+  wsrep_aborter= 0;
+  wsrep_abort_by_kill= NOT_KILLED;
 #endif /* WITH_WSREP */
 }
 
@@ -2156,6 +2160,7 @@ void THD::reset_killed()
   mysql_mutex_assert_not_owner(&LOCK_thd_data);
   mysql_mutex_lock(&LOCK_thd_data);
   wsrep_aborter= 0;
+  wsrep_abort_by_kill= NOT_KILLED;
   mysql_mutex_unlock(&LOCK_thd_data);
 #endif /* WITH_WSREP */
 

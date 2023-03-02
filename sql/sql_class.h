@@ -5147,6 +5147,8 @@ public:
   bool                      wsrep_ignore_table;
   /* thread who has started kill for this THD protected by LOCK_thd_data*/
   my_thread_id              wsrep_aborter;
+  /* kill signal used, if thread was killed by manual KILL */
+  killed_state              wsrep_abort_by_kill;
 
   /* true if BF abort is observed in do_command() right after reading
   client's packet, and if the client has sent PS execute command. */
