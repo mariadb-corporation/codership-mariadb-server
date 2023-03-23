@@ -1,6 +1,11 @@
 connection node_2;
 connection node_1;
 connection node_1;
+CALL mtr.add_suppression("SEQUENCES declared without `NOCACHE` will not behave correctly in galera cluster.");
+CALL mtr.add_suppression("WSREP: CREATE TABLE isolation failure");
+connection node_2;
+CALL mtr.add_suppression("SEQUENCES declared without `NOCACHE` will not behave correctly in galera cluster.");
+connection node_1;
 CREATE SEQUENCE `seq` start with 1 minvalue 1 maxvalue 1000000 increment by 0 cache 1000 nocycle ENGINE=InnoDB;
 SHOW CREATE SEQUENCE seq;
 Table	Create Table
@@ -47,6 +52,40 @@ NEXT VALUE FOR Seq1_1
 3001
 connection node_1;
 DROP SEQUENCE Seq1_1;
-CALL mtr.add_suppression("SEQUENCES declared without `NOCACHE` will not behave correctly in galera cluster.");
+connection node_1;
+SET SESSION autocommit=0;
+CREATE TEMPORARY SEQUENCE seq1;
+COMMIT;
+SET SESSION AUTOCOMMIT=1;
+SHOW CREATE TABLE seq1;
+Table	Create Table
+seq1	CREATE TEMPORARY TABLE `seq1` (
+  `next_not_cached_value` bigint(21) NOT NULL,
+  `minimum_value` bigint(21) NOT NULL,
+  `maximum_value` bigint(21) NOT NULL,
+  `start_value` bigint(21) NOT NULL COMMENT 'start value when sequences is created or value if RESTART is used',
+  `increment` bigint(21) NOT NULL COMMENT 'increment value',
+  `cache_size` bigint(21) unsigned NOT NULL,
+  `cycle_option` tinyint(1) unsigned NOT NULL COMMENT '0 if no cycles are allowed, 1 if the sequence should begin a new cycle when maximum_value is passed',
+  `cycle_count` bigint(21) NOT NULL COMMENT 'How many cycles have been done'
+) ENGINE=InnoDB SEQUENCE=1
 connection node_2;
-CALL mtr.add_suppression("SEQUENCES declared without `NOCACHE` will not behave correctly in galera cluster.");
+SHOW CREATE TABLE seq1;
+ERROR 42S02: Table 'test.seq1' doesn't exist
+connection node_1;
+SET SESSION autocommit=1;
+DROP SEQUENCE seq1;
+SET SESSION AUTOCOMMIT=0;
+SET SESSION wsrep_OSU_method='RSU';
+create temporary sequence sq engine=innodb;
+ERROR 42000: This version of MariaDB doesn't yet support 'CREATE TEMPORARY SEQUENCE in cluster using wsrep_osu_method=RSU'
+COMMIT;
+SET SESSION AUTOCOMMIT=1;
+SET SESSION wsrep_OSU_method='TOI';
+SET SESSION AUTOCOMMIT=0;
+SET SESSION wsrep_OSU_method='RSU';
+create sequence sq engine=innodb;
+ERROR 42000: This version of MariaDB doesn't yet support 'CREATE TEMPORARY SEQUENCE in cluster using wsrep_osu_method=RSU'
+COMMIT;
+SET SESSION AUTOCOMMIT=1;
+SET SESSION wsrep_OSU_method='TOI';
