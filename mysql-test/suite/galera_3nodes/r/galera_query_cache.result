@@ -2,17 +2,11 @@ connection node_2;
 connection node_1;
 connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3;
 connect node_4, 127.0.0.1, root, , test, $NODE_MYPORT_4;
-connect node_5, 127.0.0.1, root, , test, $NODE_MYPORT_5;
-connect node_6, 127.0.0.1, root, , test, $NODE_MYPORT_6;
 connection node_2;
 call mtr.add_suppression("WSREP: Ignoring server id for non bootstrap node.");
-connection node_3;
-call mtr.add_suppression("WSREP: Ignoring server id for non bootstrap node.");
-connection node_5;
-call mtr.add_suppression("WSREP: Ignoring server id for non bootstrap node.");
-connection node_6;
-call mtr.add_suppression("WSREP: Ignoring server id for non bootstrap node.");
 connection node_4;
+call mtr.add_suppression("WSREP: Ignoring server id for non bootstrap node.");
+connection node_3;
 CHANGE MASTER TO master_host='127.0.0.1', master_user='root', master_port=NODE_MYPORT_1, master_use_gtid=current_pos;;
 START SLAVE;
 include/wait_for_slave_to_start.inc
@@ -37,134 +31,97 @@ INSERT INTO t1 SELECT NULL, md5(rand()) from t1 LIMIT 1000000;
 INSERT INTO t1 SELECT NULL, md5(rand()) from t1 LIMIT 1000000;
 INSERT INTO t1 SELECT NULL, md5(rand()) from t1 LIMIT 1000000;
 INSERT INTO t1 values (NULL, 'foobar');
-connection node_4;
+connection node_3;
 connection node_1;
 # node_1
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 connection node_2;
 # node_2
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 connection node_3;
 # node_3
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 connection node_4;
 # node_4
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
-connection node_5;
-# node_5
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
-connection node_6;
-# node_6
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
+524251	foobar
 connection node_1;
 # node_1 insert new
 INSERT INTO t1 values (5000000000, 'foobar');
-connection node_4;
+connection node_3;
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 connection node_2;
 # node_2
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 connection node_3;
 # node_3
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 connection node_4;
 # node_4
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 SELECT * FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
-connection node_5;
-# node_5
-set profiling=1;
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
-5000000000	foobar
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
-5000000000	foobar
-connection node_6;
-# node_6
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
-5000000000	foobar
-SELECT * FROM t1 WHERE msg='foobar';
-id	msg
-786376	foobar
-5000000000	foobar
-connection node_3;
+connection node_2;
 # node_3 different query same table
 SELECT id, msg FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
-connection node_6;
+connection node_4;
 # node_6 different query same table
 SELECT id, msg FROM t1 WHERE msg='foobar';
 id	msg
-786376	foobar
+524251	foobar
 5000000000	foobar
 connection node_1;
 drop table t1;
-connection node_4;
-connection node_4;
+connection node_3;
+connection node_3;
 STOP SLAVE;
 RESET SLAVE ALL;
 connection node_1;
