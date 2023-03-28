@@ -363,7 +363,6 @@ int Wsrep_client_service::bf_rollback()
   }
   m_thd->release_transactional_locks();
   mysql_ull_cleanup(m_thd);
-  m_thd->mdl_context.release_explicit_locks();
 
   DBUG_RETURN(ret);
 }
