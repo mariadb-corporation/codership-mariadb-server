@@ -314,6 +314,7 @@ int wsrep_abort_thd(THD *bf_thd,
 {
   DBUG_ENTER("wsrep_abort_thd");
 
+  int res= 1;
   mysql_mutex_lock(&victim_thd->LOCK_thd_data);
 
   /* Note that when you use RSU node is desynced from cluster, thus WSREP(thd)
@@ -327,8 +328,8 @@ int wsrep_abort_thd(THD *bf_thd,
       WSREP_DEBUG("wsrep_abort_thd, by: %llu, victim: %llu",
                   (long long)bf_thd->real_id, (long long)victim_thd->real_id);
       mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
-      ha_abort_transaction(bf_thd, victim_thd, signal);
-      DBUG_RETURN(1);
+      res= ha_abort_transaction(bf_thd, victim_thd, signal);
+      DBUG_RETURN(res);
   }
   else
   {
@@ -342,7 +343,7 @@ int wsrep_abort_thd(THD *bf_thd,
   }
 
   mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
-  DBUG_RETURN(1);
+  DBUG_RETURN(res);
 }
 
 bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)

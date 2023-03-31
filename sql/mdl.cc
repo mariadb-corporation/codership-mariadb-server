@@ -1789,7 +1789,7 @@ MDL_lock::can_grant_lock(enum_mdl_type type_arg,
             requestor_ctx->get_thd()->wsrep_cs().mode() ==
             wsrep::client_state::m_rsu)
         {
-          wsrep_handle_mdl_conflict(requestor_ctx, &ticket, &key);
+          can_grant= wsrep_handle_mdl_conflict(requestor_ctx, &ticket, &key);
           if (wsrep_log_conflicts)
           {
             auto key= ticket.get_key();
