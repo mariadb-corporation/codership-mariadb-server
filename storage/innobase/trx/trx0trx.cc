@@ -48,6 +48,7 @@ Created 3/26/1996 Heikki Tuuri
 #include "ut0pool.h"
 #include "ut0vec.h"
 #include "log.h"
+#include "debug_sync.h"         // DEBUG_SYNC
 
 #include <set>
 #include <new>
@@ -1478,6 +1479,17 @@ void trx_t::commit()
   commit_persist();
   ut_d(was_dict_operation= false);
   ut_d(for (const auto &p : mod_tables) ut_ad(!p.second.is_dropped()));
+#ifdef WITH_WSREP
+  DBUG_EXECUTE_IF("sync.wsrep_trx_commit",
+  {
+    const char act[]=
+      "now "
+      "SIGNAL sync.wsrep_trx_commit_reached "
+      "WAIT_FOR signal.wsrep_trx_commit";
+      DBUG_ASSERT(!debug_sync_set_action(mysql_thd,
+                                         STRING_WITH_LEN(act)));
+  };);
+#endif /* WITH_WSREP */
   commit_cleanup();
 }
 

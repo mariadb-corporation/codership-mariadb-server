@@ -7964,7 +7964,8 @@ Compare_keys handler::compare_key_parts(const Field &old_field,
   @param victim_thd   victim THD to be aborted
 
   @return
-    always 0
+    0 if successful or not needed
+    1 if abort failed
 */
 
 int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
@@ -7976,17 +7977,18 @@ int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
     DBUG_RETURN(0);
   }
 
+  int res= 0;
   handlerton *hton= installed_htons[DB_TYPE_INNODB];
   if (hton && hton->abort_transaction)
   {
-    hton->abort_transaction(hton, bf_thd, victim_thd, signal);
+    res= hton->abort_transaction(hton, bf_thd, victim_thd, signal);
   }
   else
   {
     WSREP_WARN("Cannot abort InnoDB transaction");
   }
 
-  DBUG_RETURN(0);
+  DBUG_RETURN(res);
 }
 #endif /* WITH_WSREP */
 

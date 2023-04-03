@@ -3015,13 +3015,13 @@ void wsrep_to_isolation_end(THD *thd)
   @retval FALSE  Lock request cannot be granted
 */
 
-void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
+bool wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                                const MDL_ticket *ticket,
                                const MDL_key *key)
 {
-  /* Fallback to the non-wsrep behaviour */
-  if (!WSREP_ON) return;
+  DBUG_ASSERT(WSREP_ON);
 
+  bool can_grant= true;
   THD *request_thd= requestor_ctx->get_thd();
   THD *granted_thd= ticket->get_ctx()->get_thd();
 
@@ -3072,7 +3072,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
       if (granted_thd->current_backup_stage != BACKUP_FINISHED &&
 	  wsrep_check_mode(WSREP_MODE_BF_MARIABACKUP))
       {
-	wsrep_abort_thd(request_thd, granted_thd, 1);
+	can_grant= !wsrep_abort_thd(request_thd, granted_thd, 1);
       }
     }
     else if (request_thd->lex->sql_command == SQLCOM_DROP_TABLE)
@@ -3081,7 +3081,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                   wsrep_thd_transaction_state_str(granted_thd));
       ticket->wsrep_report(wsrep_debug);
       mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
-      wsrep_abort_thd(request_thd, granted_thd, 1);
+      can_grant= !wsrep_abort_thd(request_thd, granted_thd, 1);
     }
     else
     {
@@ -3091,7 +3091,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
       if (granted_thd->wsrep_trx().active())
       {
         mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
-        wsrep_abort_thd(request_thd, granted_thd, 1);
+        can_grant= !wsrep_abort_thd(request_thd, granted_thd, 1);
       }
       else
       {
@@ -3102,7 +3102,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
         mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
         if (wsrep_thd_is_BF(request_thd, FALSE))
         {
-          ha_abort_transaction(request_thd, granted_thd, TRUE);
+          can_grant= !ha_abort_transaction(request_thd, granted_thd, TRUE);
         }
         else
         {
@@ -3118,6 +3118,8 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
   {
     mysql_mutex_unlock(&request_thd->LOCK_thd_data);
   }
+
+  return can_grant;
 }
 
 /**/

@@ -1979,7 +1979,7 @@ static void innodb_disable_internal_writes(bool disable)
     sst_enable_innodb_writes();
 }
 
-static void wsrep_abort_transaction(handlerton*, THD *, THD *, my_bool);
+static int wsrep_abort_transaction(handlerton*, THD *, THD *, my_bool);
 static int innobase_wsrep_set_checkpoint(handlerton* hton, const XID* xid);
 static int innobase_wsrep_get_checkpoint(handlerton* hton, XID* xid);
 #endif /* WITH_WSREP */
@@ -18743,10 +18743,10 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
   @param victim_thd   victim THD to be aborted
 
   @return 0 victim was aborted
-  @return -1 victim thread was aborted (no transaction)
+  @return 1 victim thread was not aborted
 */
 static
-void
+int
 wsrep_abort_transaction(
 	handlerton*,
 	THD *bf_thd,
@@ -18757,25 +18757,44 @@ wsrep_abort_transaction(
 	ut_ad(bf_thd);
 	ut_ad(victim_thd);
 
+	int res= 0;
 	wsrep_thd_kill_LOCK(victim_thd);
 	wsrep_thd_LOCK(victim_thd);
 	trx_t* victim_trx= thd_to_trx(victim_thd);
 	wsrep_thd_UNLOCK(victim_thd);
 
-	WSREP_DEBUG("abort transaction: BF: %s victim: %s victim conf: %s",
+	WSREP_DEBUG("abort_transaction: BF: %s victim: %s victim trx_state: %s",
 			wsrep_thd_query(bf_thd),
 			wsrep_thd_query(victim_thd),
 			wsrep_thd_transaction_state_str(victim_thd));
 
 	if (victim_trx) {
-		victim_trx->lock.set_wsrep_victim();
-
 		wsrep_thd_LOCK(victim_thd);
-		bool aborting= !wsrep_thd_set_wsrep_aborter(bf_thd, victim_thd);
-		wsrep_thd_UNLOCK(victim_thd);
-		if (aborting) {
-			DEBUG_SYNC(bf_thd, "before_wsrep_thd_abort");
-			DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
+		victim_trx->mutex_lock();
+		switch(victim_trx->state) {
+		default:
+		{
+			WSREP_DEBUG("abort_transaction: too late trx_t::state: %d", victim_trx->state);
+		  	victim_trx->mutex_unlock();
+			wsrep_thd_UNLOCK(victim_thd);
+			res= 1;
+			break;
+		}
+		case TRX_STATE_ACTIVE:
+		{
+			/* TODO: Do we really need this if transaction has no changes? */
+			victim_trx->lock.set_wsrep_victim();
+
+			bool aborting= !wsrep_thd_set_wsrep_aborter(bf_thd, victim_thd);
+			wsrep_thd_UNLOCK(victim_thd);
+			/* TODO: this is problematic because victim can now either
+			commit or abort after releasing trx mutex and before we
+			have time to call thd::awake() and InnoDB innobase_kill_query.
+			Better would be to call rollback but we are in wrong thread. */
+			victim_trx->mutex_unlock();
+			if (aborting) {
+				DEBUG_SYNC(bf_thd, "before_wsrep_thd_abort");
+				DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
 					 {
 					   const char act[]=
 					     "now "
@@ -18784,7 +18803,11 @@ wsrep_abort_transaction(
 					   DBUG_ASSERT(!debug_sync_set_action(bf_thd,
 									      STRING_WITH_LEN(act)));
 					 };);
-			wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
+				res= wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
+			} else {
+				res= 1;
+			}
+		}
 		}
 	} else {
 		DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
@@ -18796,11 +18819,11 @@ wsrep_abort_transaction(
 				   DBUG_ASSERT(!debug_sync_set_action(bf_thd,
 								      STRING_WITH_LEN(act)));
 				 };);
-		wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
+		res= wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
 	}
 
 	wsrep_thd_kill_UNLOCK(victim_thd);
-	DBUG_VOID_RETURN;
+	DBUG_RETURN(res);
 }
 
 static
