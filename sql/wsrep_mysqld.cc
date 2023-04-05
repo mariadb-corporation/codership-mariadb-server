@@ -3099,16 +3099,18 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
           Granted_thd is likely executing with wsrep_on=0. If the requesting
           thd is BF, BF abort and wait.
         */
-        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
         if (wsrep_thd_is_BF(request_thd, FALSE))
         {
           ha_abort_transaction(request_thd, granted_thd, TRUE);
+          mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+          granted_thd->awake(KILL_QUERY_HARD);
         }
         else
         {
 	  WSREP_MDL_LOG(INFO, "MDL unknown BF-BF conflict", schema, schema_len,
                       request_thd, granted_thd);
 	  ticket->wsrep_report(true);
+          mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
 	  unireg_abort(1);
         }
       }
