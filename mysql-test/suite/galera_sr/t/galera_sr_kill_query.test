@@ -20,11 +20,21 @@ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 --let $wait_condition = SELECT TABLE_ROWS > 0 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't1';
 --source include/wait_condition.inc
 
---connection node_1
 --connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
 --echo Killing query ...
 --disable_query_log
---eval KILL QUERY $connection_id
+
+--let $count = 1
+while ($count)
+{
+  --eval KILL QUERY $connection_id
+  --let $condition = `SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE ID = $connection_id AND (Command = 'Killed' OR Command = 'Sleep')`
+  IF ($condition == 1) {
+  --dec $count
+  }
+  --sleep 0.1
+}
+
 --enable_query_log
 
 --connection node_1

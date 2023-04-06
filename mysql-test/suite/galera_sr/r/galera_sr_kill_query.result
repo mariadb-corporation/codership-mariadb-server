@@ -7,7 +7,6 @@ CREATE TABLE t1 (f1 INTEGER) ENGINE=InnoDB;
 INSERT INTO t1 SELECT 1 FROM ten AS a1, ten AS a2, ten AS a3, ten AS a4, ten AS a5, ten AS a6;;
 connection node_2;
 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
-connection node_1;
 connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
 Killing query ...
 connection node_1;
