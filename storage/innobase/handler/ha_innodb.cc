@@ -18832,21 +18832,13 @@ wsrep_innobase_kill_one_trx(
     DBUG_VOID_RETURN;
   }
 
-  /* Here we need to lock THD::LOCK_thd_data to protect from
-  concurrent usage or disconnect or delete. */
-
-  /* but, mark first the inndb transaction as a victim for Galera abort,
-     this will prevent potential deadlock, if e.g. KILL command has locked
-     the victim THD and would call for innobase_kill_query where additional
-     innodb side locks will be needed
- */
-  // removed, this is done in wsrep_kill_victim()
-  // victim_trx->lock.was_chosen_as_wsrep_victim= true;
-
   /* Temporarily release victim_trx mutex to allow locking order
-     LOCK_thd_data -> trx_mutex_exit() needed in wsrep_abort_transaction() */
+     LOCK_thd_data -> trx_mutex_exit() needed in wsrep_abort_transaction().
+     This function is called from lock manager with lock_sys mutex held,
+     which prevents the victim from going out of scope. */
   trx_mutex_exit(victim_trx);
   DEBUG_SYNC(bf_thd, "wsrep_before_BF_victim_lock");
+  wsrep_thd_kill_LOCK(thd);
   wsrep_thd_LOCK(thd);
   DEBUG_SYNC(bf_thd, "wsrep_after_BF_victim_lock");
   trx_mutex_enter(victim_trx);
@@ -18881,6 +18873,7 @@ wsrep_innobase_kill_one_trx(
 
   wsrep_kill_victim(bf_thd, thd, victim_trx, signal);
   wsrep_thd_UNLOCK(thd);
+  wsrep_thd_kill_UNLOCK(thd);
   DBUG_VOID_RETURN;
 }
 

@@ -350,7 +350,6 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
   WSREP_LOG_THD(victim_thd, "victim before");
 
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
-  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
 
 #ifdef ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("sync.wsrep_bf_abort",
