@@ -3308,16 +3308,15 @@ btr_cur_ins_lock_and_undo(
 			GAP-locking we mark that this transaction
 			is using unique key scan here. */
 			if ((type & (DICT_CLUSTERED | DICT_UNIQUE)) == DICT_UNIQUE
-			    && trx->is_wsrep()
-			    && wsrep_thd_is_BF(trx->mysql_thd, false)) {
-				trx->wsrep_UK_scan= true;
+			    && trx->is_wsrep_BF()) {
+				trx->wsrep_begin_UK_scan();
 			}
 #endif /* WITH_WSREP */
 			err = lock_rec_insert_check_and_lock(
 				flags, rec, btr_cur_get_block(cursor),
 				index, thr, mtr, inherit);
 #ifdef WITH_WSREP
-			trx->wsrep_UK_scan= false;
+			trx->wsrep_end_UK_scan();
 #endif /* WITH_WSREP */
 		}
 	}

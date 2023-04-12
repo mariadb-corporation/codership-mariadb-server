@@ -164,7 +164,6 @@ trx_init(
 #ifdef WITH_WSREP
 	ut_ad(!trx->wsrep);
 	ut_ad(!trx->wsrep_event);
-	ut_ad(!trx->wsrep_UK_scan);
 #endif /* WITH_WSREP */
 
 	ut_ad(trx->get_flush_observer() == NULL);
@@ -374,7 +373,6 @@ trx_t *trx_create()
 
 #ifdef WITH_WSREP
 	trx->wsrep_event= NULL;
-	ut_ad(!trx->wsrep_UK_scan);
 #endif /* WITH_WSREP */
 
 	trx_sys.register_trx(trx);
@@ -481,8 +479,6 @@ void trx_t::free()
   MEM_NOACCESS(&flush_observer, sizeof flush_observer);
 #ifdef WITH_WSREP
   MEM_NOACCESS(&wsrep_event, sizeof wsrep_event);
-  ut_ad(!wsrep_UK_scan);
-  MEM_NOACCESS(&wsrep_UK_scan, sizeof wsrep_UK_scan);
 #endif /* WITH_WSREP */
   MEM_NOACCESS(&magic_n, sizeof magic_n);
   trx_pools->mem_free(this);
@@ -1456,7 +1452,7 @@ inline void trx_t::commit_in_memory(const mtr_t *mtr)
   order critical section. */
   if (wsrep)
   {
-    wsrep= false;
+    wsrep= 0;
     wsrep_commit_ordered(mysql_thd);
   }
   lock.was_chosen_as_wsrep_victim= false;

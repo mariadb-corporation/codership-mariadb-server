@@ -734,14 +734,27 @@ public:
 	Transitions to COMMITTED are protected by trx_t::mutex. */
 	trx_state_t	state;
 #ifdef WITH_WSREP
-	/** whether wsrep_on(mysql_thd) held at the start of transaction */
-	bool		wsrep;
+	/** (1) whether wsrep_on(mysql_thd) held at the start of transaction
+	    (2) whether wsrep_thd_is_BF(mysql_thd) held at start of transaction
+	    (4) whether BF thread is performing unique secondary index scan
+	**/
+	static const byte TRX_WSREP_ON = 1;
+	static const byte TRX_WSREP_BF = 2;
+	static const byte TRX_WSREP_UK_SCAN = 4;
+	byte		wsrep;
+	/** true, if thread has wsrep_on  */
 	bool is_wsrep() const { return UNIV_UNLIKELY(wsrep); }
+	/** true, if thread is high priority brute force (BF)  */
+	bool is_wsrep_BF() const { return UNIV_UNLIKELY(wsrep & TRX_WSREP_BF); }
 	/** true, if BF thread is performing unique secondary index scanning */
-	bool wsrep_UK_scan;
-	bool is_wsrep_UK_scan() const { return UNIV_UNLIKELY(wsrep_UK_scan); }
+	bool is_wsrep_UK_scan() const { return UNIV_UNLIKELY(wsrep & TRX_WSREP_UK_SCAN); }
+	/** begin unique secondary index scan in wsrep BF thread */
+	void wsrep_begin_UK_scan() { wsrep |= trx_t::TRX_WSREP_UK_SCAN; }
+	/** end unique secondary index scan in wsrep BF thread */
+	void wsrep_end_UK_scan() {wsrep &= ~(trx_t::TRX_WSREP_UK_SCAN); }
 #else /* WITH_WSREP */
 	bool is_wsrep() const { return false; }
+	bool is_wsrep_BF() const {return false; }
 #endif /* WITH_WSREP */
 
 	ReadView	read_view;	/*!< consistent read view used in the

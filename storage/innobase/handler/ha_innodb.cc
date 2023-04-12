@@ -2740,7 +2740,9 @@ innobase_trx_init(
 	trx->check_unique_secondary = !thd_test_options(
 		thd, OPTION_RELAXED_UNIQUE_CHECKS);
 #ifdef WITH_WSREP
-	trx->wsrep = wsrep_on(thd);
+	trx->wsrep = wsrep_on(thd) ?
+	  (wsrep_thd_is_BF(thd, true) ? (trx_t::TRX_WSREP_BF | trx_t::TRX_WSREP_ON )
+	                              : trx_t::TRX_WSREP_ON) : 0;
 #endif
 
 	DBUG_VOID_RETURN;
@@ -4489,7 +4491,7 @@ innobase_commit_low(
 	} else {
 		trx->will_lock = false;
 #ifdef WITH_WSREP
-		trx->wsrep = false;
+		trx->wsrep = 0;
 #endif /* WITH_WSREP */
 	}
 
@@ -18793,7 +18795,7 @@ wsrep_innobase_kill_one_trx(
 	      "trx_id: " TRX_ID_FMT " thread: %ld "
 	      "seqno: %lld client_state: %s client_mode: %s "
 	      "trx_state %s query: %s",
-	      wsrep_thd_is_BF(thd, false) ? "BF" : "normal",
+	      victim_trx->is_wsrep_BF() ? "BF" : "normal",
 	      victim_trx->id,
 	      thd_get_thread_id(thd),
 	      wsrep_thd_trx_seqno(thd),
