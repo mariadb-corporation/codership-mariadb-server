@@ -18760,7 +18760,6 @@ wsrep_kill_victim(
   if (wsrep_thd_set_wsrep_aborter(bf_thd, thd))
   {
     WSREP_DEBUG("innodb kill transaction skipped due to wsrep_aborter set");
-    wsrep_thd_UNLOCK(thd);
     DBUG_VOID_RETURN;
   }
 
@@ -18777,10 +18776,8 @@ wsrep_kill_victim(
   }
   else
   {
-    wsrep_thd_LOCK(thd);
     victim_trx->lock.was_chosen_as_wsrep_victim= false;
     wsrep_thd_set_wsrep_aborter(NULL, thd);
-    wsrep_thd_UNLOCK(thd);
 
     WSREP_DEBUG("wsrep_thd_bf_abort has failed, victim %lu will survive",
                 thd_get_thread_id(thd));
@@ -18878,6 +18875,7 @@ wsrep_innobase_kill_one_trx(
 	      wsrep_thd_query(thd));
 
   wsrep_kill_victim(bf_thd, thd, victim_trx, signal);
+  wsrep_thd_UNLOCK(thd);
   DBUG_VOID_RETURN;
 }
 
@@ -18898,9 +18896,18 @@ wsrep_abort_transaction(
 	THD *victim_thd,
 	my_bool signal)
 {
-  /* Note that victim thd is protected with
-  THD::LOCK_thd_data and THD::LOCK_thd_kill here. */
   trx_t* victim_trx= thd_to_trx(victim_thd);
+
+  /* Unlock temporarily to grab mutexes in the right order. */
+  wsrep_thd_UNLOCK(victim_thd);
+  lock_mutex_enter();
+
+  /* Note that victim thd is protected with THD::LOCK_thd_kill here. */
+  if (victim_trx) {
+    trx_mutex_enter(victim_trx);
+  }
+  wsrep_thd_LOCK(victim_thd);
+
   trx_t* bf_trx= thd_to_trx(bf_thd);
   WSREP_DEBUG("wsrep_abort_transaction: BF:"
 	      " thread %ld client_state %s client_mode %s"
@@ -18923,16 +18930,10 @@ wsrep_abort_transaction(
 	      victim_trx ? victim_trx->id : 0);
   if (victim_trx)
   {
-    wsrep_thd_UNLOCK(victim_thd);
-    lock_mutex_enter();
-    trx_mutex_enter(victim_trx);
-    wsrep_thd_LOCK(victim_thd);
-
     wsrep_kill_victim(bf_thd, victim_thd, victim_trx, signal);
-
-    lock_mutex_exit();
     trx_mutex_exit(victim_trx);
   }
+  lock_mutex_exit();
 }
 
 static

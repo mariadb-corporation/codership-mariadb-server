@@ -339,7 +339,6 @@ void wsrep_abort_thd(THD *bf_thd,
                 bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU,
                 wsrep_thd_is_toi(bf_thd),
                 wsrep_thd_is_aborting(victim_thd));
-    wsrep_thd_UNLOCK(victim_thd);
   }
 
   DBUG_VOID_RETURN;

@@ -9328,8 +9328,6 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
         if (WSREP(thd))
         {
           wsrep_abort_thd(thd, tmp, 1);
-          /* tmp is unlocked in wsrep_abort_thd call */
-          DBUG_RETURN(0);
         }
         else
 #endif /* WITH_WSREP */

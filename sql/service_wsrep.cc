@@ -252,7 +252,6 @@ extern "C" my_bool wsrep_thd_bf_abort(THD *bf_thd, THD *victim_thd,
     {
       WSREP_DEBUG("victim is killed already by %llu, skipping awake",
                   victim_thd->wsrep_aborter);
-      wsrep_thd_UNLOCK(victim_thd);
       return false;
     }
 
@@ -269,7 +268,6 @@ extern "C" my_bool wsrep_thd_bf_abort(THD *bf_thd, THD *victim_thd,
     WSREP_DEBUG("wsrep_thd_bf_abort skipped awake for %llu",
                 thd_get_thread_id(victim_thd));
 
-  wsrep_thd_UNLOCK(victim_thd);
   return ret;
 }
 
