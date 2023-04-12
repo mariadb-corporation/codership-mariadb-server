@@ -1247,7 +1247,7 @@ bool do_command(THD *thd)
     /* Check if we can continue without closing the connection */
 
     /* The error must be set. */
-    DBUG_ASSERT(thd->is_error() || thd->killed != NOT_KILLED);
+    DBUG_ASSERT(thd->is_error());
     thd->protocol->end_statement();
 
     /* Mark the statement completed. */
@@ -1318,11 +1318,8 @@ bool do_command(THD *thd)
 	command != COM_STMT_EXECUTE &&
         command != COM_QUIT)
     {
-      if (thd->wsrep_abort_by_kill == NOT_KILLED)
-      {
-        WSREP_DEBUG("Deadlock error for: %s", thd->query());
-        my_error(ER_LOCK_DEADLOCK, MYF(0));
-      }
+      my_error(ER_LOCK_DEADLOCK, MYF(0));
+      WSREP_DEBUG("Deadlock error for: %s", thd->query());
       thd->reset_killed();
       thd->mysys_var->abort     = 0;
       thd->wsrep_retry_counter  = 0;
@@ -1394,16 +1391,13 @@ out:
 
   if (thd->wsrep_delayed_BF_abort)
   {
-    if (thd->wsrep_abort_by_kill == NOT_KILLED)
-    {
       my_error(ER_LOCK_DEADLOCK, MYF(0));
-    }
-    WSREP_DEBUG("Deadlock error for PS query: %s", thd->query());
-    thd->reset_killed();
-    thd->mysys_var->abort     = 0;
-    thd->wsrep_retry_counter  = 0;
+      WSREP_DEBUG("Deadlock error for PS query: %s", thd->query());
+      thd->reset_killed();
+      thd->mysys_var->abort     = 0;
+      thd->wsrep_retry_counter  = 0;
 
-    thd->wsrep_delayed_BF_abort= false;
+      thd->wsrep_delayed_BF_abort= false;
   }
 #endif /* WITH_WSREP */
   DBUG_RETURN(return_value);
@@ -7838,7 +7832,6 @@ static void wsrep_prepare_for_autocommit_retry(THD* thd,
                                                Parser_state* parser_state)
 {
   thd->clear_error();
-  thd->reset_killed();
   close_thread_tables(thd);
   thd->wsrep_retry_counter++;            // grow
   wsrep_copy_query(thd);
@@ -7916,12 +7909,8 @@ static bool wsrep_mysql_parse(THD *thd, char *rawbuf, uint length,
                   (thd->get_stmt_da()->is_error()) ?
                    thd->get_stmt_da()->sql_errno() : 0);
 
-      if (thd->wsrep_abort_by_kill == NOT_KILLED)
-      {
-        WSREP_DEBUG("Deadlock error for: %s", thd->query());
-        wsrep_override_error(thd, ER_LOCK_DEADLOCK);
-      }
       thd->reset_kill_query();
+      wsrep_override_error(thd, ER_LOCK_DEADLOCK);
     }
 
 #ifdef ENABLED_DEBUG_SYNC
@@ -7935,6 +7924,7 @@ static bool wsrep_mysql_parse(THD *thd, char *rawbuf, uint length,
         thd_is_connection_alive(thd))
     {
       thd->reset_for_next_command();
+      thd->reset_kill_query();
       if (is_autocommit                           &&
           thd->lex->sql_command != SQLCOM_SELECT  &&
           thd->wsrep_retry_counter < thd->variables.wsrep_retry_autocommit)
@@ -7965,11 +7955,7 @@ static bool wsrep_mysql_parse(THD *thd, char *rawbuf, uint length,
                     thd->wsrep_retry_counter,
                     thd->variables.wsrep_retry_autocommit,
                     wsrep_thd_query(thd));
-        if (thd->wsrep_abort_by_kill == NOT_KILLED)
-        {
-          WSREP_DEBUG("Deadlock error for: %s", thd->query());
-          my_error(ER_LOCK_DEADLOCK, MYF(0));
-        }
+        my_error(ER_LOCK_DEADLOCK, MYF(0));
         thd->reset_kill_query();
         thd->wsrep_retry_counter= 0;             //  reset
       }
@@ -9274,7 +9260,6 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
   if (!tmp)
     DBUG_RETURN(error);
   DEBUG_SYNC(thd, "found_killee");
-
   if (tmp->get_command() != COM_DAEMON)
   {
     /*
@@ -9299,6 +9284,7 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
     */
 
     mysql_mutex_lock(&tmp->LOCK_thd_data); // Lock from concurrent usage
+
 #ifdef WITH_WSREP
     if (((thd->security_ctx->master_access & PRIV_KILL_OTHER_USER_PROCESS) ||
         thd->security_ctx->user_matches(tmp->security_ctx)) &&
@@ -9325,10 +9311,18 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
                     id, tmp->wsrep_aborter, kill_signal);
 
 #ifdef WITH_WSREP
-        if (WSREP(thd))
+        if (WSREP(tmp))
         {
-          wsrep_abort_thd(thd, tmp, 1);
-          /* tmp is unlocked in wsrep_abort_thd call */
+          /*
+            Mark killed thd with kill_signal so that awake_no_mutex does
+            not dive into storage engine. We use ha_abort_transaction()
+            to do the storage engine part for wsrep THDs.
+          */
+          tmp->wsrep_abort_by_kill= kill_signal;
+          tmp->awake_no_mutex(kill_signal);
+          /* ha_abort_transaction() releases tmp->LOCK_thd_kill, so tmp
+             is not safe to access anymore. */
+          ha_abort_transaction(thd, tmp, 1);
           DBUG_RETURN(0);
         }
         else
@@ -9340,6 +9334,7 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
     else
       error= (type == KILL_TYPE_QUERY ? ER_KILL_QUERY_DENIED_ERROR :
                                         ER_KILL_DENIED_ERROR);
+
     mysql_mutex_unlock(&tmp->LOCK_thd_data);
   }
   mysql_mutex_unlock(&tmp->LOCK_thd_kill);

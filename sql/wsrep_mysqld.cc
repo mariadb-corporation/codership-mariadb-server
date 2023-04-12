@@ -2670,8 +2670,15 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
 
     /* Here we will call wsrep_abort_transaction so we should hold
     THD::LOCK_thd_data to protect victim from concurrent usage
-    and THD::LOCK_thd_kill to protect from disconnect or delete. */
-    wsrep_thd_LOCK(granted_thd);
+    and THD::LOCK_thd_kill to protect from disconnect or delete.
+
+    Note that all calls to wsrep_abort_thd() and ha_abort_transaction()
+    unlock LOCK_thd_kill for granted_thd, so granted_thd must not be
+    accessed after any of those calls. Moreover all other if branches
+    must release those locks.
+    */
+    mysql_mutex_lock(&granted_thd->LOCK_thd_kill);
+    mysql_mutex_lock(&granted_thd->LOCK_thd_data);
 
     if (wsrep_thd_is_toi(granted_thd) ||
         wsrep_thd_is_applying(granted_thd))
@@ -2680,22 +2687,22 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
       {
         WSREP_DEBUG("BF thread waiting for SR in aborting state");
         ticket->wsrep_report(wsrep_debug);
-        wsrep_thd_UNLOCK(granted_thd);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
       }
       else if (wsrep_thd_is_SR(granted_thd) && !wsrep_thd_is_SR(request_thd))
       {
         WSREP_MDL_LOG(INFO, "MDL conflict, DDL vs SR",
                       schema, schema_len, request_thd, granted_thd);
         wsrep_abort_thd(request_thd, granted_thd, 1);
-        mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_data);
-        mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_kill);
       }
       else
       {
         WSREP_MDL_LOG(INFO, "MDL BF-BF conflict", schema, schema_len,
                       request_thd, granted_thd);
         ticket->wsrep_report(true);
-        wsrep_thd_UNLOCK(granted_thd);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
         unireg_abort(1);
       }
     }
@@ -2704,7 +2711,8 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
     {
       WSREP_DEBUG("BF thread waiting for FLUSH");
       ticket->wsrep_report(wsrep_debug);
-      wsrep_thd_UNLOCK(granted_thd);
+      mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+      mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
     }
     else if (request_thd->lex->sql_command == SQLCOM_DROP_TABLE)
     {
@@ -2712,8 +2720,6 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                   wsrep_thd_transaction_state_str(granted_thd));
       ticket->wsrep_report(wsrep_debug);
       wsrep_abort_thd(request_thd, granted_thd, 1);
-      mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_data);
-      mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_kill);
     }
     else
     {
@@ -2723,8 +2729,6 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
       if (granted_thd->wsrep_trx().active())
       {
         wsrep_abort_thd(request_thd, granted_thd, true);
-        mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_data);
-        mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_kill);
       }
       else
       {
@@ -2734,15 +2738,16 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
         */
         if (wsrep_thd_is_BF(request_thd, FALSE))
         {
+          granted_thd->awake_no_mutex(KILL_QUERY_HARD);
           ha_abort_transaction(request_thd, granted_thd, TRUE);
-          mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_data);
-          mysql_mutex_assert_not_owner(&granted_thd->LOCK_thd_kill);
         }
         else
         {
 	  WSREP_MDL_LOG(INFO, "MDL unknown BF-BF conflict", schema, schema_len,
                       request_thd, granted_thd);
 	  ticket->wsrep_report(true);
+          mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+          mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
 	  unireg_abort(1);
         }
       }
@@ -2758,6 +2763,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
 static bool abort_replicated(THD *thd)
 {
   bool ret_code= false;
+  wsrep_thd_kill_LOCK(thd);
   wsrep_thd_LOCK(thd);
   if (thd->wsrep_trx().state() == wsrep::transaction::s_committing)
   {
@@ -2767,8 +2773,12 @@ static bool abort_replicated(THD *thd)
     ret_code= true;
   }
   else
+  {
+    /* wsrep_abort_thd() above releases LOCK_thd_data and LOCK_thd_kill, so
+       must do it here too. */
     wsrep_thd_UNLOCK(thd);
-
+    wsrep_thd_kill_UNLOCK(thd);
+  }
   return ret_code;
 }
 

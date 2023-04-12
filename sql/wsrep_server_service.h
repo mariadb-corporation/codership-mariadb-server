@@ -46,7 +46,7 @@ public:
 
   void release_high_priority_service(wsrep::high_priority_service*);
 
-  bool background_rollback(wsrep::client_state&);
+  void background_rollback(wsrep::client_state&);
 
   void bootstrap();
   void log_message(enum wsrep::log::level, const char*);

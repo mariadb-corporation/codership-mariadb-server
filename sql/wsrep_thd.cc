@@ -307,6 +307,52 @@ void wsrep_fire_rollbacker(THD *thd)
   }
 }
 
+static bool wsrep_bf_abort_low(THD *bf_thd, THD *victim_thd)
+{
+  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
+
+#ifdef ENABLED_DEBUG_SYNC
+  DBUG_EXECUTE_IF("sync.wsrep_bf_abort",
+                  {
+                    const char act[]=
+                      "now "
+                      "SIGNAL sync.wsrep_bf_abort_reached "
+                      "WAIT_FOR signal.wsrep_bf_abort";
+                    DBUG_ASSERT(!debug_sync_set_action(bf_thd,
+                                                       STRING_WITH_LEN(act)));
+                  };);
+#endif
+
+  wsrep::seqno bf_seqno(bf_thd->wsrep_trx().ws_meta().seqno());
+  bool ret;
+
+  {
+    /* Adopt the lock, it is being held by the caller. */
+    Wsrep_mutex wsm{&victim_thd->LOCK_thd_data};
+    wsrep::unique_lock<wsrep::mutex> lock{wsm, std::adopt_lock};
+
+    if (wsrep_thd_is_toi(bf_thd))
+    {
+      ret= victim_thd->wsrep_cs().total_order_bf_abort(lock, bf_seqno);
+    }
+    else
+    {
+      DBUG_ASSERT(WSREP(victim_thd) ? victim_thd->wsrep_trx().active() : 1);
+      ret= victim_thd->wsrep_cs().bf_abort(lock, bf_seqno);
+    }
+    if (ret)
+    {
+      wsrep_bf_aborts_counter++;
+    }
+    lock.release(); /* No unlock at the end of the scope. */
+  }
+
+  /* Sanity check for wsrep-lib calls to return with LOCK_thd_data held. */
+  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
+
+  return ret;
+}
+
 
 void wsrep_abort_thd(THD *bf_thd,
                     THD *victim_thd,
@@ -324,11 +370,14 @@ void wsrep_abort_thd(THD *bf_thd,
        || ((WSREP_ON || bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU)
            &&  wsrep_thd_is_toi(bf_thd))
        || bf_thd->lex->sql_command == SQLCOM_KILL)
-      && !wsrep_thd_is_aborting(victim_thd))
+      && !wsrep_thd_is_aborting(victim_thd) &&
+      wsrep_bf_abort_low(bf_thd, victim_thd) &&
+      !victim_thd->wsrep_cs().is_rollbacker_active())
   {
-      WSREP_DEBUG("wsrep_abort_thd, by: %llu, victim: %llu",
-                  (long long)bf_thd->real_id, (long long)victim_thd->real_id);
-      ha_abort_transaction(bf_thd, victim_thd, signal);
+    WSREP_DEBUG("wsrep_abort_thd, by: %llu, victim: %llu",
+                (long long)bf_thd->real_id, (long long)victim_thd->real_id);
+    victim_thd->awake_no_mutex(KILL_QUERY_HARD);
+    ha_abort_transaction(bf_thd, victim_thd, signal);
   }
   else
   {
@@ -339,7 +388,8 @@ void wsrep_abort_thd(THD *bf_thd,
                 bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU,
                 wsrep_thd_is_toi(bf_thd),
                 wsrep_thd_is_aborting(victim_thd));
-    wsrep_thd_UNLOCK(victim_thd);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_kill);
   }
 
   DBUG_VOID_RETURN;
@@ -351,19 +401,6 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
   WSREP_LOG_THD(victim_thd, "victim before");
 
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
-  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
-
-#ifdef ENABLED_DEBUG_SYNC
-  DBUG_EXECUTE_IF("sync.wsrep_bf_abort",
-                  {
-                    const char act[]=
-                      "now "
-                      "SIGNAL sync.wsrep_bf_abort_reached "
-                      "WAIT_FOR signal.wsrep_bf_abort";
-                    DBUG_ASSERT(!debug_sync_set_action(bf_thd,
-                                                       STRING_WITH_LEN(act)));
-                  };);
-#endif
 
   if (WSREP(victim_thd) && !victim_thd->wsrep_trx().active())
   {
@@ -386,32 +423,7 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
     mysql_mutex_lock(&victim_thd->LOCK_thd_data);
   }
 
-  bool ret;
-  wsrep::seqno bf_seqno(bf_thd->wsrep_trx().ws_meta().seqno());
-
-  if (wsrep_thd_is_toi(bf_thd))
-  {
-    /* Here we enter wsrep-lib were LOCK_thd_data will be acquired,
-    thus we need to release it. However, we can still hold
-    LOCK_thd_kill to protect from disconnect or delete. */
-    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
-    ret= victim_thd->wsrep_cs().total_order_bf_abort(bf_seqno);
-    mysql_mutex_lock(&victim_thd->LOCK_thd_data);
-  }
-  else
-  {
-    /* Test: mysql-wsrep-features#165. Here we enter wsrep-lib
-    were LOCK_thd_data will be acquired and later LOCK_thd_kill
-    thus we need to release them. */
-    wsrep_thd_UNLOCK(victim_thd);
-    ret= victim_thd->wsrep_cs().bf_abort(bf_seqno);
-    wsrep_thd_LOCK(victim_thd);
-  }
-  if (ret)
-  {
-    wsrep_bf_aborts_counter++;
-  }
-  return ret;
+  return wsrep_bf_abort_low(bf_thd, victim_thd);
 }
 
 int wsrep_create_threadvars()

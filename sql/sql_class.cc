@@ -1915,7 +1915,9 @@ void THD::awake_no_mutex(killed_state state_to_set)
   }
 
   /* Interrupt target waiting inside a storage engine. */
-  if (state_to_set != NOT_KILLED  && !wsrep_is_bf_aborted(this))
+  if (state_to_set != NOT_KILLED &&
+      IF_WSREP(!wsrep_is_bf_aborted(this) && wsrep_abort_by_kill == NOT_KILLED,
+               true))
     ha_kill_query(this, thd_kill_level(this));
 
   abort_current_cond_wait(false);
