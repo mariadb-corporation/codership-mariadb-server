@@ -222,6 +222,7 @@ extern "C" void wsrep_handle_SR_rollback(THD *bf_thd,
 extern "C" my_bool wsrep_thd_bf_abort(THD *bf_thd, THD *victim_thd,
                                       my_bool signal)
 {
+  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
 #ifdef ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
@@ -241,6 +242,7 @@ extern "C" my_bool wsrep_thd_bf_abort(THD *bf_thd, THD *victim_thd,
     as RSU has paused the provider.
    */
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
+  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
 
   if ((ret || !wsrep_on(victim_thd)) && signal)
   {
