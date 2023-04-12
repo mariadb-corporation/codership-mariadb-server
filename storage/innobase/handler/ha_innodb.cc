@@ -18840,11 +18840,16 @@ wsrep_innobase_kill_one_trx(
      the victim THD and would call for innobase_kill_query where additional
      innodb side locks will be needed
  */
-  victim_trx->lock.was_chosen_as_wsrep_victim= true;
+  // removed, this is done in wsrep_kill_victim()
+  // victim_trx->lock.was_chosen_as_wsrep_victim= true;
 
+  /* Temporarily release victim_trx mutex to allow locking order
+     LOCK_thd_data -> trx_mutex_exit() needed in wsrep_abort_transaction() */
+  trx_mutex_exit(victim_trx);
   DEBUG_SYNC(bf_thd, "wsrep_before_BF_victim_lock");
   wsrep_thd_LOCK(thd);
   DEBUG_SYNC(bf_thd, "wsrep_after_BF_victim_lock");
+  trx_mutex_enter(victim_trx);
 
   WSREP_LOG_CONFLICT(bf_thd, thd, TRUE);
 
@@ -18896,17 +18901,16 @@ wsrep_abort_transaction(
 	THD *victim_thd,
 	my_bool signal)
 {
-  trx_t* victim_trx= thd_to_trx(victim_thd);
-
-  /* Unlock temporarily to grab mutexes in the right order. */
+  /* Unlock temporarily to grab mutexes in the right order.
+     Note that victim thd is protected with THD::LOCK_thd_kill here. */
   wsrep_thd_UNLOCK(victim_thd);
   lock_mutex_enter();
+  wsrep_thd_LOCK(victim_thd);
 
-  /* Note that victim thd is protected with THD::LOCK_thd_kill here. */
+  trx_t* victim_trx= thd_to_trx(victim_thd);
   if (victim_trx) {
     trx_mutex_enter(victim_trx);
   }
-  wsrep_thd_LOCK(victim_thd);
 
   trx_t* bf_trx= thd_to_trx(bf_thd);
   WSREP_DEBUG("wsrep_abort_transaction: BF:"
