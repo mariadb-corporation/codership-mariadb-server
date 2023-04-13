@@ -29,14 +29,12 @@ extern "C" my_bool wsrep_on(const THD *thd)
 
 extern "C" void wsrep_thd_LOCK(const THD *thd)
 {
-  mysql_mutex_lock(&thd->LOCK_thd_kill);
   mysql_mutex_lock(&thd->LOCK_thd_data);
 }
 
 extern "C" void wsrep_thd_UNLOCK(const THD *thd)
 {
   mysql_mutex_unlock(&thd->LOCK_thd_data);
-  mysql_mutex_unlock(&thd->LOCK_thd_kill);
 }
 
 extern "C" void wsrep_thd_kill_LOCK(const THD *thd)
@@ -252,17 +250,22 @@ extern "C" my_bool wsrep_thd_bf_abort(THD *bf_thd, THD *victim_thd,
     {
       WSREP_DEBUG("victim is killed already by %llu, skipping awake",
                   victim_thd->wsrep_aborter);
-      wsrep_thd_UNLOCK(victim_thd);
       return false;
     }
 
     victim_thd->wsrep_aborter= bf_thd->thread_id;
-    victim_thd->awake_no_mutex(KILL_QUERY_HARD);
+    /* for KILL command, use the chosen kill signal,
+       BF aborting uses KILL_QUERY_HARD
+    */
+    if (wsrep_thd_is_local(bf_thd) && bf_thd->lex->sql_command == SQLCOM_KILL)
+      victim_thd->awake_no_mutex(bf_thd->lex->kill_signal);
+    else
+      victim_thd->awake_no_mutex(KILL_QUERY_HARD);
   }
   else
-    WSREP_DEBUG("wsrep_thd_bf_abort skipped awake for %llu", thd_get_thread_id(victim_thd));
+    WSREP_DEBUG("wsrep_thd_bf_abort skipped awake for %llu",
+                thd_get_thread_id(victim_thd));
 
-  wsrep_thd_UNLOCK(victim_thd);
   return ret;
 }
 
@@ -399,6 +402,10 @@ extern "C" bool wsrep_thd_set_wsrep_aborter(THD *bf_thd, THD *victim_thd)
     return true;
   }
   victim_thd->wsrep_aborter= bf_thd->thread_id;
+  if (wsrep_thd_is_local(bf_thd) && bf_thd->lex->sql_command == SQLCOM_KILL)
+  {
+    victim_thd->wsrep_abort_by_kill= bf_thd->lex->kill_signal;
+  }
   WSREP_DEBUG("wsrep_thd_set_wsrep_aborter setting wsrep_aborter %u",
               victim_thd->wsrep_aborter);
   return false;

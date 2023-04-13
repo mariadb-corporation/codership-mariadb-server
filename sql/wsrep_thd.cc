@@ -308,7 +308,7 @@ void wsrep_fire_rollbacker(THD *thd)
 }
 
 
-int wsrep_abort_thd(THD *bf_thd,
+void wsrep_abort_thd(THD *bf_thd,
                     THD *victim_thd,
                     my_bool signal)
 {
@@ -320,10 +320,11 @@ int wsrep_abort_thd(THD *bf_thd,
   /* Note that when you use RSU node is desynced from cluster, thus WSREP(thd)
   might not be true.
   */
-  if ((WSREP(bf_thd) ||
-       ((WSREP_ON || bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU) &&
-	 wsrep_thd_is_toi(bf_thd))) &&
-       !wsrep_thd_is_aborting(victim_thd))
+  if ((WSREP(bf_thd)
+       || ((WSREP_ON || bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU)
+           &&  wsrep_thd_is_toi(bf_thd))
+       || bf_thd->lex->sql_command == SQLCOM_KILL)
+      && !wsrep_thd_is_aborting(victim_thd))
   {
       WSREP_DEBUG("wsrep_abort_thd, by: %llu, victim: %llu",
                   (long long)bf_thd->real_id, (long long)victim_thd->real_id);
@@ -338,10 +339,11 @@ int wsrep_abort_thd(THD *bf_thd,
                 bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU,
                 wsrep_thd_is_toi(bf_thd),
                 wsrep_thd_is_aborting(victim_thd));
-    wsrep_thd_UNLOCK(victim_thd);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_kill);
   }
 
-  DBUG_RETURN(1);
+  DBUG_VOID_RETURN;
 }
 
 bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
@@ -350,7 +352,6 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
   WSREP_LOG_THD(victim_thd, "victim before");
 
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
-  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
 
 #ifdef ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("sync.wsrep_bf_abort",

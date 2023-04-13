@@ -18718,13 +18718,13 @@ wsrep_kill_victim(
 	my_bool signal)
 {
   DBUG_ENTER("wsrep_kill_victim");
+  ut_ad(lock_mutex_own());
+  ut_ad(trx_mutex_own(victim_trx));
 
   /* Mark transaction as a victim for Galera abort */
-  victim_trx->lock.was_chosen_as_wsrep_victim= true;
   if (wsrep_thd_set_wsrep_aborter(bf_thd, thd))
   {
     WSREP_DEBUG("innodb kill transaction skipped due to wsrep_aborter set");
-    wsrep_thd_UNLOCK(thd);
     DBUG_VOID_RETURN;
   }
 
@@ -18741,10 +18741,8 @@ wsrep_kill_victim(
   }
   else
   {
-    wsrep_thd_LOCK(thd);
     victim_trx->lock.was_chosen_as_wsrep_victim= false;
     wsrep_thd_set_wsrep_aborter(NULL, thd);
-    wsrep_thd_UNLOCK(thd);
 
     WSREP_DEBUG("wsrep_thd_bf_abort has failed, victim %lu will survive",
                 thd_get_thread_id(thd));
@@ -18799,11 +18797,16 @@ wsrep_innobase_kill_one_trx(
     DBUG_VOID_RETURN;
   }
 
-  /* Here we need to lock THD::LOCK_thd_data to protect from
-  concurrent usage or disconnect or delete. */
+  /* Temporarily release victim_trx mutex to allow locking order
+     LOCK_thd_data -> trx.mutex needed in wsrep_abort_transaction().
+     This function is called from lock manager with lock_sys.mutex held,
+     which prevents the victim from going out of scope. */
+  trx_mutex_exit(victim_trx);
   DEBUG_SYNC(bf_thd, "wsrep_before_BF_victim_lock");
+  wsrep_thd_kill_LOCK(thd);
   wsrep_thd_LOCK(thd);
   DEBUG_SYNC(bf_thd, "wsrep_after_BF_victim_lock");
+  trx_mutex_enter(victim_trx);
 
   WSREP_LOG_CONFLICT(bf_thd, thd, TRUE);
 
@@ -18834,6 +18837,8 @@ wsrep_innobase_kill_one_trx(
 	      wsrep_thd_query(thd));
 
   wsrep_kill_victim(bf_thd, thd, victim_trx, signal);
+  wsrep_thd_UNLOCK(thd);
+  wsrep_thd_kill_UNLOCK(thd);
   DBUG_VOID_RETURN;
 }
 
@@ -18854,9 +18859,37 @@ wsrep_abort_transaction(
 	THD *victim_thd,
 	my_bool signal)
 {
-  /* Note that victim thd is protected with
-  THD::LOCK_thd_data and THD::LOCK_thd_kill here. */
+  /* Unlock LOCK_thd_kill and LOCK_thd_data temporarily to grab mutexes
+     in the right order:
+     lock_sys.mutex
+     LOCK_thd_kill
+     LOCK_thd_data
+     trx.mutex */
+  unsigned long victim_id= thd_get_thread_id(victim_thd);
+  query_id_t victim_wsrep_trx_id= wsrep_thd_transaction_id(victim_thd);
+  wsrep_thd_UNLOCK(victim_thd);
+  wsrep_thd_kill_UNLOCK(victim_thd);
+
+  lock_mutex_enter();
+
+  victim_thd = find_thread_by_id(victim_id);
+  if (!victim_thd) {
+    WSREP_DEBUG("wsrep_abort_transaction: Victim THD does not exist anymore");
+    lock_mutex_exit();
+    return;
+  }
+  wsrep_thd_LOCK(victim_thd);
+  if (wsrep_thd_transaction_id(victim_thd) != victim_wsrep_trx_id)
+  {
+    wsrep_thd_UNLOCK(victim_thd);
+    wsrep_thd_kill_UNLOCK(victim_thd);
+  }
+
   trx_t* victim_trx= thd_to_trx(victim_thd);
+  if (victim_trx) {
+    trx_mutex_enter(victim_trx);
+  }
+
   trx_t* bf_trx= thd_to_trx(bf_thd);
   WSREP_DEBUG("wsrep_abort_transaction: BF:"
 	      " thread %ld client_state %s client_mode %s"
@@ -18877,19 +18910,18 @@ wsrep_abort_transaction(
 	      wsrep_thd_transaction_state_str(victim_thd),
 	      wsrep_thd_query(victim_thd),
 	      victim_trx ? victim_trx->id : 0);
-
   if (victim_trx)
   {
-    lock_mutex_enter();
-    trx_mutex_enter(victim_trx);
     wsrep_kill_victim(bf_thd, victim_thd, victim_trx, signal);
-    lock_mutex_exit();
     trx_mutex_exit(victim_trx);
   }
   else
   {
     wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
   }
+  lock_mutex_exit();
+  wsrep_thd_UNLOCK(victim_thd);
+  wsrep_thd_kill_UNLOCK(victim_thd);
 }
 
 static

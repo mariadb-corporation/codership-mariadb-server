@@ -88,7 +88,14 @@ bool wsrep_create_appliers(long threads, bool mutex_protected=false);
 void wsrep_create_rollbacker();
 
 bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd);
-int  wsrep_abort_thd(THD *bf_thd,
+/*
+  Abort transaction for victim_thd. This function is called from
+  MDL BF abort codepath.
+
+  @note This thread unlocks victim_thd->LOCK_thd_kill, so accessing
+  victim_thd after the function returns is not safe anymore.
+*/
+void wsrep_abort_thd(THD *bf_thd,
                      THD *victim_thd,
                      my_bool signal) __attribute__((nonnull(1,2)));
 
