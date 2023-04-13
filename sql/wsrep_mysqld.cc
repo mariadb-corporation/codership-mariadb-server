@@ -2770,8 +2770,13 @@ static bool abort_replicated(THD *thd)
     wsrep_abort_thd(thd, thd, TRUE);
     ret_code= true;
   }
-  wsrep_thd_UNLOCK(thd);
-
+  else
+  {
+    /* wsrep_abort_thd() above releases LOCK_thd_data and LOCK_thd_kill, so
+       must do it here too. */
+    wsrep_thd_UNLOCK(thd);
+    wsrep_thd_kill_UNLOCK(thd);
+  }
   return ret_code;
 }
 
