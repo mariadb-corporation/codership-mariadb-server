@@ -339,6 +339,8 @@ void wsrep_abort_thd(THD *bf_thd,
                 bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU,
                 wsrep_thd_is_toi(bf_thd),
                 wsrep_thd_is_aborting(victim_thd));
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_kill);
   }
 
   DBUG_VOID_RETURN;

@@ -18903,6 +18903,7 @@ wsrep_abort_transaction(
      LOCK_thd_data
      trx.mutex */
   unsigned long victim_id= thd_get_thread_id(victim_thd);
+  query_id_t victim_wsrep_trx_id= wsrep_thd_transaction_id(victim_thd);
   wsrep_thd_UNLOCK(victim_thd);
   wsrep_thd_kill_UNLOCK(victim_thd);
 
@@ -18915,6 +18916,11 @@ wsrep_abort_transaction(
     return;
   }
   wsrep_thd_LOCK(victim_thd);
+  if (wsrep_thd_transaction_id(victim_thd) != victim_wsrep_trx_id)
+  {
+    wsrep_thd_UNLOCK(victim_thd);
+    wsrep_thd_kill_UNLOCK(victim_thd);
+  }
 
   trx_t* victim_trx= thd_to_trx(victim_thd);
   if (victim_trx) {
@@ -18951,6 +18957,8 @@ wsrep_abort_transaction(
     wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
   }
   lock_mutex_exit();
+  wsrep_thd_UNLOCK(victim_thd);
+  wsrep_thd_kill_UNLOCK(victim_thd);
 }
 
 static

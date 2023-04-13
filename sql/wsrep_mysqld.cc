@@ -2670,7 +2670,13 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
 
     /* Here we will call wsrep_abort_transaction so we should hold
     THD::LOCK_thd_data to protect victim from concurrent usage
-    and THD::LOCK_thd_kill to protect from disconnect or delete. */
+    and THD::LOCK_thd_kill to protect from disconnect or delete.
+
+    Note that all calls to wsrep_abort_thd() and ha_abort_transaction()
+    unlock LOCK_thd_kill for granted_thd, so granted_thd must not be
+    accessed after any of those calls. Moreover all other if branches
+    must release those locks.
+    */
     mysql_mutex_lock(&granted_thd->LOCK_thd_kill);
     mysql_mutex_lock(&granted_thd->LOCK_thd_data);
 
@@ -2681,6 +2687,8 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
       {
         WSREP_DEBUG("BF thread waiting for SR in aborting state");
         ticket->wsrep_report(wsrep_debug);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
       }
       else if (wsrep_thd_is_SR(granted_thd) && !wsrep_thd_is_SR(request_thd))
       {
@@ -2694,6 +2702,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                       request_thd, granted_thd);
         ticket->wsrep_report(true);
         mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
         unireg_abort(1);
       }
     }
@@ -2702,6 +2711,8 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
     {
       WSREP_DEBUG("BF thread waiting for FLUSH");
       ticket->wsrep_report(wsrep_debug);
+      mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+      mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
     }
     else if (request_thd->lex->sql_command == SQLCOM_DROP_TABLE)
     {
@@ -2735,14 +2746,11 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                       request_thd, granted_thd);
 	  ticket->wsrep_report(true);
           mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+          mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
 	  unireg_abort(1);
         }
       }
     }
-    mysql_mutex_assert_owner(&granted_thd->LOCK_thd_data);
-    mysql_mutex_assert_owner(&granted_thd->LOCK_thd_kill);
-    mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
-    mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
   }
   else
   {

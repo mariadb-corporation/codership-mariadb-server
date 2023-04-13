@@ -111,6 +111,7 @@ wsrep_create_streaming_applier(THD *orig_thd, const char *ctx)
   /* Restore original thread local storage state before returning. */
   wsrep_restore_threadvars(saved_threadvars);
   wsrep_store_threadvars(saved_threadvars.cur_thd);
+  server_threads.insert(thd);
   return ret;
 }
 
@@ -137,6 +138,7 @@ void Wsrep_server_service::release_high_priority_service(wsrep::high_priority_se
   Wsrep_high_priority_service* hps=
     static_cast<Wsrep_high_priority_service*>(high_priority_service);
   THD* thd= hps->m_thd;
+  server_threads.erase(thd);
   delete hps;
   wsrep_store_threadvars(thd);
   delete thd;
