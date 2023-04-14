@@ -7958,6 +7958,7 @@ Compare_keys handler::compare_key_parts(const Field &old_field,
 
 int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
 {
+  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
   DBUG_ENTER("ha_abort_transaction");
   if (!WSREP(bf_thd) &&
       !(bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU &&
