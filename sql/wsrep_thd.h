@@ -99,6 +99,24 @@ void wsrep_abort_thd(THD *bf_thd,
                      THD *victim_thd,
                      my_bool signal) __attribute__((nonnull(1,2)));
 
+/**
+  Kill wsrep connection with kill_signal. Object thd is not
+  guaranteed to exist anymore when this function returns.
+
+  Asserts that the caller holds victim_thd->LOCK_thd_kill,
+  victim_thd->LOCK_thd_data.
+
+  Releases victim_thd->LOCK_thd_kill, victim_thd->LOCK_thd_data.
+
+  @param thd THD object for connection that executes the KILL.
+  @param victim_thd THD object for connection to be killed.
+  @param kill_signal Kill signal.
+  @param type Killed type
+
+  Return zero if the kill was successful, otherwise non-zero error code.
+ */
+uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_type type);
+
 /*
   Helper methods to deal with thread local storage.
   The purpose of these methods is to hide the details of thread

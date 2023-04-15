@@ -9328,17 +9328,9 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
 #ifdef WITH_WSREP
         if (WSREP(tmp))
         {
-          /*
-            Mark killed thd with kill_signal so that awake_no_mutex does
-            not dive into storage engine. We use ha_abort_transaction()
-            to do the storage engine part for wsrep THDs.
-          */
-          tmp->wsrep_abort_by_kill= kill_signal;
-          tmp->awake_no_mutex(kill_signal);
-          /* ha_abort_transaction() releases tmp->LOCK_thd_kill, so tmp
-             is not safe to access anymore. */
-          ha_abort_transaction(thd, tmp, 1);
-          DBUG_RETURN(0);
+          /* Object tmp is not guaranteed to exist after wsrep_kill_thd()
+             returns, so do early return from this function. */
+          DBUG_RETURN(wsrep_kill_thd(thd, tmp, kill_signal, type));
         }
         else
 #endif /* WITH_WSREP */
