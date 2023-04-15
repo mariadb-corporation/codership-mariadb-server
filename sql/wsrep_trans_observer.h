@@ -256,6 +256,11 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
                    thd->wsrep_trx().ws_meta().gtid(),
                    wsrep_gtid_server.gtid());
   }
+
+  mysql_mutex_lock(&thd->LOCK_thd_kill);
+  if (ret == 0 && thd->killed) wsrep_postpone_kill_for_commit(thd);
+  mysql_mutex_unlock(&thd->LOCK_thd_kill);
+
   DBUG_RETURN(ret);
 }
 
@@ -323,6 +328,11 @@ static inline int wsrep_before_commit(THD* thd, bool all)
                    wsrep_gtid_server.gtid());
     wsrep_register_for_group_commit(thd);
   }
+
+  mysql_mutex_lock(&thd->LOCK_thd_kill);
+  if (ret == 0 && thd->killed) wsrep_postpone_kill_for_commit(thd);
+  mysql_mutex_unlock(&thd->LOCK_thd_kill);
+
   DBUG_RETURN(ret);
 }
 
@@ -369,7 +379,13 @@ static inline int wsrep_after_commit(THD* thd, bool all)
   }
   wsrep_unregister_from_group_commit(thd);
   thd->wsrep_xid.null();
-  DBUG_RETURN(ret || thd->wsrep_cs().after_commit());
+
+  mysql_mutex_lock(&thd->LOCK_thd_kill);
+  ret= ret || thd->wsrep_cs().after_commit();
+  wsrep_restore_kill_after_commit(thd);
+  mysql_mutex_unlock(&thd->LOCK_thd_kill);
+
+  DBUG_RETURN(ret);
 }
 
 /*

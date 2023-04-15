@@ -5149,7 +5149,7 @@ public:
   my_thread_id              wsrep_aborter;
   /* kill signal used, if thread was killed by manual KILL */
   killed_state              wsrep_abort_by_kill;
-
+  struct err_info*          wsrep_abort_by_kill_err;
   /* true if BF abort is observed in do_command() right after reading
   client's packet, and if the client has sent PS execute command. */
   bool                      wsrep_delayed_BF_abort;

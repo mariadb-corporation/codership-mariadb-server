@@ -426,19 +426,29 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
   return wsrep_bf_abort_low(bf_thd, victim_thd);
 }
 
-uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_type type)
+uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_type)
 {
   DBUG_ENTER("wsrep_kill_thd");
   DBUG_ASSERT(WSREP(victim_thd));
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
+  using trans= wsrep::transaction;
   auto trx_state= victim_thd->wsrep_trx().state();
-  if (trx_state == wsrep::transaction::state::s_committing ||
-      trx_state == wsrep::transaction::state::s_ordered_commit) {
+  /*
+    Already killed or in commit codepath. Mark the victim as killed,
+    the killed status will be restored in wsrep_after_commit() and
+    will be processed after the commit is over. In case of multiple
+    KILLs happend on commit codepath, the last one will be effective.
+  */
+  if (victim_thd->wsrep_abort_by_kill ||
+      trx_state == trans::state::s_preparing ||
+      trx_state == trans::state::s_committing ||
+      trx_state == trans::state::s_ordered_commit)
+  {
+    victim_thd->wsrep_abort_by_kill= kill_signal;
     mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
     mysql_mutex_unlock(&victim_thd->LOCK_thd_kill);
-    DBUG_RETURN(type == KILL_TYPE_QUERY ? ER_KILL_QUERY_DENIED_ERROR :
-                ER_KILL_DENIED_ERROR);
+    DBUG_RETURN(0);
   }
   /*
     Mark killed victim_thd with kill_signal so that awake_no_mutex does
@@ -451,6 +461,21 @@ uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_
      is not safe to access anymore. */
   ha_abort_transaction(thd, victim_thd, 1);
   DBUG_RETURN(0);
+}
+
+void wsrep_postpone_kill_for_commit(THD *thd)
+{
+  mysql_mutex_assert_owner(&thd->LOCK_thd_kill);
+  DBUG_ASSERT(thd->killed != NOT_KILLED);
+  thd->wsrep_abort_by_kill= thd->killed;
+  thd->wsrep_abort_by_kill_err= thd->killed_err;
+}
+
+void wsrep_restore_kill_after_commit(THD *thd)
+{
+  mysql_mutex_assert_owner(&thd->LOCK_thd_kill);
+  thd->killed= thd->wsrep_abort_by_kill;
+  thd->killed_err= thd->wsrep_abort_by_kill_err;
 }
 
 int wsrep_create_threadvars()

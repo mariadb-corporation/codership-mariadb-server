@@ -118,6 +118,16 @@ void wsrep_abort_thd(THD *bf_thd,
 uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_type type);
 
 /*
+   Postpone KILL operation to happen after commit.
+ */
+void wsrep_postpone_kill_for_commit(THD *);
+
+/*
+  Restore KILL status after commit.
+ */
+void wsrep_restore_kill_after_commit(THD *);
+
+/*
   Helper methods to deal with thread local storage.
   The purpose of these methods is to hide the details of thread
   local storage handling when operating with wsrep storage access
