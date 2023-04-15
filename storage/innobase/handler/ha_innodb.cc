@@ -4154,6 +4154,7 @@ innobase_commit_low(
 	if (is_wsrep) {
 		tmp = thd_proc_info(thd, "innobase_commit_low()");
 	}
+	DEBUG_SYNC(thd, "wsrep_innobase_commit_low");
 #endif /* WITH_WSREP */
 	if (trx_is_started(trx)) {
 		trx_commit_for_mysql(trx);

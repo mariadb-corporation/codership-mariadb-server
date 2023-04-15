@@ -1,0 +1,66 @@
+# Verify that KILL is not effective against transaction which has
+# passed certification.
+
+--source include/have_innodb.inc
+--source include/have_debug_sync.inc
+--source include/galera_cluster.inc
+
+CREATE TABLE t1 (f1 INT PRIMARY KEY) ENGINE=InnoDB;
+
+# Connection for KILL commands
+--connect node_1_kill, 127.0.0.1, root, , test, $NODE_MYPORT_1
+# Connection for sync point control
+--connect node_1_ctrl, 127.0.0.1, root, , test, $NODE_MYPORT_1
+SET SESSION wsrep_sync_wait = 0;
+
+--echo # Case 1: kill happens before commit is ordered
+--connection node_1
+--let $victim_id = `SELECT CONNECTION_ID()`
+SET SESSION DEBUG_SYNC = "wsrep_before_commit_leave SIGNAL reached WAIT_FOR continue";
+--send INSERT INTO t1 VALUES (1)
+
+--connection node_1_ctrl
+SET DEBUG_SYNC = "now WAIT_FOR reached";
+--connection node_1_kill
+--echo # Send KILL QUERY
+--disable_query_log
+--disable_result_log
+--eval KILL QUERY $victim_id
+--enable_result_log
+--enable_query_log
+
+--connection node_1_ctrl
+SET DEBUG_SYNC = "now SIGNAL continue";
+
+--connection node_1
+--reap
+SELECT * FROM t1;
+SET DEBUG_SYNC = "RESET";
+
+--echo # Case 2: kill happens after commit is ordered
+--connection node_1
+--let $victim_id = `SELECT CONNECTION_ID()`
+--let $wsrep_replays_orig = `SELECT VARIABLE_VALUE FROM information_schema.global_status WHERE VARIABLE_NAME = 'wsrep_local_replays'`
+SET SESSION DEBUG_SYNC = "wsrep_before_ordered_commit  SIGNAL reached WAIT_FOR continue";
+--send INSERT INTO t1 VALUES (2)
+
+--connection node_1_ctrl
+SET DEBUG_SYNC = "now WAIT_FOR reached";
+--connection node_1_kill
+--echo # Send KILL QUERY
+--disable_query_log
+--disable_result_log
+--eval KILL QUERY $victim_id
+--enable_result_log
+--enable_query_log
+
+--connection node_1_ctrl
+SET DEBUG_SYNC = "now SIGNAL continue";
+
+--connection node_1
+--reap
+SELECT * FROM t1;
+SET DEBUG_SYNC = "RESET";
+
+DROP TABLE t1;
+
