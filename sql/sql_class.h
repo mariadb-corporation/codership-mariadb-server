@@ -1841,7 +1841,7 @@ show_system_thread(enum_thread_type thread)
     RETURN_NAME_AS_STRING(SYSTEM_THREAD_SLAVE_BACKGROUND);
     RETURN_NAME_AS_STRING(SYSTEM_THREAD_SEMISYNC_MASTER_BACKGROUND);
   default:
-    sprintf(buf, "<UNKNOWN SYSTEM THREAD: %d>", thread);
+    snprintf(buf, sizeof(buf), "<UNKNOWN SYSTEM THREAD: %d>", thread);
     return buf;
   }
 #undef RETURN_NAME_AS_STRING
@@ -5050,7 +5050,7 @@ private:
   bool use_temporary_table(TABLE *table, TABLE **out_table);
   void close_temporary_table(TABLE *table);
   bool log_events_and_free_tmp_shares();
-  void free_tmp_table_share(TMP_TABLE_SHARE *share, bool delete_table);
+  bool free_tmp_table_share(TMP_TABLE_SHARE *share, bool delete_table);
   void free_temporary_table(TABLE *table);
   bool lock_temporary_tables();
   void unlock_temporary_tables();
@@ -7431,7 +7431,7 @@ public:
     if (unlikely(!(dst->str= tmp= (char*) alloc_root(mem_root,
                                                      dst->length + 1))))
       return true;
-    sprintf(tmp, "%.*s%.*s%.*s",
+    snprintf(tmp, dst->length + 1, "%.*s%.*s%.*s",
             (int) m_db.length, (m_db.length ? m_db.str : ""),
             dot, ".",
             (int) m_name.length, m_name.str);

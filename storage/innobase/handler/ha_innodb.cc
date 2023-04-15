@@ -12623,7 +12623,8 @@ int create_table_info_t::create_table(bool create_fk)
 					    m_table->name.m_name);
 
 			if (m_table->fts) {
-				fts_free(m_table);
+				m_table->fts->~fts_t();
+				m_table->fts = nullptr;
 			}
 
 			my_error(ER_WRONG_NAME_FOR_INDEX, MYF(0),
@@ -17999,44 +18000,6 @@ exit:
 	return;
 }
 
-/** Validate SET GLOBAL innodb_buffer_pool_filename.
-On Windows, file names with colon (:) are not allowed.
-@param thd   connection
-@param save  &srv_buf_dump_filename
-@param value new value to be validated
-@return	0 for valid name */
-static int innodb_srv_buf_dump_filename_validate(THD *thd, st_mysql_sys_var*,
-						 void *save,
-						 st_mysql_value *value)
-{
-  char buff[OS_FILE_MAX_PATH];
-  int len= sizeof buff;
-
-  if (const char *buf_name= value->val_str(value, buff, &len))
-  {
-#ifdef _WIN32
-    if (!is_filename_allowed(buf_name, len, FALSE))
-    {
-      push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-			  ER_WRONG_ARGUMENTS,
-			  "InnoDB: innodb_buffer_pool_filename "
-			  "cannot have colon (:) in the file name.");
-      return 1;
-    }
-#endif /* _WIN32 */
-    if (buf_name == buff)
-    {
-      ut_ad(static_cast<size_t>(len) < sizeof buff);
-      buf_name= thd_strmake(thd, buf_name, len);
-    }
-
-    *static_cast<const char**>(save)= buf_name;
-    return 0;
-  }
-
-  return 1;
-}
-
 #ifdef UNIV_DEBUG
 static char* srv_buffer_pool_evict;
 
@@ -19344,9 +19307,9 @@ static MYSQL_SYSVAR_ULONG(buffer_pool_instances,
   innodb_deprecated_ignored, NULL, NULL, 0, 0, 64, 0);
 
 static MYSQL_SYSVAR_STR(buffer_pool_filename, srv_buf_dump_filename,
-  PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
+  PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
   "Filename to/from which to dump/load the InnoDB buffer pool",
-  innodb_srv_buf_dump_filename_validate, NULL, SRV_BUF_DUMP_FILENAME_DEFAULT);
+  NULL, NULL, SRV_BUF_DUMP_FILENAME_DEFAULT);
 
 static MYSQL_SYSVAR_BOOL(buffer_pool_dump_now, innodb_buffer_pool_dump_now,
   PLUGIN_VAR_RQCMDARG,
@@ -19737,10 +19700,22 @@ static MYSQL_SYSVAR_BOOL(numa_interleave, srv_numa_interleave,
   NULL, NULL, FALSE);
 #endif /* HAVE_LIBNUMA */
 
+static void innodb_change_buffering_update(THD *thd, struct st_mysql_sys_var*,
+                                           void*, const void *save)
+{
+  ulong i= *static_cast<const ulong*>(save);
+  if (i != IBUF_USE_NONE && !ibuf.index)
+    push_warning(thd, Sql_condition::WARN_LEVEL_WARN, ER_NOT_KEYFILE,
+                 "InnoDB: The change buffer is corrupted.");
+  else
+    innodb_change_buffering= i;
+}
+
 static MYSQL_SYSVAR_ENUM(change_buffering, innodb_change_buffering,
   PLUGIN_VAR_RQCMDARG,
   "Buffer changes to secondary indexes.",
-  NULL, NULL, IBUF_USE_NONE, &innodb_change_buffering_typelib);
+  nullptr, innodb_change_buffering_update,
+  IBUF_USE_NONE, &innodb_change_buffering_typelib);
 
 static MYSQL_SYSVAR_UINT(change_buffer_max_size,
   srv_change_buffer_max_size,

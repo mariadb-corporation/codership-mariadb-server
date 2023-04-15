@@ -3377,7 +3377,7 @@ page_zip_validate_low(
 				differed.  Let us ignore it. */
 				page_zip_fail(("page_zip_validate:"
 					       " min_rec_flag"
-					       " (%s" ULINTPF "," ULINTPF
+					       " (%s" UINT32PF "," UINT32PF
 					       ",0x%02x)\n",
 					       sloppy ? "ignored, " : "",
 					       page_get_space_id(page),
@@ -3422,7 +3422,8 @@ page_zip_validate_low(
 			page + PAGE_NEW_INFIMUM, TRUE);
 		trec = page_rec_get_next_low(
 			temp_page + PAGE_NEW_INFIMUM, TRUE);
-		const ulint n_core = page_is_leaf(page) ? index->n_fields : 0;
+		const ulint n_core = (index && page_is_leaf(page))
+			? index->n_fields : 0;
 
 		do {
 			if (page_offset(rec) != page_offset(trec)) {
@@ -3980,9 +3981,6 @@ page_zip_write_trx_id_and_roll_ptr(
 	ut_ad(field + DATA_TRX_ID_LEN
 	      == rec_get_nth_field(rec, offsets, trx_id_col + 1, &len));
 	ut_ad(len == DATA_ROLL_PTR_LEN);
-#if defined UNIV_DEBUG || defined UNIV_ZIP_DEBUG
-	ut_a(!memcmp(storage, field, sys_len));
-#endif /* UNIV_DEBUG || UNIV_ZIP_DEBUG */
 	compile_time_assert(DATA_TRX_ID_LEN == 6);
 	mach_write_to_6(field, trx_id);
 	compile_time_assert(DATA_ROLL_PTR_LEN == 7);

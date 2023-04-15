@@ -563,7 +563,8 @@ err_exit:
   fil_set_max_space_id_if_bigger(space_id);
 
   fil_space_t *space= fil_space_t::create(undo_name, space_id, fsp_flags,
-					  FIL_TYPE_TABLESPACE, NULL);
+					  FIL_TYPE_TABLESPACE, NULL,
+					  FIL_ENCRYPTION_DEFAULT, true);
   ut_a(fil_validate());
   ut_a(space);
 
@@ -714,7 +715,7 @@ srv_undo_tablespaces_init(bool create_new_db)
   srv_undo_tablespaces_open= 0;
 
   ut_a(srv_undo_tablespaces <= TRX_SYS_N_RSEGS);
-  ut_a(!create_new_db || srv_operation == SRV_OPERATION_NORMAL);
+  ut_a(!create_new_db || srv_operation <= SRV_OPERATION_EXPORT_RESTORED);
 
   if (srv_undo_tablespaces == 1)
     srv_undo_tablespaces= 0;
@@ -921,9 +922,7 @@ static lsn_t srv_prepare_to_delete_redo_log_file(bool old_exists)
 {
   DBUG_ENTER("srv_prepare_to_delete_redo_log_file");
 
-  /* Disable checkpoints in the page cleaner. */
-  ut_ad(!recv_sys.recovery_on);
-  recv_sys.recovery_on= true;
+  ut_ad(recv_sys.recovery_on);
 
   /* Clean the buffer pool. */
   buf_flush_sync();
@@ -1063,7 +1062,7 @@ dberr_t srv_start(bool create_new_db)
 	bool		srv_log_file_found = true;
 	mtr_t		mtr;
 
-	ut_ad(srv_operation == SRV_OPERATION_NORMAL
+	ut_ad(srv_operation <= SRV_OPERATION_RESTORE_EXPORT
 	      || srv_operation == SRV_OPERATION_RESTORE
 	      || srv_operation == SRV_OPERATION_RESTORE_EXPORT);
 
@@ -1473,7 +1472,8 @@ file_checked:
 		}
 
 		switch (srv_operation) {
-		case SRV_OPERATION_NORMAL:
+                case SRV_OPERATION_NORMAL:
+		case SRV_OPERATION_EXPORT_RESTORED:
 		case SRV_OPERATION_RESTORE_EXPORT:
 			/* Initialize the change buffer. */
 			err = dict_boot();
@@ -1605,10 +1605,10 @@ file_checked:
 			}
 		}
 
-		recv_sys.debug_free();
-
 		if (srv_operation == SRV_OPERATION_RESTORE
 		    || srv_operation == SRV_OPERATION_RESTORE_EXPORT) {
+			buf_flush_sync();
+			recv_sys.debug_free();
 			/* After applying the redo log from
 			SRV_OPERATION_BACKUP, flush the changes
 			to the data files and truncate or delete the log.
@@ -1700,6 +1700,8 @@ file_checked:
 				return(srv_init_abort(err));
 			}
 		}
+
+		recv_sys.debug_free();
 	}
 
 	ut_ad(err == DB_SUCCESS);
@@ -1883,7 +1885,8 @@ skip_monitors:
 		return(srv_init_abort(err));
 	}
 
-	if (!srv_read_only_mode && srv_operation == SRV_OPERATION_NORMAL) {
+	if (!srv_read_only_mode
+	    && srv_operation <= SRV_OPERATION_EXPORT_RESTORED) {
 		/* Initialize the innodb_temporary tablespace and keep
 		it open until shutdown. */
 		err = srv_open_tmp_tablespace(create_new_db);
@@ -1899,7 +1902,8 @@ skip_monitors:
 		}
 	}
 
-	if (!srv_read_only_mode && srv_operation == SRV_OPERATION_NORMAL
+	if (!srv_read_only_mode
+            && srv_operation <= SRV_OPERATION_EXPORT_RESTORED
 	    && srv_force_recovery < SRV_FORCE_NO_BACKGROUND) {
 		srv_init_purge_tasks();
 		purge_sys.coordinator_startup();
@@ -1976,7 +1980,7 @@ void innodb_preshutdown()
 
   if (srv_read_only_mode)
     return;
-  if (!srv_fast_shutdown && srv_operation == SRV_OPERATION_NORMAL)
+  if (!srv_fast_shutdown && srv_operation <= SRV_OPERATION_EXPORT_RESTORED)
   {
     /* Because a slow shutdown must empty the change buffer, we had
     better prevent any further changes from being buffered. */
@@ -2015,6 +2019,7 @@ void innodb_shutdown()
 		mysql_mutex_unlock(&buf_pool.flush_list_mutex);
 		break;
 	case SRV_OPERATION_NORMAL:
+	case SRV_OPERATION_EXPORT_RESTORED:
 		/* Shut down the persistent files. */
 		logs_empty_and_mark_files_at_shutdown();
 	}
@@ -2046,7 +2051,7 @@ void innodb_shutdown()
 	      || srv_force_recovery >= SRV_FORCE_NO_TRX_UNDO);
 	ut_ad(lock_sys.is_initialised() || !srv_was_started);
 	ut_ad(log_sys.is_initialised() || !srv_was_started);
-	ut_ad(ibuf.index || !srv_was_started
+	ut_ad(ibuf.index || !innodb_change_buffering || !srv_was_started
 	      || srv_force_recovery >= SRV_FORCE_NO_IBUF_MERGE);
 
 	dict_stats_deinit();
