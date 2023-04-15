@@ -18709,48 +18709,6 @@ static struct st_mysql_storage_engine innobase_storage_engine=
 
 #ifdef WITH_WSREP
 
-static
-void
-wsrep_kill_victim(
-	MYSQL_THD const bf_thd,
-	MYSQL_THD thd,
-	trx_t* victim_trx,
-	my_bool signal)
-{
-  DBUG_ENTER("wsrep_kill_victim");
-  ut_ad(lock_mutex_own());
-  ut_ad(trx_mutex_own(victim_trx));
-
-  /* Mark transaction as a victim for Galera abort */
-  if (wsrep_thd_set_wsrep_aborter(bf_thd, thd))
-  {
-    WSREP_DEBUG("innodb kill transaction skipped due to wsrep_aborter set");
-    DBUG_VOID_RETURN;
-  }
-
-  if (wsrep_thd_bf_abort(bf_thd, thd, signal))
-  {
-    lock_t*  wait_lock= victim_trx->lock.wait_lock;
-    if (wait_lock)
-    {
-      victim_trx->lock.was_chosen_as_deadlock_victim= TRUE;
-      DBUG_ASSERT(victim_trx->is_wsrep());
-      WSREP_DEBUG("victim has wait flag: %lu", thd_get_thread_id(thd));
-      lock_cancel_waiting_and_release(wait_lock);
-    }
-  }
-  else
-  {
-    victim_trx->lock.was_chosen_as_wsrep_victim= false;
-    wsrep_thd_set_wsrep_aborter(NULL, thd);
-
-    WSREP_DEBUG("wsrep_thd_bf_abort has failed, victim %lu will survive",
-                thd_get_thread_id(thd));
-  }
-
-  DBUG_VOID_RETURN;
-}
-
 /** This function is used to kill one transaction.
 
 This transaction was open on this node (not-yet-committed), and a
@@ -18797,6 +18755,13 @@ wsrep_innobase_kill_one_trx(
     DBUG_VOID_RETURN;
   }
 
+  /* Grab reference to victim_trx before releasing the mutex, this will
+     prevent victim to release locks or commit while the mutex is
+     unlocked. The state may change to TRX_STATE_COMMITTED_IN_MEMORY.
+     See skip_lock_inheritance_n_ref in trx0trx.h. */
+  victim_trx->reference();
+  trx_mutex_exit(victim_trx);
+
   DEBUG_SYNC(bf_thd, "wsrep_before_BF_victim_lock");
   wsrep_thd_kill_LOCK(thd);
   wsrep_thd_LOCK(thd);
@@ -18830,9 +18795,31 @@ wsrep_innobase_kill_one_trx(
 	      wsrep_thd_transaction_state_str(thd),
 	      wsrep_thd_query(thd));
 
-  wsrep_kill_victim(bf_thd, thd, victim_trx, signal);
+  const bool success= wsrep_thd_bf_abort(bf_thd, thd, signal);
+
   wsrep_thd_UNLOCK(thd);
   wsrep_thd_kill_UNLOCK(thd);
+  trx_mutex_enter(victim_trx);
+
+  if (success && victim_trx->state == TRX_STATE_ACTIVE)
+  {
+    lock_t*  wait_lock= victim_trx->lock.wait_lock;
+    if (wait_lock)
+    {
+      victim_trx->lock.was_chosen_as_deadlock_victim= TRUE;
+      DBUG_ASSERT(victim_trx->is_wsrep());
+      WSREP_DEBUG("victim has wait flag: %lu", thd_get_thread_id(thd));
+      lock_cancel_waiting_and_release(wait_lock);
+    }
+  }
+  else
+  {
+    victim_trx->lock.was_chosen_as_wsrep_victim= false;
+    WSREP_DEBUG("wsrep_thd_bf_abort has failed, victim %lu will survive",
+                thd_get_thread_id(thd));
+  }
+  victim_trx->release_reference();
+
   DBUG_VOID_RETURN;
 }
 
