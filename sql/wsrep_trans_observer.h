@@ -351,7 +351,8 @@ static inline int wsrep_before_commit(THD* thd, bool all)
 static inline int wsrep_ordered_commit(THD* thd, bool all)
 {
   DBUG_ENTER("wsrep_ordered_commit");
-  WSREP_DEBUG("wsrep_ordered_commit: %d", wsrep_is_real(thd, all));
+  WSREP_DEBUG("wsrep_ordered_commit: %d %lld", wsrep_is_real(thd, all),
+              (long long) wsrep_thd_trx_seqno(thd));
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   DBUG_RETURN(thd->wsrep_cs().ordered_commit());
 }

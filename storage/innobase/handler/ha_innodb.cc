@@ -18872,14 +18872,15 @@ wsrep_abort_transaction(
   /* Unlock LOCK_thd_kill and LOCK_thd_data temporarily to grab mutexes
      in the right order:
      lock_sys.mutex
-     trx.mutex
      LOCK_thd_kill
-     LOCK_thd_data*/
+     LOCK_thd_data
+     trx.mutex
+  */
   trx_t* victim_trx= thd_to_trx(victim_thd);
   trx_id_t victim_trx_id= victim_trx ? victim_trx->id : 0;
   wsrep_thd_UNLOCK(victim_thd);
   wsrep_thd_kill_UNLOCK(victim_thd);
-  /* After this point must use find_thread_by_id() is victim_thd
+  /* After this point must use find_thread_by_id() if victim_thd
      is needed again. */
 
   /* Victim didn't have active RW transaction. Note that tere is a possible
