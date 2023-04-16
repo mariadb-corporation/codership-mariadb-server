@@ -1307,6 +1307,9 @@ void THD::init()
   wsrep_aborter           = 0;
   wsrep_abort_by_kill     = NOT_KILLED;
   wsrep_abort_by_kill_err = 0;
+#ifndef DBUG_OFF
+  wsrep_killed_state      = 0;
+#endif /* DBUG_OFF */
   wsrep_desynced_backup_stage= false;
 #endif /* WITH_WSREP */
 
@@ -1662,6 +1665,9 @@ void THD::reset_for_reuse()
   wsrep_aborter= 0;
   wsrep_abort_by_kill= NOT_KILLED;
   wsrep_abort_by_kill_err= 0;
+#ifndef DBUG_OFF
+  wsrep_killed_state= 0;
+#endif /* DBUG_OFF */
 #endif /* WITH_WSREP */
 }
 

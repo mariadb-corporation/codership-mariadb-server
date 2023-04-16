@@ -434,6 +434,9 @@ uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
   using trans= wsrep::transaction;
   auto trx_state= victim_thd->wsrep_trx().state();
+#ifndef DBUG_OFF
+  victim_thd->wsrep_killed_state= trx_state;
+#endif /* DBUG_OFF */
   /*
     Already killed or in commit codepath. Mark the victim as killed,
     the killed status will be restored in wsrep_after_commit() and
@@ -467,8 +470,20 @@ void wsrep_postpone_kill_for_commit(THD *thd)
 {
   mysql_mutex_assert_owner(&thd->LOCK_thd_kill);
   DBUG_ASSERT(thd->killed != NOT_KILLED);
-  thd->wsrep_abort_by_kill= thd->killed;
-  thd->wsrep_abort_by_kill_err= thd->killed_err;
+  mysql_mutex_lock(&thd->LOCK_thd_data);
+  /* If the transaction will roll back, keep the killed state.
+     For must replay, the replay will happen in different THD context
+     which is high priority and cannot be killed. The owning thread will
+     pick the killed state in after statement processing. */
+  if (thd->wsrep_trx().state() != wsrep::transaction::state::s_cert_failed &&
+      thd->wsrep_trx().state() != wsrep::transaction::state::s_must_abort &&
+      thd->wsrep_trx().state() != wsrep::transaction::state::s_aborting &&
+      thd->wsrep_trx().state() != wsrep::transaction::state::s_must_replay)
+  {
+    thd->wsrep_abort_by_kill= thd->killed;
+    thd->wsrep_abort_by_kill_err= thd->killed_err;
+  }
+  mysql_mutex_unlock(&thd->LOCK_thd_data);
 }
 
 void wsrep_restore_kill_after_commit(THD *thd)

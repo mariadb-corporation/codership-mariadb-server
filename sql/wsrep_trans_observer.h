@@ -258,7 +258,7 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
   }
 
   mysql_mutex_lock(&thd->LOCK_thd_kill);
-  if (ret == 0 && thd->killed) wsrep_postpone_kill_for_commit(thd);
+  if (thd->killed) wsrep_postpone_kill_for_commit(thd);
   mysql_mutex_unlock(&thd->LOCK_thd_kill);
 
   DBUG_RETURN(ret);
@@ -330,7 +330,7 @@ static inline int wsrep_before_commit(THD* thd, bool all)
   }
 
   mysql_mutex_lock(&thd->LOCK_thd_kill);
-  if (ret == 0 && thd->killed) wsrep_postpone_kill_for_commit(thd);
+  if (thd->killed) wsrep_postpone_kill_for_commit(thd);
   mysql_mutex_unlock(&thd->LOCK_thd_kill);
 
   DBUG_RETURN(ret);
