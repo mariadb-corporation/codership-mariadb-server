@@ -482,6 +482,8 @@ void wsrep_postpone_kill_for_commit(THD *thd)
   {
     thd->wsrep_abort_by_kill= thd->killed;
     thd->wsrep_abort_by_kill_err= thd->killed_err;
+    thd->killed= NOT_KILLED;
+    thd->killed_err= 0;
   }
   mysql_mutex_unlock(&thd->LOCK_thd_data);
 }
@@ -491,6 +493,8 @@ void wsrep_restore_kill_after_commit(THD *thd)
   mysql_mutex_assert_owner(&thd->LOCK_thd_kill);
   thd->killed= thd->wsrep_abort_by_kill;
   thd->killed_err= thd->wsrep_abort_by_kill_err;
+  thd->wsrep_abort_by_kill= NOT_KILLED;
+  thd->wsrep_abort_by_kill_err= 0;
 }
 
 int wsrep_create_threadvars()
