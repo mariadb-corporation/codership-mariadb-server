@@ -151,6 +151,7 @@ static struct wsrep_service_st wsrep_handler = {
   wsrep_on,
   wsrep_prepare_key_for_innodb,
   wsrep_thd_LOCK,
+  wsrep_thd_TRYLOCK,
   wsrep_thd_UNLOCK,
   wsrep_thd_query,
   wsrep_thd_retry_counter,

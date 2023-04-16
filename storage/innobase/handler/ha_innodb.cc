@@ -18759,12 +18759,41 @@ wsrep_innobase_kill_one_trx(
      prevent victim to release locks or commit while the mutex is
      unlocked. The state may change to TRX_STATE_COMMITTED_IN_MEMORY.
      See skip_lock_inheritance_n_ref in trx0trx.h. */
+  const trx_id_t victim_trx_id= victim_trx->id;
+retry_lock:
   victim_trx->reference();
   trx_mutex_exit(victim_trx);
 
   DEBUG_SYNC(bf_thd, "wsrep_before_BF_victim_lock");
   wsrep_thd_kill_LOCK(thd);
-  wsrep_thd_LOCK(thd);
+  /*
+    There is now a cycle
+
+       trx reference
+         -> LOCK_commit_order
+         -> LOCK_thd_data
+         -> trx reference
+
+     which may prevent the transaction committing because reference was grabbed
+     above. Try to lock LOCK_thd_data, and if not successul, enter the
+     trx mutex again to release the reference and try again.
+  */
+  if (wsrep_thd_TRYLOCK(thd))
+  {
+    wsrep_thd_kill_UNLOCK(thd);
+    trx_mutex_enter(victim_trx);
+    victim_trx->release_reference();
+    if (victim_trx_id != victim_trx->id ||
+        victim_trx->state == TRX_STATE_COMMITTED_IN_MEMORY ||
+        victim_trx->state == TRX_STATE_NOT_STARTED)
+    {
+      WSREP_DEBUG("wsrep_innobase_kill_one_trx: Victim committed in memory");
+      DBUG_VOID_RETURN;
+    }
+    goto retry_lock;
+  }
+
+
   DEBUG_SYNC(bf_thd, "wsrep_after_BF_victim_lock");
 
   WSREP_LOG_CONFLICT(bf_thd, thd, TRUE);

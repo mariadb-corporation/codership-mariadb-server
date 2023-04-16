@@ -56,6 +56,11 @@ my_bool wsrep_on(const THD *)
 void wsrep_thd_LOCK(const THD *)
 { }
 
+int wsrep_thd_TRYLOCK(const THD *)
+{
+  return 0;
+}
+
 void wsrep_thd_UNLOCK(const THD *)
 { }
 

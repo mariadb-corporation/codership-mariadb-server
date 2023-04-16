@@ -32,6 +32,11 @@ extern "C" void wsrep_thd_LOCK(const THD *thd)
   mysql_mutex_lock(&thd->LOCK_thd_data);
 }
 
+extern "C" int wsrep_thd_TRYLOCK(const THD *thd)
+{
+  return mysql_mutex_trylock(&thd->LOCK_thd_data);
+}
+
 extern "C" void wsrep_thd_UNLOCK(const THD *thd)
 {
   mysql_mutex_unlock(&thd->LOCK_thd_data);
