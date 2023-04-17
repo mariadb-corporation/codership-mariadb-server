@@ -380,10 +380,7 @@ static inline int wsrep_after_commit(THD* thd, bool all)
   }
   wsrep_unregister_from_group_commit(thd);
   thd->wsrep_xid.null();
-
-  ret= ret || thd->wsrep_cs().after_commit();
-
-  DBUG_RETURN(ret);
+  DBUG_RETURN(ret || thd->wsrep_cs().after_commit());
 }
 
 /*
