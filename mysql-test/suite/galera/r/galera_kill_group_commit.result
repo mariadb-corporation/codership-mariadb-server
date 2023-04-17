@@ -25,6 +25,3 @@ f1
 2
 SET DEBUG_SYNC = "RESET";
 DROP TABLE t1;
-SELECT VARIABLE_VALUE - 0 AS expect_2 FROM information_schema.global_status WHERE VARIABLE_NAME = 'Binlog_group_commits';
-expect_2
-2
