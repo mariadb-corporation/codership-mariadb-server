@@ -258,7 +258,7 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
   }
 
   mysql_mutex_lock(&thd->LOCK_thd_kill);
-  if (thd->killed) wsrep_postpone_kill_for_commit(thd);
+  if (thd->killed) wsrep_backup_kill_for_commit(thd);
   mysql_mutex_unlock(&thd->LOCK_thd_kill);
 
   DBUG_RETURN(ret);
@@ -330,7 +330,7 @@ static inline int wsrep_before_commit(THD* thd, bool all)
   }
 
   mysql_mutex_lock(&thd->LOCK_thd_kill);
-  if (thd->killed) wsrep_postpone_kill_for_commit(thd);
+  if (thd->killed) wsrep_backup_kill_for_commit(thd);
   mysql_mutex_unlock(&thd->LOCK_thd_kill);
 
   DBUG_RETURN(ret);
@@ -381,10 +381,7 @@ static inline int wsrep_after_commit(THD* thd, bool all)
   wsrep_unregister_from_group_commit(thd);
   thd->wsrep_xid.null();
 
-  mysql_mutex_lock(&thd->LOCK_thd_kill);
   ret= ret || thd->wsrep_cs().after_commit();
-  wsrep_restore_kill_after_commit(thd);
-  mysql_mutex_unlock(&thd->LOCK_thd_kill);
 
   DBUG_RETURN(ret);
 }
@@ -466,10 +463,16 @@ int wsrep_after_statement(THD* thd)
               wsrep::to_c_string(thd->wsrep_cs().state()),
               wsrep::to_c_string(thd->wsrep_cs().mode()),
               wsrep::to_c_string(thd->wsrep_cs().transaction().state()));
-  DBUG_RETURN((thd->wsrep_cs().state() != wsrep::client_state::s_none &&
+  int ret= ((thd->wsrep_cs().state() != wsrep::client_state::s_none &&
                thd->wsrep_cs().mode() == Wsrep_client_state::m_local) &&
               !thd->internal_transaction() ?
               thd->wsrep_cs().after_statement() : 0);
+
+  mysql_mutex_lock(&thd->LOCK_thd_kill);
+  wsrep_restore_kill_after_commit(thd);
+  mysql_mutex_unlock(&thd->LOCK_thd_kill);
+
+  DBUG_RETURN(ret);
 }
 
 static inline void wsrep_after_apply(THD* thd)

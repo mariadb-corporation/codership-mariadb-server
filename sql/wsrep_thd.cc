@@ -469,7 +469,7 @@ uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_
   DBUG_RETURN(0);
 }
 
-void wsrep_postpone_kill_for_commit(THD *thd)
+void wsrep_backup_kill_for_commit(THD *thd)
 {
   mysql_mutex_assert_owner(&thd->LOCK_thd_kill);
   DBUG_ASSERT(thd->killed != NOT_KILLED);
