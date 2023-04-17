@@ -16,7 +16,7 @@ BEGIN;
 UPDATE t1 SET b=3 WHERE a=1;
 
 --connection node_1
-set debug_sync='before_awake_no_mutex SIGNAL before_kill WAIT_FOR continue';
+set debug_sync='wsrep_kill_before_awake_no_mutex SIGNAL before_kill WAIT_FOR continue';
 --disable_query_log
 --disable_result_log
 --send_eval KILL CONNECTION $victim_id 

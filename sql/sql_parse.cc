@@ -9311,7 +9311,6 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
     {
       {
 #ifdef WITH_WSREP
-        DEBUG_SYNC(thd, "before_awake_no_mutex");
         if (WSREP(tmp))
         {
           /* Object tmp is not guaranteed to exist after wsrep_kill_thd()
