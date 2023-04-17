@@ -342,6 +342,9 @@ static bool wsrep_bf_abort_low(THD *bf_thd, THD *victim_thd)
     }
     if (ret)
     {
+      /* BF abort should be allowed only once by wsrep-lib.*/
+      DBUG_ASSERT(victim_thd->wsrep_aborter == 0);
+      victim_thd->wsrep_aborter= bf_thd->thread_id;
       wsrep_bf_aborts_counter++;
     }
     lock.release(); /* No unlock at the end of the scope. */
@@ -441,7 +444,7 @@ uint wsrep_kill_thd(THD *thd, THD *victim_thd, killed_state kill_signal, killed_
     Already killed or in commit codepath. Mark the victim as killed,
     the killed status will be restored in wsrep_after_commit() and
     will be processed after the commit is over. In case of multiple
-    KILLs happend on commit codepath, the last one will be effective.
+    KILLs happened on commit codepath, the last one will be effective.
   */
   if (victim_thd->wsrep_abort_by_kill ||
       trx_state == trans::state::s_preparing ||

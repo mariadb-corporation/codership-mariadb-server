@@ -9309,30 +9309,15 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
         thd->security_ctx->user_matches(tmp->security_ctx))
 #endif /* WITH_WSREP */
     {
-#ifdef WITH_WSREP
-      DEBUG_SYNC(thd, "before_awake_no_mutex");
-      if (tmp->wsrep_aborter && tmp->wsrep_aborter != thd->thread_id)
       {
-        /* victim is in hit list already, bail out */
-        WSREP_DEBUG("victim %lld has wsrep aborter: %lu, skipping awake()",
-                    id, tmp->wsrep_aborter);
-        error= 0;
-      }
-      else
-#endif /* WITH_WSREP */
-      {
-        WSREP_DEBUG("kill_one_thread victim: %lld wsrep_aborter %lu"
-                    " by signal %d",
-                    id, tmp->wsrep_aborter, kill_signal);
-
 #ifdef WITH_WSREP
+        DEBUG_SYNC(thd, "before_awake_no_mutex");
         if (WSREP(tmp))
         {
           /* Object tmp is not guaranteed to exist after wsrep_kill_thd()
              returns, so do early return from this function. */
           DBUG_RETURN(wsrep_kill_thd(thd, tmp, kill_signal, type));
         }
-        else
 #endif /* WITH_WSREP */
         tmp->awake_no_mutex(kill_signal);
         error= 0;

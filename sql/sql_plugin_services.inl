@@ -178,7 +178,6 @@ static struct wsrep_service_st wsrep_handler = {
   wsrep_OSU_method_get,
   wsrep_thd_has_ignored_error,
   wsrep_thd_set_ignored_error,
-  wsrep_thd_set_wsrep_aborter,
   wsrep_report_bf_lock_wait,
   wsrep_thd_kill_LOCK,
   wsrep_thd_kill_UNLOCK,
