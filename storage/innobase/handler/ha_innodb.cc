@@ -18644,13 +18644,6 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
             break;
           /* fall through */
         case TRX_STATE_ACTIVE:
-          DEBUG_SYNC(bf_thd, "before_wsrep_thd_abort");
-          if (!wsrep_thd_bf_abort(bf_thd, vthd, false))
-          {
-            WSREP_DEBUG("wsrep_thd_bf_abort has failed, victim %lu will survive",
-                        thd_get_thread_id(vthd));
-            break;
-          }
           WSREP_LOG_CONFLICT(bf_thd, vthd, TRUE);
           WSREP_DEBUG("Aborter BF trx_id: " TRX_ID_FMT " thread: %ld "
                       "seqno: %lld client_state: %s "
@@ -18675,14 +18668,25 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
                       wsrep_thd_query(vthd));
           /* Mark transaction as a victim for Galera abort */
           vtrx->lock.set_wsrep_victim();
-          /* if victim is waiting for some other lock, we have to cancel
-             that waiting
-          */
-          lock_sys.cancel_lock_wait_for_trx(vtrx);
+          aborting= true;
         }
       }
       mysql_mutex_unlock(&lock_sys.wait_mutex);
       vtrx->mutex_unlock();
+    }
+
+    DEBUG_SYNC(bf_thd, "before_wsrep_thd_abort");
+    if (aborting && wsrep_thd_bf_abort(bf_thd, vthd, true))
+    {
+      /* if victim is waiting for some other lock, we have to cancel
+         that waiting
+      */
+      lock_sys.cancel_lock_wait_for_trx(vtrx);
+    }
+    else
+    {
+      WSREP_DEBUG("wsrep_thd_bf_abort has failed, victim %lu will survive",
+                  thd_get_thread_id(vthd));
     }
     wsrep_thd_UNLOCK(vthd);
     wsrep_thd_kill_UNLOCK(vthd);
@@ -18723,8 +18727,22 @@ wsrep_abort_transaction(
 	}
 
 	victim_trx->mutex_lock();
+
+#ifdef ENABLED_DEBUG_SYNC
+	if (victim_trx->state == TRX_STATE_NOT_STARTED)
+	{
+		DBUG_EXECUTE_IF(
+			"sync.wsrep_abort_transaction_read_only",
+			{const char act[]=
+					"now "
+					"SIGNAL sync.wsrep_abort_transaction_read_only_reached "
+					"WAIT_FOR signal.wsrep_abort_transaction_read_only";
+				DBUG_ASSERT(!debug_sync_set_action(bf_thd, STRING_WITH_LEN(act)));
+			};);
+}
+#endif /* ENABLED_DEBUG_SYNC */
+
 	if (victim_trx->state == TRX_STATE_ACTIVE) {
-		victim_trx->lock.set_wsrep_victim();
 		DEBUG_SYNC(bf_thd, "before_wsrep_thd_abort");
 		DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
 				{
@@ -18735,6 +18753,8 @@ wsrep_abort_transaction(
 					DBUG_ASSERT(!debug_sync_set_action(bf_thd,
 									   STRING_WITH_LEN(act)));
 				};);
+		victim_trx->lock.set_wsrep_victim();
+		lock_sys.cancel_lock_wait_for_trx(victim_trx);
 	}
 	victim_trx->mutex_unlock();
 	DBUG_VOID_RETURN;

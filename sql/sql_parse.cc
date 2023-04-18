@@ -9254,9 +9254,14 @@ kill_one_thread(THD *thd, my_thread_id id, killed_state kill_signal, killed_type
         {
           error = wsrep_kill_thd(thd, tmp, kill_signal);
         }
+        else
+        {
 #endif /* WITH_WSREP */
         tmp->awake_no_mutex(kill_signal);
         error= 0;
+#ifdef WITH_WSREP
+        }
+#endif /* WITH_WSREP */
       }
     }
     else

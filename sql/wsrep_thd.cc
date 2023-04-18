@@ -356,14 +356,14 @@ static bool wsrep_bf_abort_low(THD *bf_thd, THD *victim_thd)
   return ret;
 }
 
-
 void wsrep_abort_thd(THD *bf_thd,
                     THD *victim_thd,
                     my_bool signal)
 {
   DBUG_ENTER("wsrep_abort_thd");
 
-  mysql_mutex_lock(&victim_thd->LOCK_thd_data);
+  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
+  mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
 
   /* Note that when you use RSU node is desynced from cluster, thus WSREP(thd)
   might not be true.
@@ -424,9 +424,7 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
         wsrep_check_mode(WSREP_MODE_BF_MARIABACKUP))
     {
       WSREP_DEBUG("killing connection for non wsrep session");
-      mysql_mutex_lock(&victim_thd->LOCK_thd_data);
       victim_thd->awake_no_mutex(KILL_CONNECTION);
-      mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
     }
     return false;
   }

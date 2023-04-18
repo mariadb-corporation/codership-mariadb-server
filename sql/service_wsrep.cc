@@ -201,6 +201,7 @@ extern "C" void wsrep_handle_SR_rollback(THD *bf_thd,
 
   /* Note: do not store/reset globals before wsrep_bf_abort() call
      to avoid losing BF thd context. */
+  mysql_mutex_lock(&victim_thd->LOCK_thd_data);
   if (!(bf_thd && bf_thd != victim_thd))
   {
     DEBUG_SYNC(victim_thd, "wsrep_before_SR_rollback");
@@ -213,6 +214,7 @@ extern "C" void wsrep_handle_SR_rollback(THD *bf_thd,
   {
     wsrep_thd_self_abort(victim_thd);
   }
+  mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
   if (bf_thd)
   {
     wsrep_store_threadvars(bf_thd);
@@ -234,7 +236,6 @@ extern "C" my_bool wsrep_thd_bf_abort(THD *bf_thd, THD *victim_thd,
   {
     victim_thd->wsrep_aborter= bf_thd->thread_id;
     victim_thd->awake_no_mutex(KILL_QUERY_HARD);
-    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
   } else {
     WSREP_DEBUG("wsrep_thd_bf_abort skipped awake, signal %d", signal);
   }

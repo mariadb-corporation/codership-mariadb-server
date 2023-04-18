@@ -91,9 +91,6 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd);
 /*
   Abort transaction for victim_thd. This function is called from
   MDL BF abort codepath.
-
-  @note This thread unlocks victim_thd->LOCK_thd_kill, so accessing
-  victim_thd after the function returns is not safe anymore.
 */
 void wsrep_abort_thd(THD *bf_thd,
                      THD *victim_thd,
@@ -105,8 +102,6 @@ void wsrep_abort_thd(THD *bf_thd,
 
   Asserts that the caller holds victim_thd->LOCK_thd_kill,
   victim_thd->LOCK_thd_data.
-
-  Releases victim_thd->LOCK_thd_kill, victim_thd->LOCK_thd_data.
 
   @param thd THD object for connection that executes the KILL.
   @param victim_thd THD object for connection to be killed.
