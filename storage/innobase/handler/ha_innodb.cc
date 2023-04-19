@@ -18701,67 +18701,58 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
   @param bf_thd       brute force THD asking for the abort
   @param victim_thd   victim THD to be aborted
 */
-static
-void
-wsrep_abort_transaction(
-	handlerton*,
-	THD *bf_thd,
-	THD *victim_thd,
-	my_bool signal)
+static void wsrep_abort_transaction(handlerton *, THD *bf_thd, THD *victim_thd,
+                                    my_bool signal)
 {
-	DBUG_ENTER("wsrep_abort_transaction");
-	ut_ad(bf_thd);
-	ut_ad(victim_thd);
+  DBUG_ENTER("wsrep_abort_transaction");
+  ut_ad(bf_thd);
+  ut_ad(victim_thd);
 
-	trx_t* victim_trx= thd_to_trx(victim_thd);
+  trx_t *victim_trx= thd_to_trx(victim_thd);
 
-	WSREP_DEBUG("abort transaction: BF: %s victim: %s victim conf: %s",
-			wsrep_thd_query(bf_thd),
-			wsrep_thd_query(victim_thd),
-			wsrep_thd_transaction_state_str(victim_thd));
+  WSREP_DEBUG("abort transaction: BF: %s victim: %s victim conf: %s",
+              wsrep_thd_query(bf_thd), wsrep_thd_query(victim_thd),
+              wsrep_thd_transaction_state_str(victim_thd));
 
-	if (!victim_trx)
-	{
-		WSREP_DEBUG("abort transaction: victim did not exist");
-		DBUG_VOID_RETURN;
-	}
+  if (!victim_trx)
+  {
+    WSREP_DEBUG("abort transaction: victim did not exist");
+    DBUG_VOID_RETURN;
+  }
 
-	victim_trx->mutex_lock();
+  victim_trx->mutex_lock();
 
 #ifdef ENABLED_DEBUG_SYNC
-	if (victim_trx->state == TRX_STATE_NOT_STARTED)
-	{
-		DBUG_EXECUTE_IF(
-			"sync.wsrep_abort_transaction_read_only",
-			{const char act[]=
-					"now "
-					"SIGNAL sync.wsrep_abort_transaction_read_only_reached "
-					"WAIT_FOR signal.wsrep_abort_transaction_read_only";
-				DBUG_ASSERT(!debug_sync_set_action(bf_thd, STRING_WITH_LEN(act)));
-			};);
-}
+  if (victim_trx->state == TRX_STATE_NOT_STARTED)
+  {
+    DBUG_EXECUTE_IF("sync.wsrep_abort_transaction_read_only", {
+      const char act[]=
+          "now "
+          "SIGNAL sync.wsrep_abort_transaction_read_only_reached "
+          "WAIT_FOR signal.wsrep_abort_transaction_read_only";
+      DBUG_ASSERT(!debug_sync_set_action(bf_thd, STRING_WITH_LEN(act)));
+    };);
+  }
 #endif /* ENABLED_DEBUG_SYNC */
 
-	if (victim_trx->state == TRX_STATE_ACTIVE) {
-		DEBUG_SYNC(bf_thd, "before_wsrep_thd_abort");
-		DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
-				{
-					const char act[]=
-						"now "
-						"SIGNAL sync.before_wsrep_thd_abort_reached "
-						"WAIT_FOR signal.before_wsrep_thd_abort";
-					DBUG_ASSERT(!debug_sync_set_action(bf_thd,
-									   STRING_WITH_LEN(act)));
-				};);
-		victim_trx->lock.set_wsrep_victim();
-		victim_trx->mutex_unlock();
-		lock_sys.cancel_lock_wait_for_trx(victim_trx);
-	}
-	else
-	{
-		victim_trx->mutex_unlock();
-	}
-	DBUG_VOID_RETURN;
+  if (victim_trx->state == TRX_STATE_ACTIVE)
+  {
+    DEBUG_SYNC(bf_thd, "before_wsrep_thd_abort");
+    DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort", {
+      const char act[]= "now "
+                        "SIGNAL sync.before_wsrep_thd_abort_reached "
+                        "WAIT_FOR signal.before_wsrep_thd_abort";
+      DBUG_ASSERT(!debug_sync_set_action(bf_thd, STRING_WITH_LEN(act)));
+    };);
+    victim_trx->lock.set_wsrep_victim();
+    victim_trx->mutex_unlock();
+    lock_sys.cancel_lock_wait_for_trx(victim_trx);
+  }
+  else
+  {
+    victim_trx->mutex_unlock();
+  }
+  DBUG_VOID_RETURN;
 }
 
 static
