@@ -18723,7 +18723,7 @@ wsrep_abort_transaction(
 	if (!victim_trx)
 	{
 		WSREP_DEBUG("abort transaction: victim did not exist");
-		return;
+		DBUG_VOID_RETURN;
 	}
 
 	victim_trx->mutex_lock();
@@ -18754,9 +18754,13 @@ wsrep_abort_transaction(
 									   STRING_WITH_LEN(act)));
 				};);
 		victim_trx->lock.set_wsrep_victim();
+		victim_trx->mutex_unlock();
 		lock_sys.cancel_lock_wait_for_trx(victim_trx);
 	}
-	victim_trx->mutex_unlock();
+	else
+	{
+		victim_trx->mutex_unlock();
+	}
 	DBUG_VOID_RETURN;
 }
 
