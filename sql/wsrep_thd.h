@@ -88,7 +88,7 @@ bool wsrep_create_appliers(long threads, bool mutex_protected=false);
 void wsrep_create_rollbacker();
 
 bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd);
-int  wsrep_abort_thd(THD *bf_thd,
+void wsrep_abort_thd(THD *bf_thd,
                      THD *victim_thd,
                      my_bool signal) __attribute__((nonnull(1,2)));
 

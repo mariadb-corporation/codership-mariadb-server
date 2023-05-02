@@ -143,10 +143,20 @@ void Wsrep_server_service::release_high_priority_service(wsrep::high_priority_se
   wsrep_delete_threadvars();
 }
 
-void Wsrep_server_service::background_rollback(wsrep::client_state& client_state)
+bool Wsrep_server_service::background_rollback(wsrep::client_state& client_state)
 {
   Wsrep_client_state& cs= static_cast<Wsrep_client_state&>(client_state);
+
+  if (wsrep_thd_is_local(cs.thd()) &&
+      cs.thd()->wsrep_abort_by_kill >= KILL_CONNECTION)
+  {
+    WSREP_DEBUG("Skipping rollbacker for KILL command");
+    cs.thd()->wsrep_abort_by_kill= NOT_KILLED;
+    return true;
+  }
+
   wsrep_fire_rollbacker(cs.thd());
+  return false;
 }
 
 void Wsrep_server_service::bootstrap()

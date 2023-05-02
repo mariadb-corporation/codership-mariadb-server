@@ -18720,7 +18720,6 @@ wsrep_kill_victim(
   DBUG_ENTER("wsrep_kill_victim");
 
   /* Mark transaction as a victim for Galera abort */
-  victim_trx->lock.was_chosen_as_wsrep_victim= true;
   if (wsrep_thd_set_wsrep_aborter(bf_thd, thd))
   {
     WSREP_DEBUG("innodb kill transaction skipped due to wsrep_aborter set");
@@ -18730,7 +18729,7 @@ wsrep_kill_victim(
 
   if (wsrep_thd_bf_abort(bf_thd, thd, signal))
   {
-    lock_t*  wait_lock= victim_trx->lock.wait_lock;
+    lock_t*  wait_lock= (victim_trx) ? victim_trx->lock.wait_lock : NULL;
     if (wait_lock)
     {
       DBUG_ASSERT(victim_trx->is_wsrep());
@@ -18742,7 +18741,8 @@ wsrep_kill_victim(
   else
   {
     wsrep_thd_LOCK(thd);
-    victim_trx->lock.was_chosen_as_wsrep_victim= false;
+    if (victim_trx)
+      victim_trx->lock.was_chosen_as_wsrep_victim= false;
     wsrep_thd_set_wsrep_aborter(NULL, thd);
     wsrep_thd_UNLOCK(thd);
 
@@ -18801,6 +18801,14 @@ wsrep_innobase_kill_one_trx(
 
   /* Here we need to lock THD::LOCK_thd_data to protect from
   concurrent usage or disconnect or delete. */
+
+  /* but, mark first the inndb transaction as a victim for Galera abort,
+     this will prevent potential deadlock, if e.g. KILL command has locked
+     the victim THD and would call for innobase_kill_query where additional
+     innodb side locks will be needed
+ */
+  victim_trx->lock.was_chosen_as_wsrep_victim= true;
+
   DEBUG_SYNC(bf_thd, "wsrep_before_BF_victim_lock");
   wsrep_thd_LOCK(thd);
   DEBUG_SYNC(bf_thd, "wsrep_after_BF_victim_lock");
@@ -18878,17 +18886,45 @@ wsrep_abort_transaction(
 	      wsrep_thd_query(victim_thd),
 	      victim_trx ? victim_trx->id : 0);
 
-  if (victim_trx)
+  /* if victim does not have transaction in innodb side,
+     we can use server side abort only */
+  if (victim_trx && victim_trx->state != TRX_STATE_NOT_STARTED)
   {
+    /* pick up victim trx id, as the victim may move forward after we release
+       THD lock mutexes */
+    trx_id_t victim_trx_id= victim_trx->id;
+    wsrep_thd_UNLOCK(victim_thd);
+
     lock_mutex_enter();
-    trx_mutex_enter(victim_trx);
-    wsrep_kill_victim(bf_thd, victim_thd, victim_trx, signal);
-    lock_mutex_exit();
-    trx_mutex_exit(victim_trx);
+    /* now we have innodb lock system mutex, but victim trx may have exited by now,
+       find the victim again to see if abort is needed in innodb side anymore */
+    if ((victim_trx= trx_sys.find(bf_trx, victim_trx_id, false)))
+    {
+      /* victim trx is still alive, lock it and issue kill
+         This happens in same order as in wsrep_innobase_kill_one_trx() */
+      trx_mutex_enter(victim_trx);
+      wsrep_thd_LOCK(victim_thd);
+
+      wsrep_kill_victim(bf_thd, victim_thd, victim_trx, signal);
+
+      lock_mutex_exit();
+      trx_mutex_exit(victim_trx);
+    }
+    else
+    {
+      /* victim trx has exited on his own, we skip server side abort */
+      lock_mutex_exit();
+      wsrep_thd_UNLOCK(victim_thd);
+    }
   }
   else
   {
-    wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
+    /* victim trx is not started in innodb
+       we are calling wsrep_kill_victim to kill the victim in server side.
+       We don't acquire lock system mutex, as we have the victim THD locked in
+       server side, and the victim is not supposed to enter innodb after that
+    */
+    wsrep_kill_victim(bf_thd, victim_thd, NULL, signal);
   }
 }
 

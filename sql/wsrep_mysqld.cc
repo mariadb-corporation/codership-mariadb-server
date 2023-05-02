@@ -2249,11 +2249,6 @@ static int wsrep_TOI_event_buf(THD* thd, uchar** buf, size_t* buf_len)
   case SQLCOM_DROP_TABLE:
     err= wsrep_drop_table_query(thd, buf, buf_len);
     break;
-  case SQLCOM_KILL:
-    WSREP_DEBUG("KILL as TOI: %s", thd->query());
-    err= wsrep_to_buf_helper(thd, thd->query(), thd->query_length(),
-                             buf, buf_len);
-    break;
   case SQLCOM_CREATE_ROLE:
     if (sp_process_definer(thd))
     {
@@ -2768,7 +2763,7 @@ static bool abort_replicated(THD *thd)
   {
     WSREP_DEBUG("aborting replicated trx: %llu", (ulonglong)(thd->real_id));
 
-    (void)wsrep_abort_thd(thd, thd, TRUE);
+    wsrep_abort_thd(thd, thd, TRUE);
     ret_code= true;
   }
   else
