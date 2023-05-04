@@ -946,6 +946,7 @@ static void lock_wait_wsrep(trx_t *trx)
   if (!wait_lock)
   {
 func_exit:
+    ib::info() << "WSREP BF with no wait_lock";
     lock_sys.wr_unlock();
     mysql_mutex_unlock(&lock_sys.wait_mutex);
     return;
@@ -983,13 +984,20 @@ func_exit:
         {
           victims.emplace(lock->trx);
         }
+	else
+	{
+          ib::info() << "WSREP BF victim has also BF " << lock->trx->id;
+	}
       while ((lock= lock_rec_get_next(heap_no, lock)));
     }
   }
 
   if (victims.empty())
-    goto func_exit;
+    {
+     ib::info() << "WSREP BF victims remain empty";
 
+    goto func_exit;
+    }
   std::vector<std::pair<ulong,trx_id_t>> victim_id;
   for (trx_t *v : victims)
     victim_id.emplace_back(std::pair<ulong,trx_id_t>
