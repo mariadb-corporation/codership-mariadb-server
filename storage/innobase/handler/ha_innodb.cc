@@ -18631,7 +18631,6 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
   {
     bool aborting= false;
     wsrep_thd_LOCK(vthd);
-    WSREP_DEBUG("lock_wait_wsrep_kill for %ld", thd_get_thread_id(vthd));
     trx_t *vtrx= thd_to_trx(vthd);
     if (vtrx)
     {
@@ -18651,10 +18650,10 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
           break;
         case TRX_STATE_PREPARED:
           if (!wsrep_is_wsrep_xid(&vtrx->xid))
-	    {
-	      WSREP_DEBUG("lock_wait_wsrep_kill, victim BF abort skipped due to xid");
+          {
+            WSREP_DEBUG("lock_wait_wsrep_kill, victim BF abort skipped due to xid");
             break;
-	    }
+          }
           /* fall through */
         case TRX_STATE_ACTIVE:
           WSREP_LOG_CONFLICT(bf_thd, vthd, TRUE);
@@ -18683,14 +18682,14 @@ void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id)
         }
       }
       else
-	{
-	  WSREP_DEBUG("lock_wait_wsrep_kill, strange trx->id %d != trx_id %d", vtrx->id, trx_id);
-	  aborting = true;
-	}
+      {
+          WSREP_DEBUG("lock_wait_wsrep_kill, id change trx->id %d != trx_id %d", vtrx->id, trx_id);
+          aborting = true;
+      }
       
       if (aborting && wsrep_thd_set_wsrep_aborter(bf_thd, vthd))
       {
-        aborting= false;
+        aborting = false;
         WSREP_DEBUG("kill transaction skipped due to wsrep_aborter set");
       }
       mysql_mutex_unlock(&lock_sys.wait_mutex);
