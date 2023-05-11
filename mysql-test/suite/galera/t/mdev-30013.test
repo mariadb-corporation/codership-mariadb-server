@@ -1,5 +1,9 @@
 --source include/galera_cluster.inc
 
+if (!$HA_ARCHIVE_SO) {
+  skip Needs Archive loadable plugin;
+}
+
 INSTALL PLUGIN ARCHIVE SONAME 'ha_archive.so';
 CREATE TABLE t (a CHAR(1)) ENGINE=ARCHIVE;
 SHOW CREATE TABLE t;
