@@ -11905,6 +11905,7 @@ void wsrep_thd_binlog_stmt_rollback(THD * thd)
   {
     thd->binlog_remove_pending_rows_event(TRUE, TRUE);
     cache_mngr->stmt_cache.reset();
+    cache_mngr->trx_cache.restore_prev_position();
   }
   DBUG_VOID_RETURN;
 }
