@@ -2086,7 +2086,11 @@ commit_one_phase_2(THD *thd, bool all, THD_TRANS *trans, bool is_real_trans)
   {
     int err;
 
+#ifdef WITH_WSREP
+    if ((has_binlog_hton(ha_info) || WSREP_EMULATE_BINLOG(thd)) &&
+#else
     if (has_binlog_hton(ha_info) &&
+#endif /* WITH_WSREP */
         (err= binlog_commit(thd, all,
                             is_ro_1pc_trans(thd, ha_info, all, is_real_trans))))
     {
