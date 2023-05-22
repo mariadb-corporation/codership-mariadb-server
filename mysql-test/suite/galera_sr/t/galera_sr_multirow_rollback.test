@@ -39,6 +39,7 @@ SET SESSION wsrep_trx_fragment_size = 1000;
 START TRANSACTION;
 --error ER_DUP_ENTRY
 INSERT INTO t1 (f2) VALUES ('a'), ('b');
+--error ER_UNKNOWN_ERROR
 COMMIT;
 
 SELECT COUNT(*) AS expect_0 FROM t1;
