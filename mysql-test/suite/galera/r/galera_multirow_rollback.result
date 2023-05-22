@@ -6,6 +6,7 @@ START TRANSACTION;
 INSERT INTO t1 (f2) VALUES ('a'), ('b');
 ERROR 23000: Duplicate entry '0' for key 'PRIMARY'
 COMMIT;
+ERROR HY000: Maximum writeset size exceeded
 SELECT COUNT(*) AS expect_0 FROM t1;
 expect_0
 0
@@ -71,3 +72,47 @@ id	fk1
 3	1
 DROP TABLE c;
 DROP TABLE p;
+connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+SET GLOBAL DEBUG_DBUG = "d,sync.wsrep_apply_cb";
+connection node_1;
+CREATE TABLE t1 (f1 int primary key, f2 int);
+INSERT INTO t1 VALUES (1,0);
+BEGIN;
+INSERT INTO t1 VALUES (2,4),(1,1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+connection node_2;
+UPDATE t1 SET f2=8 WHERE f1=1;
+connection node_1a;
+SET DEBUG_SYNC = "now WAIT_FOR sync.wsrep_apply_cb_reached";
+connection node_1;
+COMMIT;
+ERROR HY000: Maximum writeset size exceeded
+connection node_1a;
+SET DEBUG_SYNC = "now SIGNAL signal.wsrep_apply_cb";
+connection node_1;
+SELECT * FROM t1;
+f1	f2
+1	8
+DROP TABLE t1;
+CREATE TABLE t1(f1 int primary key, f2 int);
+INSERT INTO t1 VALUES (1,0);
+connection node_1a;
+SET GLOBAL DEBUG_DBUG = "d,sync.wsrep_apply_cb";
+connection node_1;
+BEGIN;
+INSERT INTO t1 VALUES (3,5),(1,1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+connection node_2;
+UPDATE t1 SET f2=9 WHERE f1=1;
+connection node_1a;
+SET DEBUG_SYNC = "now WAIT_FOR sync.wsrep_apply_cb_reached";
+SET DEBUG_SYNC = "now SIGNAL signal.wsrep_apply_cb";
+connection node_1;
+COMMIT;
+ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
+SELECT * FROM t1;
+f1	f2
+1	9
+DROP TABLE t1;
+SET DEBUG_SYNC='reset';
+SET GLOBAL debug_dbug = DEFAULT;
