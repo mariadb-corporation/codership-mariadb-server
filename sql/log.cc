@@ -348,7 +348,7 @@ public:
 
   my_off_t get_prev_position()
   {
-     return(before_stmt_pos);
+    return(before_stmt_pos);
   }
 
   void set_prev_position(my_off_t pos)
@@ -5842,17 +5842,6 @@ THD::binlog_start_trans_and_stmt()
     this->binlog_set_stmt_begin();
     bool mstmt_mode= in_multi_stmt_transaction_mode();
 #ifdef WITH_WSREP
-    /*
-      With wsrep binlog emulation we can skip the rest because the
-      binlog cache will not be written into binlog. Note however that
-      because of this the hton callbacks will not get called to clean
-      up the cache, so this must be done explicitly when the transaction
-      terminates.
-    */
-    if (WSREP_EMULATE_BINLOG_NNULL(this))
-    {
-      DBUG_VOID_RETURN;
-    }
     /* If this event replicates through a master-slave then we need to
        inject manually GTID so it is preserved in the cluster. We are writing 
        directly to WSREP buffer and not in IO cache because in case of IO cache
@@ -11892,21 +11881,6 @@ void wsrep_thd_binlog_trx_reset(THD * thd)
     }
   }
   thd->reset_binlog_for_next_statement();
-  DBUG_VOID_RETURN;
-}
-
-void wsrep_thd_binlog_stmt_rollback(THD * thd)
-{
-  DBUG_ENTER("wsrep_thd_binlog_stmt_rollback");
-  WSREP_DEBUG("wsrep_thd_binlog_stmt_rollback");
-  binlog_cache_mngr *const cache_mngr=
-    (binlog_cache_mngr*) thd_get_ha_data(thd, binlog_hton);
-  if (cache_mngr)
-  {
-    thd->binlog_remove_pending_rows_event(TRUE, TRUE);
-    cache_mngr->stmt_cache.reset();
-    cache_mngr->trx_cache.restore_prev_position();
-  }
   DBUG_VOID_RETURN;
 }
 

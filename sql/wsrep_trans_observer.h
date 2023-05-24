@@ -385,11 +385,6 @@ static inline int wsrep_before_rollback(THD* thd, bool all)
   {
     if (!all && thd->in_active_multi_stmt_transaction())
     {
-      if (wsrep_emulate_bin_log)
-      {
-        wsrep_thd_binlog_stmt_rollback(thd);
-      }
-
       if (thd->wsrep_trx().is_streaming() &&
           (wsrep_fragments_certified_for_stmt(thd) > 0))
       {
