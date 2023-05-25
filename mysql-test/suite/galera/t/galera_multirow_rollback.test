@@ -152,6 +152,19 @@ SET DEBUG_SYNC = "now SIGNAL signal.wsrep_apply_cb";
 COMMIT;
 
 SELECT * FROM t1;
+DROP TABLE t1;
+
+#
+# Case 7: 
+#
+CREATE TABLE t1 (i int primary key) engine=innodb;
+BEGIN;
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+--error ER_DUP_ENTRY
+INSERT INTO t1 VALUES (1);
+COMMIT;
+
 
 # Cleanup
 DROP TABLE t1;
