@@ -8608,6 +8608,8 @@ ha_innobase::update_row(
 
 	DBUG_ENTER("ha_innobase::update_row");
 
+	WSREP_DEBUG("::update_row() for %lu : %s", thd_get_thread_id(m_user_thd), wsrep_thd_query(m_user_thd));
+
 	if (is_read_only()) {
 		DBUG_RETURN(HA_ERR_TABLE_READONLY);
 	} else if (!trx_is_started(trx)) {

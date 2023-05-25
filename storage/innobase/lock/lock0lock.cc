@@ -937,6 +937,8 @@ static void lock_wait_wsrep(trx_t *trx)
   if (!wsrep_thd_is_BF(trx->mysql_thd, false))
     return;
 
+  if (trx->mysql_thd)
+    WSREP_DEBUG("LOCK_WAIT_WSREP for %lu : %s", thd_get_thread_id(trx->mysql_thd), wsrep_thd_query(trx->mysql_thd));
   std::set<trx_t*> victims;
 
   lock_sys.wr_lock(SRW_LOCK_CALL);
@@ -991,24 +993,36 @@ func_exit:
     goto func_exit;
 
   std::vector<std::pair<ulong,trx_id_t>> victim_id;
-  for (trx_t *v : victims)
+  for (trx_t *v : victims) {
+    if (v->mysql_thd)
+      WSREP_DEBUG("::lock_wait_wsrep victim %lu : %s", thd_get_thread_id(v->mysql_thd), wsrep_thd_query(v->mysql_thd));
+
     victim_id.emplace_back(std::pair<ulong,trx_id_t>
                            {thd_get_thread_id(v->mysql_thd), v->id});
-
-  DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
-                  {
-                    const char act[]=
-                      "now SIGNAL sync.before_wsrep_thd_abort_reached "
-                      "WAIT_FOR signal.before_wsrep_thd_abort";
-                    DBUG_ASSERT(!debug_sync_set_action(trx->mysql_thd,
-                                                       STRING_WITH_LEN(act)));
-                  };);
+  }
 
   lock_sys.wr_unlock();
   mysql_mutex_unlock(&lock_sys.wait_mutex);
 
   for (const auto &v : victim_id)
     lock_wait_wsrep_kill(trx, v.first, v.second);
+
+  // Try to find out if new conflicting transaction can acquire
+  // conflicting record locks now before BF
+#ifdef ENABLED_DEBUG_SYNC
+  WSREP_DEBUG("::lock_wait_wsrep for %lu : %s", thd_get_thread_id(trx->mysql_thd), wsrep_thd_query(trx->mysql_thd));
+
+  /* Allow tests to block the applier thread using the DBUG facilities */
+  DBUG_EXECUTE_IF("sync.wsrep_before_thd_abort",
+                 {
+                   const char act[]=
+                     "now "
+                     "SIGNAL sync.wsrep_before_thd_abort_reached "
+                     "WAIT_FOR signal.wsrep_before_thd_abort_continue";
+                   DBUG_ASSERT(!debug_sync_set_action(trx->mysql_thd,
+                                                      STRING_WITH_LEN(act)));
+                 };);
+#endif /* ENABLED_DEBUG_SYNC */
 }
 #endif /* WITH_WSREP */
 
@@ -1296,6 +1310,9 @@ lock_rec_enqueue_waiting(
         lock, that's why we check only deadlock victim bit here. */
         ut_ad(!(trx->lock.was_chosen_as_deadlock_victim & 1));
 
+	if (trx->mysql_thd)
+	  WSREP_DEBUG("::lock_rec_enqueue_waiting for %lu : %s", thd_get_thread_id(trx->mysql_thd), wsrep_thd_query(trx->mysql_thd));
+
 	if (trx->mysql_thd && thd_lock_wait_timeout(trx->mysql_thd) == 0) {
 		trx->error_state = DB_LOCK_WAIT_TIMEOUT;
 		return DB_LOCK_WAIT_TIMEOUT;
@@ -1513,6 +1530,9 @@ lock_rec_lock(
         lock_table_has(trx, index->table, LOCK_IS));
   ut_ad((LOCK_MODE_MASK & mode) != LOCK_X ||
          lock_table_has(trx, index->table, LOCK_IX));
+
+  if (trx->mysql_thd)
+    WSREP_DEBUG("::lock_rec_lock for %lu : %s", thd_get_thread_id(trx->mysql_thd), wsrep_thd_query(trx->mysql_thd));
 
   if (lock_table_has(trx, index->table,
                      static_cast<lock_mode>(LOCK_MODE_MASK & mode)))

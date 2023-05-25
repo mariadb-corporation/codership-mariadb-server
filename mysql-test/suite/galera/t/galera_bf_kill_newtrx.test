@@ -1,0 +1,82 @@
+--source include/galera_cluster.inc
+--source include/have_debug.inc
+--source include/have_debug_sync.inc
+
+CREATE TABLE t1(a int not null primary key, b int,c int,d int,e int) engine=innodb;
+INSERT INTO t1 VALUES (1,1,0,0,0),(2,2,0,0,0),(3,3,0,0,0),(4,4,0,0,0),(5,5,0,0,0),(6,6,0,0,0),(7,7,0,0,0);
+
+--connection node_2
+#
+# This will be transaction (1) that BF (i.e. transaction executed by
+# applier that WS arrives from different node) will kill i.e. this
+# change is not applied
+#
+BEGIN;
+UPDATE t1 SET b = 100, c = 300 where a = 5;
+
+#
+# Here we set dbug sync point so that BF will pause after
+# it has constructed list of victims
+#
+--connect node_2b, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection node_2b
+set session wsrep_sync_wait=0;
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'root' AND COMMAND = 'Sleep' LIMIT 1
+--source include/wait_condition.inc
+
+SET GLOBAL debug_dbug = 'd,sync.wsrep_before_thd_abort';
+
+--connection node_1
+#
+# This update will conflict transaction we started on node_2 and will
+# pause after conflicting transactions are BF killed
+#
+SELECT * FROM t1;
+UPDATE t1 SET b = 200, d=200 where a = 5;
+
+--connection node_2b
+SET DEBUG_SYNC='now WAIT_FOR sync.wsrep_before_thd_abort_reached';
+
+#
+# This is a new local conflicting transaction (2) that is not
+# in conflicting transactions list on BF it should not get lock
+#
+--connect node_2c, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection node_2c
+SET SESSION wsrep_sync_wait=0;
+--send UPDATE t1 SET b = 400, e = 100 where a = 5;
+
+#
+# Let applier to continue it should have killed transaction (1)
+# and
+# execution order is BF --> 2 or 2 will be rolled-back because of
+# lock wait
+#
+--connection node_2b
+SELECT SLEEP(5);
+SET DEBUG_SYNC='now SIGNAL signal.wsrep_before_thd_abort_continue';
+SET DEBUG_SYNC='RESET';
+SET GLOBAL debug_dbug = '';
+
+--connection node_2c
+--error 0,ER_LOCK_WAIT_TIMEOUT
+--reap
+COMMIT;
+
+--connection node_1
+--disconnect node_2b
+--disconnect node_2c
+
+--connection node_2
+--error ER_LOCK_DEADLOCK
+COMMIT;
+
+#
+# Verify database state it seems that it is (5,400,0,200,100) BF --> 2 OR
+# (5,200,0,200,0) i.e. 2 had lock wait timeout
+#
+--connection node_1
+COMMIT;
+SELECT COUNT(*) AS EXCEPT_1 FROM t1 where (a = 5 and b = 400 and d = 200 and e = 100) OR
+(a = 5 and b = 200 and d = 200 and e = 0);
+DROP TABLE t1;
