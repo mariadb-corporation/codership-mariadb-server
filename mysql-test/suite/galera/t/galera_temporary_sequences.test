@@ -1,0 +1,37 @@
+--source include/galera_cluster.inc
+--source include/have_sequence.inc
+
+--connection node_2
+set autocommit=0;
+SET SESSION wsrep_OSU_method='RSU';
+create table t (i int primary key, j int);
+create temporary sequence seq2 NOCACHE engine=innodb;
+commit;
+SET SESSION wsrep_OSU_method='RSU';
+create sequence seq1 NOCACHE engine=innodb;
+SET SESSION wsrep_OSU_method='TOI';
+DROP TABLE t;
+DROP SEQUENCE seq2;
+DROP SEQUENCE seq1;
+
+--connection node_1
+create table t (i int primary key, j int);
+set autocommit=0;
+insert into t values (3,0);
+create temporary sequence seq1 NOCACHE engine=innodb;
+commit;
+insert into t values (4,0);
+create sequence seq2 NOCACHE engine=innodb;
+commit;
+
+--connection node_2
+select * from t;
+--error ER_NO_SUCH_TABLE
+show create table seq1;
+show create table seq2;
+
+
+--connection node_1
+DROP TABLE t;
+DROP SEQUENCE seq1;
+DROP SEQUENCE seq2;
