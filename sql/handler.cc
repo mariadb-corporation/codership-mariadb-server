@@ -7058,13 +7058,13 @@ bool handler::check_table_binlog_row_based_internal()
 
             Otherwise, return 'true' if binary logging is on.
           */
-          IF_WSREP(((WSREP_EMULATE_BINLOG_NNULL(thd) &&
+          (!WSREP(thd) || IF_WSREP(((WSREP_EMULATE_BINLOG_NNULL(thd) &&
                      wsrep_thd_is_local(thd)) ||
                     ((WSREP_NNULL(thd) ||
                       (thd->variables.option_bits & OPTION_BIN_LOG)) &&
                      mysql_bin_log.is_open())),
                     (thd->variables.option_bits & OPTION_BIN_LOG) &&
-                    mysql_bin_log.is_open()));
+                                   mysql_bin_log.is_open())));
 }
 
 

@@ -4733,7 +4733,7 @@ select_create::prepare(List<Item> &_values, SELECT_LEX_UNIT *u)
   */
   if (!thd->lex->tmp_table() &&
       thd->is_current_stmt_binlog_format_row() &&
-      mysql_bin_log.is_open())
+      (mysql_bin_log.is_open() || WSREP_EMULATE_BINLOG(thd)))
   {
     thd->binlog_start_trans_and_stmt();
   }
@@ -5096,7 +5096,7 @@ bool select_create::send_eof()
     {
       thd->get_stmt_da()->set_overwrite_status(FALSE);
       mysql_mutex_lock(&thd->LOCK_thd_data);
-      if (wsrep_current_error(thd))
+      if (wsrep_current_error(thd) || thd->is_error())
       {
         WSREP_DEBUG("select_create commit failed, thd: %llu err: %s %s",
                     thd->thread_id,
