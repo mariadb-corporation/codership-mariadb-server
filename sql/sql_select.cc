@@ -69,6 +69,9 @@
 #include "my_json_writer.h"
 #include "opt_trace.h"
 #include "derived_handler.h"
+#ifdef WITH_WSREP
+#include "wsrep_trans_observer.h" /* wsrep_start_transction() */
+#endif /* WITH_WSREP */
 
 /*
   A key part number that means we're using a fulltext scan.
@@ -426,6 +429,22 @@ bool handle_select(THD *thd, LEX *lex, select_result *result,
   SELECT_LEX *select_lex= lex->first_select_lex();
   DBUG_ENTER("handle_select");
   MYSQL_SELECT_START(thd->query());
+
+
+#ifdef WITH_WSREP
+  /* This transaction is actually CTAS so if wsrep transaction
+     is not started, start it. */
+  if (WSREP(thd) && thd->wsrep_trx_id() == WSREP_UNDEFINED_TRX_ID &&
+      lex->sql_command == SQLCOM_CREATE_TABLE)
+  {
+    wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+    WSREP_DEBUG("handle_select:: thread_id %lu client_state %s mode %s trx_state %s",
+                thd_get_thread_id(thd),
+                wsrep_thd_client_state_str(thd),
+                wsrep_thd_client_mode_str(thd),
+                wsrep_thd_transaction_state_str(thd));
+  }
+#endif
 
   if (select_lex->master_unit()->is_unit_op() ||
       select_lex->master_unit()->fake_select_lex)

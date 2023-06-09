@@ -1,0 +1,29 @@
+--source include/galera_cluster.inc
+
+
+SET GLOBAL log_output='TABLE';
+SET SESSION sql_mode='no_auto_value_on_zero';
+SET SESSION enforce_storage_engine=InnoDB;
+--error ER_BAD_LOG_STATEMENT
+ALTER TABLE mysql.general_log ENGINE=MyISAM;
+SET GLOBAL general_log=1;
+SELECT 1;
+SET GLOBAL log_output=DEFAULT;
+SET SESSION sql_mode=DEFAULT;
+
+
+call mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT.*");
+SET GLOBAL wsrep_forced_binlog_format=STATEMENT;
+CREATE TABLE t (a INT UNIQUE) REPLACE SELECT 1 AS a,2 AS b UNION SELECT 1 AS a,3 AS c;
+SELECT * from t;
+DROP TABLE t;
+SET GLOBAL wsrep_forced_binlog_format=DEFAULT;
+
+call mtr.add_suppression("BINLOG_BASE64_EVENT: Could not read field.*");
+call mtr.add_suppression("BINLOG_BASE64_EVENT: Could not execute Write_rows_v1 event on table.*");
+CREATE TABLE t1 (a INT NOT NULL AUTO_INCREMENT PRIMARY KEY, b INT, KEY(b)) engine=innodb;
+BINLOG 'AMqaOw8BAAAAdAAAAHgAAAAAAAQANS42LjM0LTc5LjEtZGVidWctbG9nAAAAAAAAAAAAAAAAAAAA AAAAAAAAAAAAAAAAAAAAAAAAEzgNAAgAEgAEBAQEEgAAXAAEGggAAAAICAgCAAAACgoKGRkAAYVx w2w=';
+--error ER_GET_ERRNO
+BINLOG 'wlZOTxMBAAAAKgAAADwCAAAAACkAAAAAAAEABHRlc3QAAnQxAAIDAwAC wlZOTxcBAAAAJgAAAGICAAAAACkAAAAAAAEAAv/8AgAAAAgAAAA=';
+SELECT * FROM t1;
+DROP TABLE t1;
