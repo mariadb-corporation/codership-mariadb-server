@@ -3803,6 +3803,7 @@ void wsrep_commit_empty(THD* thd, bool all)
        we have already aborted transaction e.g. because max writeset size
        has been reached. */
     DBUG_ASSERT(!wsrep_has_changes(thd) ||
+                thd->wsrep_affected_rows == 0 ||
                 (thd->lex->sql_command == SQLCOM_CREATE_TABLE &&
                  !thd->is_current_stmt_binlog_format_row()) ||
                 thd->wsrep_cs().transaction().state() == wsrep::transaction::s_aborted);
