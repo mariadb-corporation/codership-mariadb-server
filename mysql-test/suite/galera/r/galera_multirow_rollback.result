@@ -6,7 +6,6 @@ START TRANSACTION;
 INSERT INTO t1 (f2) VALUES ('a'), ('b');
 ERROR 23000: Duplicate entry '0' for key 'PRIMARY'
 COMMIT;
-ERROR HY000: Maximum writeset size exceeded
 SELECT COUNT(*) AS expect_0 FROM t1;
 expect_0
 0
@@ -86,7 +85,6 @@ connection node_1a;
 SET DEBUG_SYNC = "now WAIT_FOR sync.wsrep_apply_cb_reached";
 connection node_1;
 COMMIT;
-ERROR HY000: Maximum writeset size exceeded
 connection node_1a;
 SET DEBUG_SYNC = "now SIGNAL signal.wsrep_apply_cb";
 connection node_1;

@@ -13,7 +13,6 @@ CREATE TABLE t1 (f1 INTEGER PRIMARY KEY DEFAULT 0, f2 char(12));
 START TRANSACTION;
 --error ER_DUP_ENTRY
 INSERT INTO t1 (f2) VALUES ('a'), ('b');
---error ER_UNKNOWN_ERROR
 COMMIT;
 
 SELECT COUNT(*) AS expect_0 FROM t1;
@@ -113,7 +112,6 @@ UPDATE t1 SET f2=8 WHERE f1=1;
 SET DEBUG_SYNC = "now WAIT_FOR sync.wsrep_apply_cb_reached";
 
 --connection node_1
---error ER_UNKNOWN_ERROR
 COMMIT;
 
 --connection node_1a
