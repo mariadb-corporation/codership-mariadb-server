@@ -976,10 +976,11 @@ func_exit:
       if (!lock_rec_get_nth_bit(lock, heap_no))
         lock= lock_rec_get_next(heap_no, lock);
       do
-        /* if victim has also BF status, but has earlier seqno, we have to wait */
+        /* pick victim, if there is need to wait for the lock */
         if (lock->trx != trx &&
-            !(wsrep_thd_is_BF(lock->trx->mysql_thd, false) &&
-              wsrep_thd_order_before(lock->trx->mysql_thd, trx->mysql_thd)))
+          lock_rec_has_to_wait(trx, wait_lock->type_mode, lock,
+                               lock_rec_get_nth_bit(wait_lock,
+                                                    PAGE_HEAP_NO_SUPREMUM)))
         {
           victims.emplace(lock->trx);
         }
@@ -989,7 +990,6 @@ func_exit:
 
   if (victims.empty())
     goto func_exit;
-
   std::vector<std::pair<ulong,trx_id_t>> victim_id;
   for (trx_t *v : victims)
     victim_id.emplace_back(std::pair<ulong,trx_id_t>

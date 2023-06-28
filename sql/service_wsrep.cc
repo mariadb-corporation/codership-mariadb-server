@@ -257,8 +257,11 @@ extern "C" my_bool wsrep_thd_order_before(const THD *left, const THD *right)
                 (long long)wsrep_thd_trx_seqno(right));
     return TRUE;
   }
-  WSREP_DEBUG("waiting for BF, trx order: %lld %lld\n",
+  WSREP_DEBUG("trx order wait, thd1: %ld, BF: %d order: %lld "
+              "thd2: %ld, BF: %d order: %lld",
+              left->thread_id, (wsrep_thd_is_BF(left, false)),
               (long long)wsrep_thd_trx_seqno(left),
+              right->thread_id, (wsrep_thd_is_BF(right, false)),
               (long long)wsrep_thd_trx_seqno(right));
   return FALSE;
 }

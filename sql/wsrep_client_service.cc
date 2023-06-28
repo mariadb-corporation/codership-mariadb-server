@@ -101,7 +101,6 @@ int Wsrep_client_service::prepare_data_for_replication()
     {
       WSREP_ERROR("rbr write fail, data_len: %zu",
                   data_len);
-      // wsrep_override_error(m_thd, ER_ERROR_DURING_COMMIT);
       DBUG_RETURN(1);
     }
 
@@ -110,7 +109,6 @@ int Wsrep_client_service::prepare_data_for_replication()
     {
       WSREP_ERROR("rbr write fail, data_len: %zu",
                   data_len);
-      // wsrep_override_error(m_thd, ER_ERROR_DURING_COMMIT);
       DBUG_RETURN(1);
     }
 
@@ -138,6 +136,8 @@ int Wsrep_client_service::prepare_data_for_replication()
     {
       WSREP_DEBUG("empty rbr buffer, query: %s", wsrep_thd_query(m_thd));
     }
+    DBUG_EXECUTE_IF("wsrep_disable_fix", DBUG_RETURN(0); );
+    DBUG_RETURN(1);
   }
   DBUG_RETURN(0);
 }
