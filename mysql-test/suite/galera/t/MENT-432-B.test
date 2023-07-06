@@ -1,0 +1,240 @@
+#
+# Test that mariabackup SST donation sneds correct GTID for the joiner
+#
+
+--source include/big_test.inc
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+--source include/have_mariabackup.inc
+
+--connection node_1
+
+# Issue an endless stream of autoincrement inserts
+
+DELIMITER |;
+CREATE PROCEDURE p_I (count int, tab varchar(40))
+BEGIN
+        DECLARE i int;
+        SET i = 0;
+	SET @stmt1 = CONCAT('INSERT INTO ', tab, '(f2) SELECT 7 FROM ten AS a1, ten AS a2, ten AS a3');
+	SET @stmt2 = CONCAT('INSERT INTO ', tab, '(f2) SELECT 8 FROM ten AS a1, ten AS a2, ten AS a3, ten AS a4');
+	SET @stmt3 = CONCAT('INSERT INTO ', tab, '(f2) SELECT 9 FROM ten AS a1, ten AS a2, ten AS a3, ten AS a4, ten AS a5');
+	PREPARE ps1 FROM @stmt1;
+	PREPARE ps2 FROM @stmt2;
+	PREPARE ps3 FROM @stmt3;
+        WHILE i < count DO
+	      EXECUTE ps2;
+              SET i = i + 1;
+	END WHILE;
+	DEALLOCATE PREPARE ps1;
+	DEALLOCATE PREPARE ps2;
+	DEALLOCATE PREPARE ps3;
+END|
+DELIMITER ;|
+
+
+CREATE TABLE ten (f1 INTEGER) ENGINE=InnoDB;
+INSERT INTO ten VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+CREATE TABLE ta (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE tb (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE tc (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE td (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE te (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE tf (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE tg (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE th (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE ti (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE tj (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE tk (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+CREATE TABLE tl (f1 int primary key auto_increment, f2 int) ENGINE=InnoDB;
+
+
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1a
+--let $connection_id_a = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1b, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1b
+--let $connection_id_b = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1c, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1c
+--let $connection_id_c = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1d, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1d
+--let $connection_id_d = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1e, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1e
+--let $connection_id_e = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1f, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1f
+--let $connection_id_f = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1g, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1g
+--let $connection_id_g = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1h, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1h
+--let $connection_id_h = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1i, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1i
+--let $connection_id_i = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1j, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1j
+--let $connection_id_j = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1k, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1k
+--let $connection_id_k = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+--connect node_1l, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1l
+--let $connection_id_l = `SELECT CONNECTION_ID()`
+SET wsrep_sync_wait=0;
+
+
+# Kill and restart node #2
+
+--connection node_2
+--source include/kill_galera.inc
+--remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
+
+--connection node_1a
+--send CALL p_I(10000, 'ta');
+
+--connection node_1b
+--send CALL p_I(10000, 'tb');
+
+--connection node_1c
+--send CALL p_I(10000, 'tc');
+
+--connection node_1d
+--send CALL p_I(10000, 'td');
+
+--connection node_1e
+--send CALL p_I(10000, 'te');
+
+--connection node_1f
+--send CALL p_I(10000, 'tf');
+
+--connection node_1g
+--send CALL p_I(10000, 'tg');
+
+--connection node_1h
+--send CALL p_I(10000, 'th');
+
+--connection node_1i
+--send CALL p_I(10000, 'ti');
+
+--connection node_1j
+--send CALL p_I(10000, 'tj');
+
+--connection node_1k
+--send CALL p_I(10000, 'tk');
+
+--connection node_1l
+--send CALL p_I(10000, 'tl');
+
+--sleep 10
+
+--connection node_2
+#
+# allow more time for node_2 to become ready, as rollbacking
+# at innodb recovery phase may take a long time
+#
+--let $wait_ready_counter = 1200
+--source include/start_mysqld.inc
+
+# Terminate the stored procedures
+
+--connection node_1
+
+--sleep 10
+--eval KILL CONNECTION $connection_id_a
+--eval KILL CONNECTION $connection_id_b
+--eval KILL CONNECTION $connection_id_c
+--eval KILL CONNECTION $connection_id_d
+--eval KILL CONNECTION $connection_id_e
+--eval KILL CONNECTION $connection_id_f
+--eval KILL CONNECTION $connection_id_g
+--eval KILL CONNECTION $connection_id_h
+--eval KILL CONNECTION $connection_id_i
+--eval KILL CONNECTION $connection_id_j
+--eval KILL CONNECTION $connection_id_k
+--eval KILL CONNECTION $connection_id_l
+
+--connection node_1a
+--error 0,2013
+--reap
+
+--connection node_1b
+--error 0,2013
+--reap
+
+--connection node_1c
+--error 0,2013
+--reap
+
+--connection node_1d
+--error 0,2013
+--reap
+
+--connection node_1e
+--error 0,2013
+--reap
+
+--connection node_1f
+--error 0,2013
+--reap
+
+--connection node_1g
+--error 0,2013
+--reap
+
+--connection node_1h
+--error 0,2013
+--reap
+
+--connection node_1i
+--error 0,2013
+--reap
+
+--connection node_1j
+--error 0,2013
+--reap
+
+--connection node_1k
+--error 0,2013
+--reap
+
+--connection node_1l
+--error 0,2013
+--reap
+
+--connection node_2
+CALL mtr.add_suppression("WSREP: Failed to report last committed .*");
+
+--connection node_1
+CALL mtr.add_suppression("WSREP: Failed to report last committed .*");
+
+DROP PROCEDURE p_I;
+DROP TABLE ta,tb,tc,td,te,tf,tg,th,ti,tj,tk,tl;
+DROP TABLE ten;
+
