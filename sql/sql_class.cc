@@ -669,6 +669,7 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
    wsrep_ignore_table(false),
    wsrep_aborter(0),
    wsrep_delayed_BF_abort(false),
+   wsrep_ctas(false),
 
 /* wsrep-lib */
    m_wsrep_next_trx_id(WSREP_UNDEFINED_TRX_ID),
@@ -5961,6 +5962,8 @@ int THD::decide_logging_format(TABLE_LIST *tables)
 
   reset_binlog_local_stmt_filter();
 
+  // Used binlog format
+  enum_binlog_format binlog_format= static_cast<enum_binlog_format>(wsrep_binlog_format());
   /*
     We should not decide logging format if the binlog is closed or
     binlogging is off, or if the statement is filtered out from the
@@ -5981,20 +5984,41 @@ int THD::decide_logging_format(TABLE_LIST *tables)
     }
   }
 
+  /*
+    If user has configured wsrep_forced_binlog_format to
+    STMT OR MIXED and used binlog_format would be same
+    and this is CREATE TABLE AS SELECT we will fall back
+    to ROW.
+  */
+  if (wsrep_forced_binlog_format < BINLOG_FORMAT_ROW &&
+      binlog_format < BINLOG_FORMAT_ROW &&
+      this->wsrep_ctas)
+  {
+    binlog_format= BINLOG_FORMAT_ROW;
+    if (!this->got_warning)
+      push_warning_printf(this, Sql_condition::WARN_LEVEL_WARN,
+                          ER_UNKNOWN_ERROR,
+                          "Galera does not support wsrep_forced_binlog_format = %s "
+                          "in CREATE TABLE AS SELECT",
+                          wsrep_forced_binlog_format == BINLOG_FORMAT_STMT ?
+                          "BINLOG_FORMAT_STMT" : "BINLOG_FORMAT_MIXED");
+    set_current_stmt_binlog_format_row();
+  }
+
   if ((WSREP_EMULATE_BINLOG_NNULL(this) ||
        (mysql_bin_log.is_open() && (variables.option_bits & OPTION_BIN_LOG))) &&
-      !(wsrep_binlog_format() == BINLOG_FORMAT_STMT &&
+      !(binlog_format == BINLOG_FORMAT_STMT &&
         !binlog_filter->db_ok(db.str)))
 #else
   if (mysql_bin_log.is_open() && (variables.option_bits & OPTION_BIN_LOG) &&
-      !(wsrep_binlog_format() == BINLOG_FORMAT_STMT &&
+      !(binlog_format == BINLOG_FORMAT_STMT &&
         !binlog_filter->db_ok(db.str)))
 #endif /* WITH_WSREP */
   {
 
     if (is_bulk_op())
     {
-      if (wsrep_binlog_format() == BINLOG_FORMAT_STMT)
+      if (binlog_format == BINLOG_FORMAT_STMT)
       {
         my_error(ER_BINLOG_NON_SUPPORTED_BULK, MYF(0));
         DBUG_PRINT("info",
@@ -6207,7 +6231,7 @@ int THD::decide_logging_format(TABLE_LIST *tables)
       prev_access_table= table;
     }
 
-    if (wsrep_binlog_format() != BINLOG_FORMAT_ROW)
+    if (binlog_format != BINLOG_FORMAT_ROW)
     {
       /*
         DML statements that modify a table with an auto_increment
@@ -6291,7 +6315,7 @@ int THD::decide_logging_format(TABLE_LIST *tables)
         */
         my_error((error= ER_BINLOG_ROW_INJECTION_AND_STMT_ENGINE), MYF(0));
       }
-      else if ((wsrep_binlog_format() == BINLOG_FORMAT_ROW || is_bulk_op()) &&
+      else if ((binlog_format == BINLOG_FORMAT_ROW || is_bulk_op()) &&
                sqlcom_can_generate_row_events(this))
       {
         /*
@@ -6321,7 +6345,7 @@ int THD::decide_logging_format(TABLE_LIST *tables)
     else
     {
       /* binlog_format = STATEMENT */
-      if (wsrep_binlog_format() == BINLOG_FORMAT_STMT)
+      if (binlog_format == BINLOG_FORMAT_STMT)
       {
         if (lex->is_stmt_row_injection())
         {
@@ -6461,7 +6485,7 @@ int THD::decide_logging_format(TABLE_LIST *tables)
                         "and binlog_filter->db_ok(db) = %d",
                         mysql_bin_log.is_open(),
                         (variables.option_bits & OPTION_BIN_LOG),
-                        (uint) wsrep_binlog_format(),
+                        (uint) binlog_format,
                         binlog_filter->db_ok(db.str)));
 #endif
 

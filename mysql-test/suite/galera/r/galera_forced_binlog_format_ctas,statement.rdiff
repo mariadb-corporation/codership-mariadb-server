@@ -1,0 +1,23 @@
+--- suite/galera/r/galera_forced_binlog_format_ctas.result	2023-07-28 09:51:22.356453875 +0300
++++ suite/galera/r/galera_forced_binlog_format_ctas,statement.reject	2023-07-28 12:56:16.643062913 +0300
+@@ -4,10 +4,20 @@
+ CREATE TABLE t2(a int not null primary key, b int) ENGINE=InnoDB;
+ INSERT INTO t1 SELECT seq,seq from seq_1_to_1000;
+ CREATE TABLE t3 AS SELECT * FROM t1;
++Warnings:
++Warning	1105	Galera does not support wsrep_forced_binlog_format = BINLOG_FORMAT_STMT in CREATE TABLE AS SELECT
+ CREATE TABLE t4 AS SELECT * FROM t2;
++Warnings:
++Warning	1105	Galera does not support wsrep_forced_binlog_format = BINLOG_FORMAT_STMT in CREATE TABLE AS SELECT
+ CREATE TABLE t5 (a INT UNIQUE) AS SELECT 1 AS a;
++Warnings:
++Warning	1105	Galera does not support wsrep_forced_binlog_format = BINLOG_FORMAT_STMT in CREATE TABLE AS SELECT
+ CREATE TABLE t6 (a INT UNIQUE) REPLACE SELECT 1 AS a;
++Warnings:
++Warning	1105	Galera does not support wsrep_forced_binlog_format = BINLOG_FORMAT_STMT in CREATE TABLE AS SELECT
+ CREATE TABLE t7 (a INT UNIQUE) REPLACE SELECT 1 AS a,2 AS b UNION SELECT 1 AS a,3 AS c;
++Warnings:
++Warning	1105	Galera does not support wsrep_forced_binlog_format = BINLOG_FORMAT_STMT in CREATE TABLE AS SELECT
+ SELECT COUNT(*) AS EXPECT_1000 FROM t1;
+ EXPECT_1000
+ 1000

@@ -1,0 +1,11 @@
+[row]
+wsrep_forced_binlog_format=ROW
+log-bin
+[mixed]
+wsrep_forced_binlog_format=MIXED
+log-bin
+[statement]
+wsrep_forced_binlog_format=STATEMENT
+log-bin
+[none]
+

@@ -4969,11 +4969,9 @@ public:
   void                      *wsrep_apply_format;
   uchar*                    wsrep_rbr_buf;
   wsrep_gtid_t              wsrep_sync_wait_gtid;
-  //  wsrep_gtid_t              wsrep_last_written_gtid;
   ulong                     wsrep_affected_rows;
   bool                      wsrep_has_ignored_error;
   bool                      wsrep_replicate_GTID;
-
   /*
     When enabled, do not replicate/binlog updates from the current table that's
     being processed. At the moment, it is used to keep mysql.gtid_slave_pos
@@ -4993,7 +4991,8 @@ public:
   /* true if BF abort is observed in do_command() right after reading
   client's packet, and if the client has sent PS execute command. */
   bool                      wsrep_delayed_BF_abort;
-
+  // true if this transaction is CREATE TABLE AS SELECT (CTAS)
+  bool                      wsrep_ctas;
   /*
     Transaction id:
     * m_wsrep_next_trx_id is assigned on the first query after

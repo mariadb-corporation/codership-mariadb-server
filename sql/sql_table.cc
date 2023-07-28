@@ -11629,14 +11629,18 @@ bool Sql_cmd_create_table_like::execute(THD *thd)
 
 #ifdef WITH_WSREP
   if (select_lex->item_list.elements && // With SELECT
-      WSREP(thd) && thd->variables.wsrep_trx_fragment_size > 0)
+      WSREP(thd))
   {
-    my_message(
+    if (thd->variables.wsrep_trx_fragment_size > 0)
+    {
+      my_message(
         ER_NOT_ALLOWED_COMMAND,
         "CREATE TABLE AS SELECT is not supported with streaming replication",
         MYF(0));
-    res= 1;
-    goto end_with_restore_list;
+      res= 1;
+      goto end_with_restore_list;
+    }
+    thd->wsrep_ctas= true; // This will be used in THD::decide_logging_format
   }
 #endif /* WITH_WSREP */
 
@@ -11803,10 +11807,11 @@ bool Sql_cmd_create_table_like::execute(THD *thd)
 #ifdef WITH_WSREP
           WSREP_TO_ISOLATION_BEGIN_ALTER(create_table->db.str, create_table->table_name.str,
                                          first_table, &alter_info, NULL)
-	  {
-	    WSREP_WARN("CREATE TABLE isolation failure");
-	    DBUG_RETURN(true);
-	  }
+          {
+            WSREP_WARN("CREATE TABLE isolation failure");
+            res= true;
+            goto end_with_restore_list;
+          }
 #endif /* WITH_WSREP */
         }
         // check_engine will set db_type to  NULL if e.g. TEMPORARY is
@@ -11833,5 +11838,9 @@ bool Sql_cmd_create_table_like::execute(THD *thd)
   }
 
 end_with_restore_list:
+#ifdef WITH_WSREP
+  thd->wsrep_ctas= false;
+  thd->got_warning= 0;
+#endif
   DBUG_RETURN(res);
 }
