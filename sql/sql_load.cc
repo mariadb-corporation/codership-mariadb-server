@@ -105,13 +105,13 @@ public:
 class Wsrep_load_data_split
 {
 public:
-  Wsrep_load_data_split(THD *thd)
+  Wsrep_load_data_split(THD *thd, bool split)
     : m_thd(thd)
-    , m_load_data_splitting(wsrep_load_data_splitting)
+    , m_load_data_splitting(split)
     , m_fragment_unit(thd->wsrep_trx().streaming_context().fragment_unit())
     , m_fragment_size(thd->wsrep_trx().streaming_context().fragment_size())
   {
-    if (WSREP(m_thd) && m_load_data_splitting)
+    if (split)
     {
       /* Override streaming settings with backward compatible values for
          load data splitting */
@@ -121,7 +121,7 @@ public:
 
   ~Wsrep_load_data_split()
   {
-    if (WSREP(m_thd) && m_load_data_splitting)
+    if (m_load_data_splitting)
     {
       /* Restore original settings */
       m_thd->wsrep_cs().streaming_params(m_fragment_unit, m_fragment_size);
@@ -342,6 +342,9 @@ int mysql_load(THD *thd, const sql_exchange *ex, TABLE_LIST *table_list,
   bool is_concurrent;
 #endif
   const char *db= table_list->db.str;		// This is never null
+#ifdef WITH_WSREP
+  bool wsrep_split= false; // wsrep load data splitting ?
+#endif
   /*
     If path for file is not defined, we will use the current database.
     If this is not set, we will use the directory where the table to be
@@ -352,9 +355,6 @@ int mysql_load(THD *thd, const sql_exchange *ex, TABLE_LIST *table_list,
   bool transactional_table __attribute__((unused));
   DBUG_ENTER("mysql_load");
 
-#ifdef WITH_WSREP
-  Wsrep_load_data_split wsrep_load_data_split(thd);
-#endif /* WITH_WSREP */
   /*
     Bug #34283
     mysqlbinlog leaves tmpfile after termination if binlog contains
@@ -419,6 +419,25 @@ int mysql_load(THD *thd, const sql_exchange *ex, TABLE_LIST *table_list,
   {
     DBUG_RETURN(TRUE);
   }
+
+#ifdef WITH_WSREP
+  /*
+    We support load data splitting for InnoDB only as it will use
+    streaming replication (SR).
+  */
+  if (WSREP(thd) &&
+      wsrep_load_data_splitting &&
+      table_list->table->s->db_type()->db_type != DB_TYPE_INNODB)
+  {
+    wsrep_split=false;
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+			ER_NOT_SUPPORTED_YET,
+                        "wsrep_load_data_splitting for other than InnoDB tables");
+  }
+
+  Wsrep_load_data_split wsrep_load_data_split(thd, wsrep_split);
+#endif /* WITH_WSREP */
+
   thd_proc_info(thd, "Executing");
   /*
     Let us emit an error if we are loading data to table which is used
