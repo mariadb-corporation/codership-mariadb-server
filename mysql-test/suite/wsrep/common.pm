@@ -89,7 +89,9 @@ sub check_wsrep_support() {
     # WSREP_PROVIDER env not defined. Lets try to locate the wsrep provider
     # library.
     $file_wsrep_provider=
-      ::mtr_file_exists("/usr/lib64/galera-4/libgalera_smm.so",
+	::mtr_file_exists("$basedir/lib/plugin/libgalera_smm.so",
+                      "$::bindir/plugin/galera_replication/galera/libgalera_smm.so",
+                      "/usr/lib64/galera-4/libgalera_smm.so",
                       "/usr/lib64/galera/libgalera_smm.so",
                       "/usr/lib/galera-4/libgalera_smm.so",
                       "/usr/lib/galera/libgalera_smm.so");
