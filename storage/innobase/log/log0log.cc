@@ -622,7 +622,7 @@ log_file_header_flush(
 	lsn_t	dest_offset;
 
 	ut_ad(log_write_mutex_own());
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 	ut_a(nth_file < log_sys.log.n_files);
 	ut_ad(log_sys.log.format == log_t::FORMAT_10_4
 	      || log_sys.log.format == log_t::FORMAT_ENC_10_4);
@@ -699,7 +699,7 @@ log_write_buf(
 	ulint		i;
 
 	ut_ad(log_write_mutex_own());
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 	ut_a(len % OS_FILE_LOG_BLOCK_SIZE == 0);
 	ut_a(start_lsn % OS_FILE_LOG_BLOCK_SIZE == 0);
 
@@ -890,7 +890,7 @@ loop:
 		return;
 	}
 
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 
 	/* If it is a write call we should just go ahead and do it
 	as we checked that write_lsn is not where we'd like it to
@@ -1050,7 +1050,7 @@ void log_buffer_flush_to_disk(bool sync)
 ATTRIBUTE_COLD void log_write_and_flush()
 {
   ut_ad(!srv_read_only_mode);
-  ut_ad(!recv_no_log_write);
+  ut_a(!recv_no_log_write);
   ut_ad(!recv_recovery_is_on());
 
   /* The following code is adapted from log_write_up_to(). */
@@ -1481,7 +1481,7 @@ bool log_checkpoint(bool sync)
 		return(true);
 	}
 
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 
 	/* Repeat the MLOG_FILE_NAME records after the checkpoint, in
 	case some log records between the checkpoint and log_sys.lsn
@@ -1572,7 +1572,7 @@ loop:
 	advance = 0;
 
 	log_mutex_enter();
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 
 	if (!log_sys.check_flush_or_checkpoint) {
 		log_mutex_exit();
@@ -1651,7 +1651,7 @@ log_check_margins(void)
 		log_flush_margin();
 		log_checkpoint_margin();
 		log_mutex_enter();
-		ut_ad(!recv_no_log_write);
+		ut_a(!recv_no_log_write);
 		check = log_sys.check_flush_or_checkpoint;
 		log_mutex_exit();
 	} while (check);
@@ -2054,7 +2054,7 @@ log_pad_current_log_block(void)
 	ulint		i;
 	lsn_t		lsn;
 
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 	/* We retrieve lsn only because otherwise gcc crashed on HP-UX */
 	lsn = log_reserve_and_open(OS_FILE_LOG_BLOCK_SIZE);
 

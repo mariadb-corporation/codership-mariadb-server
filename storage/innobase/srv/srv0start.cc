@@ -488,7 +488,7 @@ create_log_files(
 	if (log_sys.is_encrypted() && !log_crypt_init()) {
 		return DB_ERROR;
 	}
-	ut_d(recv_no_log_write = false);
+	recv_no_log_write = false;
 	log_sys.lsn = ut_uint64_align_up(lsn, OS_FILE_LOG_BLOCK_SIZE);
 
 	log_sys.log.set_lsn(log_sys.lsn);
@@ -2034,7 +2034,7 @@ files_checked:
 			InnoDB files is needed. */
 			ut_ad(srv_force_recovery <= SRV_FORCE_IGNORE_CORRUPT);
 			ut_ad(srv_n_log_files_found <= 1);
-			ut_ad(recv_no_log_write);
+			ut_a(recv_no_log_write);
 			buf_flush_sync_all_buf_pools();
 			err = fil_write_flushed_lsn(log_get_lsn());
 			ut_ad(!buf_pool_check_no_pending_io());
@@ -2081,7 +2081,7 @@ files_checked:
 			/* Prohibit redo log writes from any other
 			threads until creating a log checkpoint at the
 			end of create_log_files(). */
-			ut_d(recv_no_log_write = true);
+			recv_no_log_write = true;
 			ut_ad(!buf_pool_check_no_pending_io());
 
 			DBUG_EXECUTE_IF("innodb_log_abort_3",

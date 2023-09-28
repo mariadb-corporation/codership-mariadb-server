@@ -379,7 +379,7 @@ mtr_write_log(
 	const ulint	len = log->size();
 	mtr_write_log_t	write_log;
 
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 	DBUG_PRINT("ib_log",
 		   (ULINTPF " extra bytes written at " LSN_PF,
 		    len, log_sys.lsn));
@@ -426,7 +426,7 @@ mtr_t::commit()
   ut_ad(!is_inside_ibuf());
 
   /* This is a dirty read, for debugging. */
-  ut_ad(!m_modifications || !recv_no_log_write);
+  ut_a(!m_modifications || !recv_no_log_write);
   ut_ad(!m_modifications || m_log_mode != MTR_LOG_NONE);
 
   if (m_modifications
@@ -718,7 +718,7 @@ mtr_t::release_page(const void* ptr, mtr_memo_type_t type)
 @return number of bytes to write in finish_write() */
 inline ulint mtr_t::prepare_write()
 {
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 
 	if (UNIV_UNLIKELY(m_log_mode != MTR_LOG_ALL)) {
 		ut_ad(m_log_mode == MTR_LOG_NO_REDO);

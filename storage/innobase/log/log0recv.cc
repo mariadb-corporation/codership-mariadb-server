@@ -75,11 +75,9 @@ volatile bool	recv_recovery_on;
 
 /** TRUE when recv_init_crash_recovery() has been called. */
 bool	recv_needed_recovery;
-#ifdef UNIV_DEBUG
 /** TRUE if writing to the redo log (mtr_commit) is forbidden.
 Protected by log_sys.mutex. */
 bool	recv_no_log_write = false;
-#endif /* UNIV_DEBUG */
 
 /** TRUE if buf_page_is_corrupted() should check if the log sequence
 number (FIL_PAGE_LSN) is in the future.  Initially FALSE, and set by
@@ -3886,7 +3884,7 @@ recv_recovery_from_checkpoint_start(lsn_t flush_lsn)
 
 	recv_sys.apply_log_recs = true;
 	recv_no_ibuf_operations = is_mariabackup_restore_or_export();
-	ut_d(recv_no_log_write = recv_no_ibuf_operations);
+	recv_no_log_write = recv_no_ibuf_operations;
 
 	mutex_exit(&recv_sys.mutex);
 
