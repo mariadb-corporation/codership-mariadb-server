@@ -233,8 +233,7 @@ static inline bool wsrep_run_commit_hook(THD* thd, bool all)
   For TEMPORARY SEQUENCES commit hooks will be done as
   CREATE + INSERT is not replicated and needs to be
   committed locally. */
-  if (ret &&
-      (thd->wsrep_cs().mode() == wsrep::client_state::m_toi ||
+  if ((thd->wsrep_cs().mode() == wsrep::client_state::m_toi ||
        thd->wsrep_cs().mode() == wsrep::client_state::m_rsu) &&
       thd->lex->sql_command == SQLCOM_CREATE_SEQUENCE &&
       !thd->lex->tmp_table())
