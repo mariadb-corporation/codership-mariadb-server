@@ -305,7 +305,7 @@ static dberr_t create_log_file(bool create_new_db, lsn_t lsn,
 	if (log_sys.is_encrypted() && !log_crypt_init()) {
 		return DB_ERROR;
 	}
-	ut_d(recv_no_log_write = false);
+	recv_no_log_write = false;
 	lsn = ut_uint64_align_up(lsn, OS_FILE_LOG_BLOCK_SIZE);
 	log_sys.set_lsn(lsn + LOG_BLOCK_HDR_SIZE);
 	log_sys.log.set_lsn(lsn);
@@ -1615,7 +1615,7 @@ file_checked:
 			Unless --export is specified, no further change to
 			InnoDB files is needed. */
 			ut_ad(srv_force_recovery <= SRV_FORCE_IGNORE_CORRUPT);
-			ut_ad(recv_no_log_write);
+			ut_a(recv_no_log_write);
 			err = fil_write_flushed_lsn(log_sys.get_lsn());
 			DBUG_ASSERT(!buf_pool.any_io_pending());
 			log_sys.log.close_file();
@@ -1660,7 +1660,7 @@ file_checked:
 			/* Prohibit redo log writes from any other
 			threads until creating a log checkpoint at the
 			end of create_log_file(). */
-			ut_d(recv_no_log_write = true);
+			recv_no_log_write = true;
 			DBUG_ASSERT(!buf_pool.any_io_pending());
 
 			DBUG_EXECUTE_IF("innodb_log_abort_3",

@@ -477,7 +477,7 @@ static void log_block_store_checksum(byte* block)
 void log_t::file::write_header_durable(lsn_t lsn)
 {
   ut_ad(lsn % OS_FILE_LOG_BLOCK_SIZE == 0);
-  ut_ad(!recv_no_log_write);
+  ut_a(!recv_no_log_write);
   ut_ad(log_sys.log.format == log_t::FORMAT_10_5 ||
         log_sys.log.format == log_t::FORMAT_ENC_10_5);
 
@@ -578,7 +578,7 @@ log_write_buf(
 	ulint		i;
 
 	ut_ad(log_write_lock_own());
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 	ut_a(len % OS_FILE_LOG_BLOCK_SIZE == 0);
 	ut_a(start_lsn % OS_FILE_LOG_BLOCK_SIZE == 0);
 
@@ -698,7 +698,7 @@ static void log_write(bool rotate_key)
 		return;
 	}
 
-	ut_ad(!recv_no_log_write);
+	ut_a(!recv_no_log_write);
 
 	ulint		start_offset;
 	ulint		end_offset;
@@ -993,7 +993,7 @@ ATTRIBUTE_COLD static void log_checkpoint_margin()
   while (log_sys.check_flush_or_checkpoint())
   {
     mysql_mutex_lock(&log_sys.mutex);
-    ut_ad(!recv_no_log_write);
+    ut_a(!recv_no_log_write);
 
     if (!log_sys.check_flush_or_checkpoint())
     {
@@ -1035,7 +1035,7 @@ ATTRIBUTE_COLD void log_check_margins()
   {
     log_flush_margin();
     log_checkpoint_margin();
-    ut_ad(!recv_no_log_write);
+    ut_a(!recv_no_log_write);
   }
   while (log_sys.check_flush_or_checkpoint());
 }
