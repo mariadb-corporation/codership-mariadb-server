@@ -395,6 +395,11 @@ extern "C" void  wsrep_thd_set_PA_unsafe(THD *thd)
   }
 }
 
+extern "C" uint32 wsrep_get_domain_id()
+{
+  return wsrep_gtid_domain_id;
+}
+
 extern "C" int wsrep_thd_append_table_key(MYSQL_THD thd,
                                     const char* db,
                                     const char* table,

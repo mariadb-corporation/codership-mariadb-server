@@ -1,0 +1,127 @@
+--source include/galera_cluster.inc
+
+--connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3
+--connect node_2b, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connect node_1b, 127.0.0.1, root, , test, $NODE_MYPORT_1
+
+--connection node_1
+--disable_warnings
+CREATE SCHEMA IF NOT EXISTS mysqlslap;
+USE mysqlslap;
+--enable_warnings
+
+CREATE TABLE t1 (id bigint not null primary key auto_increment, name VARCHAR(64)) ENGINE=innodb;
+--echo # node_1
+show variables like '%gtid_binlog_pos%';
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't1'
+--source include/wait_condition.inc
+--echo # node_2
+show variables like '%gtid_binlog_pos%';
+--connection node_3
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't1'
+--source include/wait_condition.inc
+--echo # node_3
+show variables like '%gtid_binlog_pos%';
+
+--connection node_1
+let $query = "INSERT INTO t1 VALUES (NULL, 'Dr. No'), (NULL, 'From Australia With Love'), (NULL,
+ 'Goldfinger'), (NULL, 'Thunderball'), (NULL, 'You Only Live Twice')";
+--exec $MYSQL_SLAP --silent --concurrency=5 --iterations=2000 --query=$query --delimiter=";"
+
+--connection node_2
+--exec $MYSQL_SLAP --silent --concurrency=5 --iterations=2000 --query=$query --delimiter=";"
+
+--connection node_3
+--exec $MYSQL_SLAP --silent --concurrency=5 --iterations=2000 --query=$query --delimiter=";"
+
+--echo # Shutdown node_2
+--connection node_2b
+--sleep 2
+--source include/shutdown_mysqld.inc
+
+--echo # Wait until node_2 leaves cluster
+--connection node_1b
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+SHOW PROCESSLIST;
+
+--connection node_2
+--echo # Restart node_2
+--source include/start_mysqld.inc
+
+--connection node_1b
+--echo # Wait until node_2 is back in cluster
+--let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--echo # Wait for a while
+--sleep 5
+
+--echo # One by one shutdown all nodes
+--connection node_3
+--echo # shutdown node_3
+--source include/shutdown_mysqld.inc
+--connection node_2
+--echo # wait until node_3 is out of cluster
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+--echo # shutdown node_2
+--source include/shutdown_mysqld.inc
+--connection node_1
+--echo # wait until node_2 is out of cluster
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+--echo # shutdown node_1
+--source include/shutdown_mysqld.inc
+
+
+--echo # Bootstrap from node_1
+--connection node_1
+--let $restart_parameters = --wsrep_new_cluster
+--source include/start_mysqld.inc
+show variables like 'wsrep_gtid_domain_id';
+show variables like '%gtid_binlog_pos%';
+
+--echo # Restart node_2
+--connection node_2
+--let $restart_parameters = 
+--let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.2.expect
+--source include/start_mysqld.inc
+show variables like 'wsrep_gtid_domain_id';
+show variables like '%gtid_binlog_pos%';
+
+--connection node_1
+--echo # wait until node_1 is in cluster
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--echo # Restart node_3
+--connection node_3
+--let $restart_parameters = 
+--let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.3.expect
+--source include/start_mysqld.inc
+show variables like 'wsrep_gtid_domain_id';
+show variables like '%gtid_binlog_pos%';
+
+--connection node_1
+--echo # wait until node_1 is in cluster
+--let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+
+SELECT COUNT(*) FROM mysqlslap.t1;
+
+--connection node_2
+SELECT COUNT(*) FROM mysqlslap.t1;
+--connection node_3
+SELECT COUNT(*) FROM mysqlslap.t1;
+
+--echo # cleanup
+--connection node_1
+USE test;
+DROP SCHEMA mysqlslap;
+--disconnect node_3
+--disconnect node_2b
+--disconnect node_1b

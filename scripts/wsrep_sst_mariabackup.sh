@@ -103,8 +103,10 @@ fi
 
 DATA="$WSREP_SST_OPT_DATA"
 INFO_FILE='xtrabackup_galera_info'
+DONOR_INFO_FILE='donor_galera_info'
 IST_FILE='xtrabackup_ist'
 MAGIC_FILE="$DATA/$INFO_FILE"
+DONOR_MAGIC_FILE="$DATA/$DONOR_INFO_FILE"
 
 INNOAPPLYLOG="$DATA/mariabackup.prepare.log"
 INNOMOVELOG="$DATA/mariabackup.move.log"
@@ -905,6 +907,7 @@ monitor_process()
 }
 
 [ -f "$MAGIC_FILE" ] && rm -f "$MAGIC_FILE"
+[ -f "$DONOR_MAGIC_FILE" ] && rm -rf "$DONOR_MAGIC_FILE"
 
 read_cnf
 setup_ports
@@ -1090,6 +1093,9 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
         # Store donor's wsrep GTID (state ID) and wsrep_gtid_domain_id
         # (separated by a space).
         echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$MAGIC_FILE"
+        echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$DONOR_MAGIC_FILE"
+
+	wsrep_log_info "Storing wsrep GTID : $WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID"
 
         if [ -n "$WSREP_SST_OPT_REMOTE_PSWD" ]; then
             # Let joiner know that we know its secret
@@ -1192,6 +1198,7 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
         # Store donor's wsrep GTID (state ID) and wsrep_gtid_domain_id
         # (separated by a space).
         echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$MAGIC_FILE"
+        echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$DONOR_MAGIC_FILE"
         echo "1" > "$DATA/$IST_FILE"
 
         if [ -n "$scomp" ]; then
@@ -1510,6 +1517,7 @@ else # joiner
             fi
         fi
 
+	exit 11
         wsrep_log_info "Preparing the backup at $DATA"
         setup_commands
         timeit 'mariadb-backup prepare stage' "$INNOAPPLY"
@@ -1587,7 +1595,9 @@ else # joiner
 
     # Remove special tags from the magic file, and from the output:
     coords=$(head -n1 "$MAGIC_FILE")
+    coords2=$(head -n1 "$DONOR_MAGIC_FILE")
     wsrep_log_info "Galera co-ords from recovery: $coords"
+    wsrep_log_info "Galera co-ords from donor: $coords2"
     echo "$coords" # Output : UUID:seqno wsrep_gtid_domain_id
 
     wsrep_log_info "Total time on joiner: $totime seconds"

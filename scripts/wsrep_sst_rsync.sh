@@ -1000,6 +1000,7 @@ EOF
     coords=$(head -n1 "$MAGIC_FILE")
     wsrep_log_info "Galera co-ords from recovery: $coords"
     echo "$coords" # Output : UUID:seqno wsrep_gtid_domain_id
+    wsrep_log_info "Streamed GTID : $coords"
 fi
 
 wsrep_log_info "$WSREP_METHOD $WSREP_TRANSFER_TYPE completed on $WSREP_SST_OPT_ROLE"
