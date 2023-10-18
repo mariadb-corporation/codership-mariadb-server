@@ -2087,7 +2087,11 @@ commit_one_phase_2(THD *thd, bool all, THD_TRANS *trans, bool is_real_trans)
   {
     int err;
 
+#ifdef WITH_WSREP
+    if ((has_binlog_hton(ha_info) || WSREP_EMULATE_BINLOG(thd)) &&
+#else
     if (has_binlog_hton(ha_info) &&
+#endif /* WITH_WSREP */
         (err= binlog_commit(thd, all,
                             is_ro_1pc_trans(thd, ha_info, all, is_real_trans))))
     {
@@ -7075,7 +7079,7 @@ bool handler::check_table_binlog_row_based_internal()
                       (thd->variables.option_bits & OPTION_BIN_LOG)) &&
                      mysql_bin_log.is_open())),
                     (thd->variables.option_bits & OPTION_BIN_LOG) &&
-                    mysql_bin_log.is_open()));
+                   mysql_bin_log.is_open()));
 }
 
 

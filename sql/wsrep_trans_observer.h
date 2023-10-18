@@ -196,16 +196,23 @@ static inline bool wsrep_run_commit_hook(THD* thd, bool all)
                        wsrep_is_active(thd), wsrep_is_real(thd, all),
                        wsrep_has_changes(thd), wsrep_thd_is_applying(thd),
                        wsrep_is_ordered(thd)));
-  /* Is MST commit or autocommit? */
-  bool ret= wsrep_is_active(thd) && wsrep_is_real(thd, all);
+
+  /* is trx registered in wsrep provider */
+  if (!wsrep_is_active(thd)) DBUG_RETURN(false);
+  if (!wsrep_is_real(thd, all)) DBUG_RETURN(false);
+
   /* Do not commit if we are aborting */
-  ret= ret && (thd->wsrep_trx().state() != wsrep::transaction::s_aborting);
-  if (ret && !(wsrep_has_changes(thd) ||  /* Has generated write set */
+  if (thd->wsrep_trx().state() == wsrep::transaction::s_aborting)
+    DBUG_RETURN(false);
+
+  mysql_mutex_lock(&thd->LOCK_thd_data);
+
+  /* Has generated write set */
+  if (!(wsrep_has_changes(thd) ||
                /* Is high priority (replay, applier, storage) and the
                   transaction is scheduled for commit ordering */
                (wsrep_thd_is_applying(thd) && wsrep_is_ordered(thd))))
   {
-    mysql_mutex_lock(&thd->LOCK_thd_data);
     DBUG_PRINT("wsrep", ("state: %s",
                          wsrep::to_c_string(thd->wsrep_trx().state())));
     /* Transaction is local but has no changes, the commit hooks will
@@ -213,12 +220,11 @@ static inline bool wsrep_run_commit_hook(THD* thd, bool all)
        wsrep_commit_empty() */
     if (thd->wsrep_trx().state() == wsrep::transaction::s_executing)
     {
-      ret= false;
+      mysql_mutex_unlock(&thd->LOCK_thd_data);
+      DBUG_RETURN(false);
     }
-    mysql_mutex_unlock(&thd->LOCK_thd_data);
   }
 
-  mysql_mutex_lock(&thd->LOCK_thd_data);
   /* Transaction creating sequence is TOI or RSU,
   CREATE SEQUENCE = CREATE + INSERT (initial value)
   and replicated using statement based replication, thus
@@ -227,16 +233,33 @@ static inline bool wsrep_run_commit_hook(THD* thd, bool all)
   For TEMPORARY SEQUENCES commit hooks will be done as
   CREATE + INSERT is not replicated and needs to be
   committed locally. */
-  if (ret &&
-      (thd->wsrep_cs().mode() == wsrep::client_state::m_toi ||
+  if ((thd->wsrep_cs().mode() == wsrep::client_state::m_toi ||
        thd->wsrep_cs().mode() == wsrep::client_state::m_rsu) &&
       thd->lex->sql_command == SQLCOM_CREATE_SEQUENCE &&
       !thd->lex->tmp_table())
-    ret= false;
+      DBUG_RETURN(false);
+
+  if (thd->wsrep_cs().mode() == Wsrep_client_state::m_local &&
+      !thd->wsrep_trx().is_streaming())
+  {
+    IO_CACHE* trx_cache= wsrep_get_cache(thd, true);
+    IO_CACHE* stmt_cache= wsrep_get_cache(thd, false);
+
+    if (!( (trx_cache  && my_b_tell(trx_cache) > 0) ||
+           (stmt_cache && my_b_tell(stmt_cache) > 0)
+         )
+       )
+    {
+      WSREP_DEBUG("empty RBR buffer, query: %s", wsrep_thd_query(thd));
+      thd->wsrep_affected_rows = 0;
+      mysql_mutex_unlock(&thd->LOCK_thd_data);
+      DBUG_RETURN(false);
+    }
+  }
   mysql_mutex_unlock(&thd->LOCK_thd_data);
 
-  DBUG_PRINT("wsrep", ("return: %d", ret));
-  DBUG_RETURN(ret);
+  DBUG_PRINT("wsrep", ("return: true"));
+  DBUG_RETURN(true);
 }
 
 /*
@@ -375,7 +398,7 @@ static inline int wsrep_after_commit(THD* thd, bool all)
               wsrep_is_active(thd),
               (long long)wsrep_thd_trx_seqno(thd),
               wsrep_has_changes(thd));
-  DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
+  //DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   if (thd->internal_transaction())
     DBUG_RETURN(0);
   int ret= 0;
@@ -401,11 +424,6 @@ static inline int wsrep_before_rollback(THD* thd, bool all)
   {
     if (!all && thd->in_active_multi_stmt_transaction())
     {
-      if (wsrep_emulate_bin_log)
-      {
-        wsrep_thd_binlog_stmt_rollback(thd);
-      }
-
       if (thd->wsrep_trx().is_streaming() &&
           (wsrep_fragments_certified_for_stmt(thd) > 0))
       {
