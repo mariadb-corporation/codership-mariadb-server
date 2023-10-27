@@ -442,6 +442,18 @@ enum wsrep::streaming_context::fragment_unit wsrep_fragment_unit(ulong unit);
 wsrep::key wsrep_prepare_key_for_toi(const char* db, const char* table,
                                      enum wsrep::key::type type);
 
+/**
+ * Append MDL key with the given lock type to the set of keys for
+ * certification for the given thread.
+ *
+ * Returns:
+ *  0 when successfully added the keys
+ *  1 when no keys need to be added
+ * -1 in case of error while adding the keys
+ */
+int wsrep_append_key_for_mdl(THD* thd, MDL_key* mdl_key,
+                             enum enum_mdl_type mdl_type);
+
 void wsrep_wait_ready(THD *thd);
 void wsrep_ready_set(bool ready_value);
 #else /* !WITH_WSREP */

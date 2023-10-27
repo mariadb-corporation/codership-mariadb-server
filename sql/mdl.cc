@@ -26,6 +26,8 @@
 #include <mysql/psi/mysql_stage.h>
 #ifdef WITH_WSREP
 #include "wsrep_mysqld.h"
+
+static int wsrep_append_key_for_mdl(THD* thd, MDL_request* mdl_request);
 #endif
 #ifdef HAVE_PSI_INTERFACE
 static PSI_mutex_key key_MDL_wait_LOCK_wait_status;
@@ -2054,6 +2056,12 @@ MDL_context::try_acquire_lock(MDL_request *mdl_request)
     MDL_ticket::destroy(ticket);
   }
 
+#ifdef WITH_WSREP
+  if (wsrep_append_key_for_mdl(get_thd(), mdl_request))
+  {
+    return TRUE;
+  }
+#endif /* WITH_WSREP */
   return FALSE;
 }
 
@@ -2308,6 +2316,12 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
     */
     DBUG_PRINT("info", ("Got lock without waiting"));
     DBUG_PRINT("mdl", ("Seized:   %s", dbug_print_mdl(mdl_request->ticket)));
+#ifdef WITH_WSREP
+    if (wsrep_append_key_for_mdl(get_thd(), mdl_request))
+    {
+      DBUG_RETURN(TRUE);
+    }
+#endif /* WITH_WSREP */
     DBUG_RETURN(FALSE);
   }
 
@@ -2449,6 +2463,12 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
   mdl_request->ticket= ticket;
 
   DBUG_PRINT("mdl", ("Acquired: %s", ticket_msg));
+#ifdef WITH_WSREP
+  if (wsrep_append_key_for_mdl(get_thd(), mdl_request))
+  {
+    DBUG_RETURN(TRUE);
+  }
+#endif /* WITH_WSREP */
   DBUG_RETURN(FALSE);
 }
 
@@ -3303,5 +3323,33 @@ void MDL_ticket::wsrep_report(bool debug)
               m_lock->key.db_name(),
               m_lock->key.name(),
               psi_stage->m_name);
+}
+
+static int wsrep_append_key_for_mdl(THD* thd, MDL_request* mdl_request)
+{
+  const auto rcode= wsrep_append_key_for_mdl(thd, &mdl_request->key,
+                                             mdl_request->type);
+  if (!rcode)
+  {
+    WSREP_DEBUG("Append MDL key: type: %s space: %s db: %s name: %s",
+                mdl_request->ticket->get_type_name(mdl_request->type),
+                wsrep_get_mdl_namespace_name(mdl_request->key.mdl_namespace()),
+                mdl_request->key.db_name(),
+                mdl_request->key.name());
+    return 0;
+  }
+  else if (rcode > 0)
+  {
+    return 0;
+  }
+  else
+  {
+    WSREP_DEBUG("Failed to append MDL key: type: %s space: %s db: %s name: %s",
+                mdl_request->ticket->get_type_name(mdl_request->type),
+                wsrep_get_mdl_namespace_name(mdl_request->key.mdl_namespace()),
+                mdl_request->key.db_name(),
+                mdl_request->key.name());
+    return 1;
+  }
 }
 #endif /* WITH_WSREP */

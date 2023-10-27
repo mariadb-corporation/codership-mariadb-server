@@ -1584,6 +1584,169 @@ bool wsrep_prepare_key_for_innodb(THD* thd,
   return wsrep_prepare_key(cache_key, cache_key_len, row_id, row_id_len, key, key_len);
 }
 
+struct MDL_Wsrep_key
+{
+  const char* name;
+  size_t len;
+};
+
+static MDL_Wsrep_key mdl_wsrep_keys[]= {
+  {"S", 1},
+  {"SH", 2},
+  {"SR", 2},
+  {"SW", 2},
+  {"SU", 2},
+  {"SRO", 3},
+  {"SNW", 3},
+  {"SNRW", 4},
+  {"X", 1},
+};
+
+static enum Wsrep_service_key_type wsrep_key_S[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_SH[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_SR[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_SW[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_SU[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_SRO[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_SNW[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_SNRW[]= {
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_REFERENCE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+};
+
+static enum Wsrep_service_key_type wsrep_key_X[]= {
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+  WSREP_SERVICE_KEY_EXCLUSIVE,
+};
+
+struct MDL_Wsrep_compat
+{
+  const enum Wsrep_service_key_type* types;
+  size_t count;
+};
+
+#define WSREP_KEY_COMPAT(type) {wsrep_key_##type, \
+  sizeof(wsrep_key_##type)/sizeof(enum Wsrep_service_key_type)}
+
+static MDL_Wsrep_compat mdl_wsrep_compat[]= {
+  WSREP_KEY_COMPAT(S),
+  WSREP_KEY_COMPAT(SH),
+  WSREP_KEY_COMPAT(SR),
+  WSREP_KEY_COMPAT(SW),
+  WSREP_KEY_COMPAT(SU),
+  WSREP_KEY_COMPAT(SRO),
+  WSREP_KEY_COMPAT(SNW),
+  WSREP_KEY_COMPAT(SNRW),
+  WSREP_KEY_COMPAT(X),
+};
+
+#undef WSREP_KEY_COMPAT
+
+int wsrep_append_key_for_mdl(THD* thd, MDL_key* mdl_key,
+                             enum enum_mdl_type mdl_type)
+{
+  // Do nothing for non-tables.
+  if (mdl_key->mdl_namespace() != MDL_key::TABLE)
+  {
+    return 1;
+  }
+
+  // Everything below shared key is not added.
+  if (mdl_type < MDL_SHARED)
+  {
+    return 1;
+  }
+
+  // Check if this is Wsrep thread and it runs local transaction.
+  if (!WSREP(thd) || !wsrep_thd_is_local(thd) || wsrep_thd_is_toi(thd) ||
+      !thd->wsrep_cs().transaction().active())
+  {
+    return 1;
+  }
+
+  const enum Wsrep_service_key_type* key_types=
+                          mdl_wsrep_compat[mdl_type - MDL_SHARED].types;
+  const size_t key_count= mdl_wsrep_compat[mdl_type - MDL_SHARED].count;
+  for (size_t key= 0; key < key_count; ++key)
+  {
+    wsrep_buf_t wkey_part[3];
+    wsrep_key_t wkey= {wkey_part, 3};
+
+    const char* mdl_wsrep_key_name= mdl_wsrep_keys[key].name;
+    size_t mdl_wsrep_key_len= mdl_wsrep_keys[key].len;
+    // Use full MDL key name in the format:
+    // <mdl_namespace><database name>0<table name>0
+    if (!wsrep_prepare_key(mdl_key->ptr(), mdl_key->length(),
+                           (const uchar*)mdl_wsrep_key_name, mdl_wsrep_key_len,
+                           wkey_part, (size_t*)&wkey.key_parts_num))
+    {
+      return -1;
+    }
+
+    if (wsrep_thd_append_key(thd, &wkey, 1, key_types[key]))
+    {
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
 wsrep::key wsrep_prepare_key_for_toi(const char* db, const char* table,
                                      enum wsrep::key::type type)
 {
