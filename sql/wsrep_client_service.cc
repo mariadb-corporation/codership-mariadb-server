@@ -30,7 +30,6 @@
 #include "rpl_rli.h"     /* Relay_log_info */
 #include "slave.h"   /* opt_log_slave_updates */
 #include "transaction.h" /* trans_commit()... */
-#include "log.h"      /* stmt_has_updated_trans_table() */
 #include "mysql/service_debug_sync.h"
 #include "mysql/psi/mysql_thread.h" /* mysql_mutex_assert_owner() */
 
@@ -53,6 +52,8 @@ Wsrep_client_service::Wsrep_client_service(THD* thd,
                                            Wsrep_client_state& client_state)
   : wsrep::client_service()
   , m_thd(thd)
+  , trx_cache_pos(0)
+  , stmt_cache_pos(0)
   , m_client_state(client_state)
 { }
 
@@ -86,130 +87,38 @@ int Wsrep_client_service::prepare_data_for_replication()
 {
   DBUG_ASSERT(m_thd == current_thd);
   DBUG_ENTER("Wsrep_client_service::prepare_data_for_replication");
-  size_t data_len= 0;
-  IO_CACHE* transactional_cache= wsrep_get_cache(m_thd, true);
-  IO_CACHE* stmt_cache= wsrep_get_cache(m_thd, false);
-
-  if (transactional_cache || stmt_cache)
-  {
-    m_thd->binlog_flush_pending_rows_event(true);
-
-    size_t transactional_data_len= 0;
-    size_t stmt_data_len= 0;
-
-    // Write transactional cache
-    if (transactional_cache &&
-        wsrep_write_cache(m_thd, transactional_cache, &transactional_data_len))
-    {
-      WSREP_ERROR("rbr write fail, data_len: %zu",
-                  data_len);
-      // wsrep_override_error(m_thd, ER_ERROR_DURING_COMMIT);
-      DBUG_RETURN(1);
-    }
-
-    // Write stmt cache
-    if (stmt_cache && wsrep_write_cache(m_thd, stmt_cache, &stmt_data_len))
-    {
-      WSREP_ERROR("rbr write fail, data_len: %zu",
-                  data_len);
-      // wsrep_override_error(m_thd, ER_ERROR_DURING_COMMIT);
-      DBUG_RETURN(1);
-    }
-
-    // Complete data written from both caches
-    data_len = transactional_data_len + stmt_data_len;
-  }
-
-  if (data_len == 0)
-  {
-    if (m_thd->get_stmt_da()->is_ok()              &&
-        m_thd->get_stmt_da()->affected_rows() > 0  &&
-        !binlog_filter->is_on() &&
-        !m_thd->wsrep_trx().is_streaming())
-    {
-      WSREP_DEBUG("empty rbr buffer, query: %s, "
-                  "affected rows: %llu, "
-                  "changed tables: %d, "
-                  "sql_log_bin: %d",
-                  wsrep_thd_query(m_thd),
-                  m_thd->get_stmt_da()->affected_rows(),
-                  stmt_has_updated_trans_table(m_thd),
-                  m_thd->variables.sql_log_bin);
-    }
-    else
-    {
-      WSREP_DEBUG("empty rbr buffer, query: %s", wsrep_thd_query(m_thd));
-    }
-  }
-  DBUG_RETURN(0);
+  DBUG_RETURN(wsrep_prepare_data_for_replication(m_thd, trx_cache_pos, true));
 }
-
 
 void Wsrep_client_service::cleanup_transaction()
 {
   DBUG_ASSERT(m_thd == current_thd);
   if (WSREP_EMULATE_BINLOG(m_thd)) wsrep_thd_binlog_trx_reset(m_thd);
   m_thd->wsrep_affected_rows= 0;
+  trx_cache_pos= 0;
+  stmt_cache_pos= 0;
 }
 
-
 int Wsrep_client_service::prepare_fragment_for_replication(
-  wsrep::mutable_buffer& buffer, size_t& log_position)
+    wsrep::mutable_buffer &buffer)
 {
   DBUG_ASSERT(m_thd == current_thd);
-  THD* thd= m_thd;
   DBUG_ENTER("Wsrep_client_service::prepare_fragment_for_replication");
-  IO_CACHE* cache= wsrep_get_cache(thd, true);
-  thd->binlog_flush_pending_rows_event(true);
-
-  if (!cache)
+  if (wsrep_get_binlog_cache_size(m_thd, false))
   {
-    DBUG_RETURN(0);
-  }
-
-  const my_off_t saved_pos(my_b_tell(cache));
-  if (reinit_io_cache(cache, READ_CACHE, thd->wsrep_sr().log_position(), 0, 0))
-  {
-    DBUG_RETURN(1);
-  }
-
-  int ret= 0;
-  size_t total_length= 0;
-  size_t length= my_b_bytes_in_cache(cache);
-
-  if (!length)
-  {
-    length= my_b_fill(cache);
-  }
-
-  if (length > 0)
-  {
-    do
+    if (wsrep_prepare_fragment_for_replication(m_thd, buffer,
+                                               stmt_cache_pos,
+                                               false))
     {
-      total_length+= length;
-      if (total_length > wsrep_max_ws_size)
-      {
-        WSREP_WARN("transaction size limit (%lu) exceeded: %zu",
-                   wsrep_max_ws_size, total_length);
-        ret= 1;
-        goto cleanup;
-      }
-
-      buffer.push_back(reinterpret_cast<const char*>(cache->read_pos),
-                       reinterpret_cast<const char*>(cache->read_pos + length));
-      cache->read_pos= cache->read_end;
+      DBUG_RETURN(1);
     }
-    while (cache->file >= 0 && (length= my_b_fill(cache)));
+    if (buffer.size() > 0)
+    {
+      DBUG_RETURN(0);
+    }
   }
-  DBUG_ASSERT(total_length == buffer.size());
-  log_position= saved_pos;
-cleanup:
-  if (reinit_io_cache(cache, WRITE_CACHE, saved_pos, 0, 0))
-  {
-    WSREP_WARN("Failed to reinitialize IO cache");
-    ret= 1;
-  }
-  DBUG_RETURN(ret);
+  DBUG_RETURN(wsrep_prepare_fragment_for_replication(m_thd, buffer,
+                                                     trx_cache_pos, true));
 }
 
 int Wsrep_client_service::remove_fragments()
@@ -241,17 +150,8 @@ bool Wsrep_client_service::statement_allowed_for_streaming() const
 
 size_t Wsrep_client_service::bytes_generated() const
 {
-  IO_CACHE* cache= wsrep_get_cache(m_thd, true);
-  if (cache)
-  {
-    size_t pending_rows_event_length= 0;
-    if (Rows_log_event* ev= m_thd->binlog_get_pending_rows_event(true))
-    {
-      pending_rows_event_length= ev->get_data_size();
-    }
-    return my_b_tell(cache) + pending_rows_event_length;
-  }
-  return 0;
+  return wsrep_get_binlog_cache_size(m_thd, false) +
+         wsrep_get_binlog_cache_size(m_thd, true);
 }
 
 void Wsrep_client_service::will_replay()

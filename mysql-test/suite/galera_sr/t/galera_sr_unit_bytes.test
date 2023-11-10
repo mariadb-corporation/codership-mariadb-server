@@ -1,0 +1,48 @@
+#
+# Test wsrep_trx_fragment_size > 1
+#
+--source include/galera_cluster.inc
+
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+
+SET SESSION wsrep_trx_fragment_size=400;
+START TRANSACTION;
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+INSERT INTO t1 VALUES (5);
+INSERT INTO t1 VALUES (6);
+INSERT INTO t1 VALUES (7);
+INSERT INTO t1 VALUES (8);
+INSERT INTO t1 VALUES (9);
+INSERT INTO t1 VALUES (10);
+INSERT INTO t1 VALUES (11);
+INSERT INTO t1 VALUES (12);
+INSERT INTO t1 VALUES (13);
+INSERT INTO t1 VALUES (14);
+INSERT INTO t1 VALUES (15);
+INSERT INTO t1 VALUES (16);
+INSERT INTO t1 VALUES (17);
+INSERT INTO t1 VALUES (18);
+INSERT INTO t1 VALUES (19);
+INSERT INTO t1 VALUES (20);
+
+# Fragment size was selected as 400 bytes, so
+# that more than one row should fit in one
+# fragment. We don't test exactly how many
+# fragments were replicated at this point
+# (test would be too fragile to changes).
+# However, we can expect:
+
+# more than one fragment
+SELECT COUNT(*) > 1 FROM mysql.wsrep_streaming_log;
+
+# less than 10 fragments (more than one row fits in one fragment)
+SELECT COUNT(*) < 10 FROM mysql.wsrep_streaming_log;
+
+# no fragments with size less than 400 bytes
+SELECT COUNT(*) FROM mysql.wsrep_streaming_log WHERE LENGTH(frag) < 400;
+COMMIT;
+
+DROP TABLE t1;

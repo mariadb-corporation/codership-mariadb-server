@@ -1,0 +1,11 @@
+[binlogoff]
+
+[binlogon]
+log-bin
+
+[sr]
+wsrep-trx-fragment-size=1
+
+[sr-binlogon]
+log-bin
+wsrep-trx-fragment-size=1

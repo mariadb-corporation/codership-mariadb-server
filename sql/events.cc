@@ -1301,7 +1301,7 @@ end:
 }
 
 #ifdef WITH_WSREP
-int wsrep_create_event_query(THD *thd, uchar** buf, size_t* buf_len)
+int wsrep_create_event_query(THD *thd, wsrep::mutable_buffer &buf)
 {
   char buffer[1024];
   String log_query(buffer, sizeof(buffer), &my_charset_bin);
@@ -1312,7 +1312,7 @@ int wsrep_create_event_query(THD *thd, uchar** buf, size_t* buf_len)
                thd->get_db(), thd->query());
     return 1;
   }
-  return wsrep_to_buf_helper(thd, log_query.ptr(), log_query.length(), buf, buf_len);
+  return wsrep_to_buf_helper(thd, log_query.ptr(), log_query.length(), buf);
 }
 #endif /* WITH_WSREP */
 /**

@@ -43,7 +43,7 @@ public:
   void cleanup_transaction();
   bool statement_allowed_for_streaming() const;
   size_t bytes_generated() const;
-  int prepare_fragment_for_replication(wsrep::mutable_buffer&, size_t&);
+  int prepare_fragment_for_replication(wsrep::mutable_buffer&);
   int remove_fragments();
   void emergency_shutdown()
   { throw wsrep::not_implemented_error(); }
@@ -67,6 +67,8 @@ public:
 private:
   friend class Wsrep_server_service;
   THD* m_thd;
+  size_t trx_cache_pos;
+  size_t stmt_cache_pos;
   Wsrep_client_state& m_client_state;
 };
 

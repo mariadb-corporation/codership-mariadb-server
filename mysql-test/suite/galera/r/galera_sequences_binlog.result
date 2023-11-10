@@ -1,0 +1,211 @@
+connection node_2;
+connection node_1;
+#
+# Autocommit statements
+#
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+CREATE SEQUENCE SEQ NOCACHE ENGINE=InnoDB;
+connection node_1;
+SELECT NEXTVAL(SEQ);
+NEXTVAL(SEQ)
+1
+connection node_2;
+SELECT NEXTVAL(SEQ);
+NEXTVAL(SEQ)
+2
+connection node_1;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Query	#	#	COMMIT
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Xid	#	#	COMMIT /* XID */
+connection node_2;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Xid	#	#	COMMIT /* XID */
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Query	#	#	COMMIT
+#
+# INSERT NEXTVAL
+#
+connection node_1;
+INSERT INTO t1 SELECT NEXTVAL(SEQ);
+SELECT * FROM t1;
+f1
+3
+connection node_2;
+INSERT INTO t1 VALUES (NEXTVAL(SEQ));
+SELECT * FROM t1;
+f1
+3
+4
+connection node_1;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Annotate_rows	#	#	INSERT INTO t1 SELECT NEXTVAL(SEQ)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Xid	#	#	COMMIT /* XID */
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Annotate_rows	#	#	INSERT INTO t1 VALUES (NEXTVAL(SEQ))
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Xid	#	#	COMMIT /* XID */
+connection node_2;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Annotate_rows	#	#	INSERT INTO t1 SELECT NEXTVAL(SEQ)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Xid	#	#	COMMIT /* XID */
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Annotate_rows	#	#	INSERT INTO t1 VALUES (NEXTVAL(SEQ))
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Xid	#	#	COMMIT /* XID */
+connection node_1;
+DROP TABLE t1,SEQ;
+#
+#  NEXTVAL in transaction
+#
+connection node_1;
+CREATE SEQUENCE SEQ NOCACHE ENGINE=InnoDB;
+START TRANSACTION;
+SELECT NEXTVAL(SEQ);
+NEXTVAL(SEQ)
+1
+COMMIT;
+connection node_2;
+START TRANSACTION;
+SELECT NEXTVAL(SEQ);
+NEXTVAL(SEQ)
+2
+ROLLBACK;
+connection node_1;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Query	#	#	COMMIT
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Query	#	#	COMMIT
+connection node_2;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Xid	#	#	COMMIT /* XID */
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Annotate_rows	#	#	SELECT NEXTVAL(SEQ)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Query	#	#	COMMIT
+connection node_1;
+DROP TABLE SEQ;
+#
+# INSERT NEXTVAL in transaction
+#
+connection node_1;
+CREATE SEQUENCE SEQ NOCACHE ENGINE=InnoDB;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+START TRANSACTION;
+INSERT INTO t1 VALUES (100);
+INSERT INTO t1 SELECT NEXTVAL(SEQ);
+INSERT INTO t1 VALUES (101);
+COMMIT;
+SELECT * FROM t1;
+f1
+1
+100
+101
+SELECT LASTVAL(SEQ);
+LASTVAL(SEQ)
+1
+connection node_2;
+START TRANSACTION;
+INSERT INTO t1 VALUES (200);
+INSERT INTO t1 SELECT NEXTVAL(SEQ);
+INSERT INTO t1 VALUES (201);
+ROLLBACK;
+SELECT * FROM t1;
+f1
+1
+100
+101
+SELECT LASTVAL(SEQ);
+LASTVAL(SEQ)
+2
+connection node_1;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Annotate_rows	#	#	INSERT INTO t1 VALUES (100)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Annotate_rows	#	#	INSERT INTO t1 SELECT NEXTVAL(SEQ)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Annotate_rows	#	#	INSERT INTO t1 VALUES (101)
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Xid	#	#	COMMIT /* XID */
+mysqld-bin.000002	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000002	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000002	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000002	#	Query	#	#	COMMIT
+connection node_2;
+include/show_binlog_events.inc
+Log_name	Pos	Event_type	Server_id	End_log_pos	Info
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Annotate_rows	#	#	INSERT INTO t1 VALUES (100)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Annotate_rows	#	#	INSERT INTO t1 SELECT NEXTVAL(SEQ)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Annotate_rows	#	#	INSERT INTO t1 VALUES (101)
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.t1)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Xid	#	#	COMMIT /* XID */
+mysqld-bin.000003	#	Gtid	#	#	BEGIN GTID #-#-#
+mysqld-bin.000003	#	Table_map	#	#	table_id: # (test.SEQ)
+mysqld-bin.000003	#	Write_rows_v1	#	#	table_id: # flags: STMT_END_F
+mysqld-bin.000003	#	Query	#	#	COMMIT
+connection node_1;
+DROP TABLE t1, SEQ;

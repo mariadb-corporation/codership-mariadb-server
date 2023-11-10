@@ -21,112 +21,67 @@
 #include "log_event.h"
 #include "wsrep_applier.h"
 #include "wsrep_mysqld.h"
-
 #include "transaction.h"
 
-extern handlerton *binlog_hton;
-/*
-  Write the contents of a cache to a memory buffer.
-
-  This function quite the same as MYSQL_BIN_LOG::write_cache(),
-  with the exception that here we write in buffer instead of log file.
- */
-int wsrep_write_cache_buf(IO_CACHE *cache, uchar **buf, size_t *buf_len)
+class wsrep_iocache_writer
 {
-  *buf= NULL;
-  *buf_len= 0;
-  my_off_t const saved_pos(my_b_tell(cache));
-  DBUG_ENTER("wsrep_write_cache_buf");
+public:
+  wsrep_iocache_writer() {}
+  virtual ~wsrep_iocache_writer() {}
+  virtual int write(const unsigned char *data, size_t length)= 0;
+  virtual void cleanup_after_error() {}
+};
 
-  if (reinit_io_cache(cache, READ_CACHE, 0, 0, 0))
+class wsrep_iocache_buffer_writer : public wsrep_iocache_writer
+{
+public:
+  wsrep_iocache_buffer_writer(wsrep::mutable_buffer &buffer) : buffer(buffer)
   {
-    WSREP_ERROR("failed to initialize io-cache");
-    DBUG_RETURN(ER_ERROR_ON_WRITE);
+  }
+  virtual int write(const unsigned char *data, size_t length)
+  {
+    buffer.push_back(reinterpret_cast<const char *>(data),
+                     reinterpret_cast<const char *>(data + length));
+    return 0;
+  }
+  virtual void cleanup_after_error() { buffer.clear(); }
+
+private:
+  wsrep::mutable_buffer &buffer;
+};
+
+class wsrep_iocache_provider_writer : public wsrep_iocache_writer
+{
+public:
+  wsrep_iocache_provider_writer(THD *thd) : thd(thd) {}
+  virtual int write(const unsigned char *data, size_t length)
+  {
+    return thd->wsrep_cs().append_data(wsrep::const_buffer(data, length));
   }
 
-  uint length= my_b_bytes_in_cache(cache);
-  if (unlikely(0 == length)) length= my_b_fill(cache);
-
-  size_t total_length= 0;
-
-  if (likely(length > 0)) do
-  {
-      total_length += length;
-      /*
-        Bail out if buffer grows too large.
-        A temporary fix to avoid allocating indefinitely large buffer,
-        not a real limit on a writeset size which includes other things
-        like header and keys.
-      */
-      if (total_length > wsrep_max_ws_size)
-      {
-          WSREP_WARN("transaction size limit (%lu) exceeded: %zu",
-                     wsrep_max_ws_size, total_length);
-          goto error;
-      }
-      uchar* tmp= (uchar *)my_realloc(*buf, total_length,
-                                       MYF(MY_ALLOW_ZERO_PTR));
-      if (!tmp)
-      {
-          WSREP_ERROR("could not (re)allocate buffer: %zu + %u",
-                      *buf_len, length);
-          goto error;
-      }
-      *buf= tmp;
-
-      memcpy(*buf + *buf_len, cache->read_pos, length);
-      *buf_len= total_length;
-
-      if (cache->file < 0)
-      {
-        cache->read_pos= cache->read_end;
-        break;
-      }
-  } while ((length= my_b_fill(cache)));
-
-  if (reinit_io_cache(cache, WRITE_CACHE, saved_pos, 0, 0))
-  {
-    WSREP_WARN("failed to initialize io-cache");
-    goto cleanup;
-  }
-
-  DBUG_RETURN(0);
-
-error:
-  if (reinit_io_cache(cache, WRITE_CACHE, saved_pos, 0, 0))
-  {
-    WSREP_WARN("failed to initialize io-cache");
-  }
-cleanup:
-  my_free(*buf);
-  *buf= NULL;
-  *buf_len= 0;
-  DBUG_RETURN(ER_ERROR_ON_WRITE);
-}
-
-#define STACK_SIZE 4096 /* 4K - for buffer preallocated on the stack:
-                         * many transactions would fit in there
-                         * so there is no need to reach for the heap */
+private:
+  THD *thd;
+};
 
 /*
   Write the contents of a cache to wsrep provider.
 
   This function quite the same as MYSQL_BIN_LOG::write_cache(),
-  with the exception that here we write in buffer instead of log file.
+  with the exception that here we write to a wsrep_io_cache_writer
+  instead of log file.
 
   This version uses incremental data appending as it reads it from cache.
- */
-static int wsrep_write_cache_inc(THD*      const thd,
-                                 IO_CACHE* const cache,
-                                 size_t*   const len)
+*/
+static int wsrep_write_cache_inc(IO_CACHE *const cache, size_t &offset,
+                                 wsrep_iocache_writer &writer)
 {
   DBUG_ENTER("wsrep_write_cache_inc");
   my_off_t const saved_pos(my_b_tell(cache));
 
-  if (reinit_io_cache(cache, READ_CACHE, thd->wsrep_sr().log_position(), 0, 0))
+  if (reinit_io_cache(cache, READ_CACHE, offset, 0, 0))
   {
     WSREP_ERROR("failed to initialize io-cache");
-    DBUG_RETURN(1);;
+    DBUG_RETURN(1);
   }
 
   int ret= 0;
@@ -151,18 +106,25 @@ static int wsrep_write_cache_inc(THD*      const thd,
         ret= 1;
         goto cleanup;
       }
-      if (thd->wsrep_cs().append_data(wsrep::const_buffer(cache->read_pos, length)))
+      if (writer.write(cache->read_pos, length))
+      {
+        ret= 1;
         goto cleanup;
+      }
       cache->read_pos= cache->read_end;
     } while ((cache->file >= 0) && (length= my_b_fill(cache)));
     if (ret == 0)
     {
-      assert(total_length + thd->wsrep_sr().log_position() == saved_pos);
+      assert(total_length + offset == saved_pos);
     }
   }
 
+  offset= saved_pos;
 cleanup:
-  *len= total_length;
+  if (ret)
+  {
+    writer.cleanup_after_error();
+  }
   if (reinit_io_cache(cache, WRITE_CACHE, saved_pos, 0, 0))
   {
     WSREP_ERROR("failed to reinitialize io-cache");
@@ -170,17 +132,63 @@ cleanup:
   DBUG_RETURN(ret);
 }
 
-/*
-  Write the contents of a cache to wsrep provider.
-
-  This function quite the same as MYSQL_BIN_LOG::write_cache(),
-  with the exception that here we write in buffer instead of log file.
- */
-int wsrep_write_cache(THD*      const thd,
-                      IO_CACHE* const cache,
-                      size_t*   const len)
+int wsrep_write_cache_buf(IO_CACHE *cache, wsrep::mutable_buffer &buffer)
 {
-  return wsrep_write_cache_inc(thd, cache, len);
+  size_t offset= 0;
+  wsrep_iocache_buffer_writer writer(buffer);
+  return wsrep_write_cache_inc(cache, offset, writer);
+}
+
+int wsrep_write_cache(THD *thd, IO_CACHE *const cache, size_t &offset)
+{
+  wsrep_iocache_provider_writer writer(thd);
+  return wsrep_write_cache_inc(cache, offset, writer);
+}
+
+static int wsrep_write_cache_data(THD *thd, size_t &offset,
+                                  wsrep_iocache_writer &writer,
+                                  bool is_transactional)
+{
+  const bool stmt_end= true;
+  thd->binlog_flush_pending_rows_event(stmt_end, is_transactional);
+  IO_CACHE *cache= wsrep_get_cache(thd, is_transactional);
+  if (cache && wsrep_write_cache_inc(cache, offset, writer))
+  {
+    return 1;
+  }
+  return 0;
+}
+
+int wsrep_prepare_data_for_replication(THD *thd, size_t &offset,
+                                       bool is_transactional)
+{
+  wsrep_iocache_provider_writer writer(thd);
+  return wsrep_write_cache_data(thd, offset, writer, is_transactional);
+}
+
+int wsrep_prepare_fragment_for_replication(THD *thd,
+                                           wsrep::mutable_buffer &buffer,
+                                           size_t &offset,
+                                           bool is_transactional)
+{
+  wsrep_iocache_buffer_writer writer(buffer);
+  return wsrep_write_cache_data(thd, offset, writer, is_transactional);
+}
+
+size_t wsrep_get_binlog_cache_size(THD *thd, bool is_transactional)
+{
+  IO_CACHE *cache= wsrep_get_cache(thd, is_transactional);
+  if (cache)
+  {
+    size_t pending_rows_event_length= 0;
+    if (Rows_log_event *ev=
+            thd->binlog_get_pending_rows_event(is_transactional))
+    {
+      pending_rows_event_length= ev->get_data_size();
+    }
+    return my_b_tell(cache) + pending_rows_event_length;
+  }
+  return 0;
 }
 
 void wsrep_dump_rbr_buf(THD *thd, const void* rbr_buf, size_t buf_len)

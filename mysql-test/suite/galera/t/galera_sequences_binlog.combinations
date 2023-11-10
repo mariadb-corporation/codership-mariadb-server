@@ -1,0 +1,9 @@
+[sr-off]
+log-bin
+wsrep-trx-fragment-size=0
+
+[sr-on]
+log-bin
+wsrep-trx-fragment-size=1
+
+

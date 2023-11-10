@@ -6410,6 +6410,13 @@ static int write_locked_table_maps(THD *thd)
                        thd, thd->lock, thd->extra_lock));
 
   DBUG_PRINT("debug", ("get_binlog_table_maps(): %d", thd->get_binlog_table_maps()));
+#ifdef WITH_WSREP
+  if (WSREP(thd) && thd->lock->table_count > 1 &&
+      wsrep_fragments_certified_for_stmt(thd))
+  {
+    DBUG_RETURN(0);
+  }
+#endif /* WITH_WSREP */
 
   MYSQL_LOCK *locks[2];
   locks[0]= thd->extra_lock;

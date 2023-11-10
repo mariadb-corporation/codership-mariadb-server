@@ -1,0 +1,96 @@
+#
+# Test rollback in combination with SEQUENCEs
+#
+
+--source include/galera_cluster.inc
+
+#
+# Single statement auto commit rollback
+#
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+
+SELECT LASTVAL(s1);
+--error ER_DUP_ENTRY
+INSERT INTO t1 VALUES (1),(NEXTVAL(s1));
+SELECT LASTVAL(s1);
+
+--connection node_2
+SELECT NEXTVAL(s1) AS 'expect 2';
+
+DROP TABLE t1,s1;
+
+
+#
+# Rollback in empty transaction
+#
+--connection node_1
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+
+BEGIN;
+SELECT NEXTVAL(s1);
+ROLLBACK;
+
+SELECT LASTVAL(s1) AS 'expect 1';
+
+--connection node_2
+SELECT NEXTVAL(s1) AS 'expect 2';
+
+DROP TABLE s1;
+
+
+#
+# Statement rollback within transaction
+#
+# Notice, this case results in full
+# transaction rollback. Beucase NEXTVAL
+# replicates a fragment, and SR can't
+# can't handle statement rollback within
+# a transaction when a fragment has
+# been replicated.
+#
+#
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+
+BEGIN;
+--error ER_LOCK_DEADLOCK 
+INSERT INTO t1 VALUES (1), (NEXTVAL(s1));
+ROLLBACK;
+
+SELECT LASTVAL(s1) AS 'expect 1';
+
+--connection node_2
+SELECT NEXTVAL(s1) AS 'expect 2';
+
+DROP TABLE t1,s1;
+
+#
+# Rollback transaction with changes
+#
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+
+BEGIN;
+SELECT NEXTVAL(s1);
+INSERT INTO t1 VALUES(1);
+SELECT NEXTVAL(s1);
+INSERT INTO t1 SELECT NEXTVAL(s1);
+SELECT NEXTVAL(s1);
+INSERT INTO t1 VALUES (NEXTVAL(s1));
+SELECT NEXTVAL(s1);
+INSERT INTO t1 VALUES (1111),(NEXTVAL(s1));
+SELECT NEXTVAL(s1);
+ROLLBACK;
+
+SELECT LASTVAL(s1) AS 'expect 8';
+SELECT COUNT(*) AS 'expect 0' FROM t1;
+
+--connection node_2
+SELECT NEXTVAL(s1) AS 'expect 9';
+SELECT COUNT(*) AS 'expect 0' FROM t1;
+
+DROP TABLE t1,s1;

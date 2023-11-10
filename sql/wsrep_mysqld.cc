@@ -1657,8 +1657,8 @@ wsrep::key_array wsrep_prepare_keys_for_toi(const char* db,
  *
  * Return 0 in case of success, 1 in case of error.
  */
-int wsrep_to_buf_helper(
-    THD* thd, const char *query, uint query_len, uchar** buf, size_t* buf_len)
+int wsrep_to_buf_helper(THD *thd, const char *query, uint query_len,
+                        wsrep::mutable_buffer &buffer)
 {
   IO_CACHE tmp_io_cache;
   Log_event_writer writer(&tmp_io_cache, 0);
@@ -1707,7 +1707,7 @@ int wsrep_to_buf_helper(
   Query_log_event ev(thd, query, query_len, FALSE, FALSE, FALSE, 0);
   ev.checksum_alg= current_binlog_check_alg;
   if (!ret && writer.write(&ev)) ret= 1;
-  if (!ret && wsrep_write_cache_buf(&tmp_io_cache, buf, buf_len)) ret= 1;
+  if (!ret && wsrep_write_cache_buf(&tmp_io_cache, buffer)) ret= 1;
   close_cached_file(&tmp_io_cache);
   return ret;
 }
@@ -1729,7 +1729,7 @@ wsrep_alter_query_string(THD *thd, String *buf)
   return 0;
 }
 
-static int wsrep_alter_event_query(THD *thd, uchar** buf, size_t* buf_len)
+static int wsrep_alter_event_query(THD *thd, wsrep::mutable_buffer &buffer)
 {
   String log_query;
 
@@ -1739,12 +1739,11 @@ static int wsrep_alter_event_query(THD *thd, uchar** buf, size_t* buf_len)
                thd->get_db(), thd->query());
     return 1;
   }
-  return wsrep_to_buf_helper(thd, log_query.ptr(), log_query.length(), buf, buf_len);
+  return wsrep_to_buf_helper(thd, log_query.ptr(), log_query.length(), buffer);
 }
 
-#include "sql_show.h"
 static int
-create_view_query(THD *thd, uchar** buf, size_t* buf_len)
+create_view_query(THD *thd, wsrep::mutable_buffer &buffer)
 {
     LEX *lex= thd->lex;
     SELECT_LEX *select_lex= lex->first_select_lex();
@@ -1811,7 +1810,7 @@ create_view_query(THD *thd, uchar** buf, size_t* buf_len)
     buff.append(STRING_WITH_LEN(" AS "));
     buff.append(thd->lex->create_view->select.str,
                 thd->lex->create_view->select.length);
-    return wsrep_to_buf_helper(thd, buff.ptr(), buff.length(), buf, buf_len);
+    return wsrep_to_buf_helper(thd, buff.ptr(), buff.length(), buffer);
 }
 
 /*
@@ -1821,7 +1820,7 @@ create_view_query(THD *thd, uchar** buf, size_t* buf_len)
   TODO: See comments for sql_base.cc:drop_temporary_table() and refine
   the function to deal with transactional locked tables.
  */
-static int wsrep_drop_table_query(THD* thd, uchar** buf, size_t* buf_len)
+static int wsrep_drop_table_query(THD* thd, wsrep::mutable_buffer &buffer)
 {
 
   LEX* lex= thd->lex;
@@ -1865,18 +1864,17 @@ static int wsrep_drop_table_query(THD* thd, uchar** buf, size_t* buf_len)
 
     WSREP_DEBUG("Rewrote '%s' as '%s'", thd->query(), buff.ptr());
 
-    return wsrep_to_buf_helper(thd, buff.ptr(), buff.length(), buf, buf_len);
+    return wsrep_to_buf_helper(thd, buff.ptr(), buff.length(), buffer);
   }
   else
   {
-    return wsrep_to_buf_helper(thd, thd->query(), thd->query_length(),
-                               buf, buf_len);
+    return wsrep_to_buf_helper(thd, thd->query(), thd->query_length(), buffer);
   }
 }
 
 
 /* Forward declarations. */
-int wsrep_create_trigger_query(THD *thd, uchar** buf, size_t* buf_len);
+int wsrep_create_trigger_query(THD *thd, wsrep::mutable_buffer& buffer);
 
 /*
   Decide if statement should run in TOI.
@@ -2005,7 +2003,7 @@ static bool wsrep_can_run_in_toi(THD *thd, const char *db, const char *table,
 }
 
 
-static int wsrep_create_sp(THD *thd, uchar** buf, size_t* buf_len)
+static int wsrep_create_sp(THD *thd, wsrep::mutable_buffer &buffer)
 {
   String log_query;
   sp_head *sp= thd->lex->sphead;
@@ -2035,32 +2033,32 @@ static int wsrep_create_sp(THD *thd, uchar** buf, size_t* buf_len)
     return 1;
   }
 
-  return wsrep_to_buf_helper(thd, log_query.ptr(), log_query.length(), buf, buf_len);
+  return wsrep_to_buf_helper(thd, log_query.ptr(), log_query.length(), buffer);
 }
 
-static int wsrep_TOI_event_buf(THD* thd, uchar** buf, size_t* buf_len)
+static int wsrep_TOI_event_buf(THD* thd, wsrep::mutable_buffer& buffer)
 {
   int err;
   switch (thd->lex->sql_command)
   {
   case SQLCOM_CREATE_VIEW:
-    err= create_view_query(thd, buf, buf_len);
+    err= create_view_query(thd, buffer);
     break;
   case SQLCOM_CREATE_PROCEDURE:
   case SQLCOM_CREATE_SPFUNCTION:
-    err= wsrep_create_sp(thd, buf, buf_len);
+    err= wsrep_create_sp(thd, buffer);
     break;
   case SQLCOM_CREATE_TRIGGER:
-    err= wsrep_create_trigger_query(thd, buf, buf_len);
+    err= wsrep_create_trigger_query(thd, buffer);
     break;
   case SQLCOM_CREATE_EVENT:
-    err= wsrep_create_event_query(thd, buf, buf_len);
+    err= wsrep_create_event_query(thd, buffer);
     break;
   case SQLCOM_ALTER_EVENT:
-    err= wsrep_alter_event_query(thd, buf, buf_len);
+    err= wsrep_alter_event_query(thd, buffer);
     break;
   case SQLCOM_DROP_TABLE:
-    err= wsrep_drop_table_query(thd, buf, buf_len);
+    err= wsrep_drop_table_query(thd, buffer);
     break;
   case SQLCOM_CREATE_ROLE:
     if (sp_process_definer(thd))
@@ -2069,8 +2067,7 @@ static int wsrep_TOI_event_buf(THD* thd, uchar** buf, size_t* buf_len)
     }
     /* fallthrough */
   default:
-    err= wsrep_to_buf_helper(thd, thd->query(), thd->query_length(), buf,
-                             buf_len);
+    err= wsrep_to_buf_helper(thd, thd->query(), thd->query_length(), buffer);
     break;
   }
 
@@ -2121,12 +2118,11 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
     return 1;
   }
 
-  uchar* buf= 0;
-  size_t buf_len(0);
+  wsrep::mutable_buffer buffer;
   int buf_err;
   int rc;
 
-  buf_err= wsrep_TOI_event_buf(thd, &buf, &buf_len);
+  buf_err= wsrep_TOI_event_buf(thd, buffer);
   if (buf_err) {
     WSREP_ERROR("Failed to create TOI event buf: %d", buf_err);
     my_message(ER_UNKNOWN_ERROR,
@@ -2135,7 +2131,7 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
                MYF(0));
     return -1;
   }
-  struct wsrep_buf buff= { buf, buf_len };
+  struct wsrep_buf buff= { buffer.data(), buffer.size() };
 
   wsrep::key_array key_array=
     wsrep_prepare_keys_for_toi(db, table, table_list, alter_info, fk_tables);
@@ -2146,7 +2142,6 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
     WSREP_DEBUG("TO isolation skipped, sql: %s."
                 "Only temporary tables affected.",
                 wsrep_thd_query(thd));
-    if (buf) my_free(buf);
     return -1;
   }
 
@@ -2209,8 +2204,6 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
     ++wsrep_to_isolation;
     rc= 0;
   }
-
-  if (buf) my_free(buf);
 
   if (rc) wsrep_TOI_begin_failed(thd, NULL);
 
@@ -2885,7 +2878,7 @@ wsrep_error_label:
 #endif
 }
 
-int wsrep_create_trigger_query(THD *thd, uchar** buf, size_t* buf_len)
+int wsrep_create_trigger_query(THD *thd, wsrep::mutable_buffer &buffer)
 {
   LEX *lex= thd->lex;
   String stmt_query;
@@ -2944,7 +2937,7 @@ int wsrep_create_trigger_query(THD *thd, uchar** buf, size_t* buf_len)
   stmt_query.append(stmt_definition.str, stmt_definition.length);
 
   return wsrep_to_buf_helper(thd, stmt_query.c_ptr(), stmt_query.length(),
-                             buf, buf_len);
+                             buffer);
 }
 
 void* start_wsrep_THD(void *arg)

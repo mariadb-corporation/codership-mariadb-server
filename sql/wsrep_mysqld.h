@@ -328,10 +328,9 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
 void wsrep_to_isolation_end(THD *thd);
 
 bool wsrep_append_SR_keys(THD *thd);
-int wsrep_to_buf_helper(
-  THD* thd, const char *query, uint query_len, uchar** buf, size_t* buf_len);
-int wsrep_create_trigger_query(THD *thd, uchar** buf, size_t* buf_len);
-int wsrep_create_event_query(THD *thd, uchar** buf, size_t* buf_len);
+int wsrep_to_buf_helper(THD *thd, const char *query, uint query_len,
+                        wsrep::mutable_buffer &buffer);
+int wsrep_create_event_query(THD *thd, wsrep::mutable_buffer &buffer);
 
 void wsrep_init_sidno(const wsrep_uuid_t&);
 bool wsrep_node_is_donor();

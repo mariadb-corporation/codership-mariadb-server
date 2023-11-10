@@ -1,0 +1,86 @@
+connection node_2;
+connection node_1;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) Engine=InnoDB;
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+SELECT LASTVAL(s1);
+LASTVAL(s1)
+NULL
+INSERT INTO t1 VALUES (1),(NEXTVAL(s1));
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+SELECT LASTVAL(s1);
+LASTVAL(s1)
+1
+connection node_2;
+SELECT NEXTVAL(s1) AS 'expect 2';
+expect 2
+2
+DROP TABLE t1,s1;
+connection node_1;
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+BEGIN;
+SELECT NEXTVAL(s1);
+NEXTVAL(s1)
+1
+ROLLBACK;
+SELECT LASTVAL(s1) AS 'expect 1';
+expect 1
+1
+connection node_2;
+SELECT NEXTVAL(s1) AS 'expect 2';
+expect 2
+2
+DROP TABLE s1;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+BEGIN;
+INSERT INTO t1 VALUES (1), (NEXTVAL(s1));
+ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
+ROLLBACK;
+SELECT LASTVAL(s1) AS 'expect 1';
+expect 1
+1
+connection node_2;
+SELECT NEXTVAL(s1) AS 'expect 2';
+expect 2
+2
+DROP TABLE t1,s1;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY);
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+BEGIN;
+SELECT NEXTVAL(s1);
+NEXTVAL(s1)
+1
+INSERT INTO t1 VALUES(1);
+SELECT NEXTVAL(s1);
+NEXTVAL(s1)
+2
+INSERT INTO t1 SELECT NEXTVAL(s1);
+SELECT NEXTVAL(s1);
+NEXTVAL(s1)
+4
+INSERT INTO t1 VALUES (NEXTVAL(s1));
+SELECT NEXTVAL(s1);
+NEXTVAL(s1)
+6
+INSERT INTO t1 VALUES (1111),(NEXTVAL(s1));
+SELECT NEXTVAL(s1);
+NEXTVAL(s1)
+8
+ROLLBACK;
+SELECT LASTVAL(s1) AS 'expect 8';
+expect 8
+8
+SELECT COUNT(*) AS 'expect 0' FROM t1;
+expect 0
+0
+connection node_2;
+SELECT NEXTVAL(s1) AS 'expect 9';
+expect 9
+9
+SELECT COUNT(*) AS 'expect 0' FROM t1;
+expect 0
+0
+DROP TABLE t1,s1;

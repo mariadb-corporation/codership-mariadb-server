@@ -60,6 +60,7 @@
 
 #include "wsrep_mysqld.h"
 #ifdef WITH_WSREP
+#include "wsrep_binlog.h"
 #include "wsrep_trans_observer.h"
 #endif /* WITH_WSREP */
 
@@ -1674,9 +1675,6 @@ int binlog_init(void *p)
   return 0;
 }
 
-#ifdef WITH_WSREP
-#include "wsrep_binlog.h"
-#endif /* WITH_WSREP */
 static int binlog_close_connection(handlerton *hton, THD *thd)
 {
   DBUG_ENTER("binlog_close_connection");
@@ -1685,18 +1683,17 @@ static int binlog_close_connection(handlerton *hton, THD *thd)
 #ifdef WITH_WSREP
   if (WSREP(thd) && cache_mngr && !cache_mngr->trx_cache.empty()) {
     IO_CACHE* cache= cache_mngr->get_binlog_cache_log(true);
-    uchar *buf;
-    size_t len=0;
-    wsrep_write_cache_buf(cache, &buf, &len);
+    wsrep::mutable_buffer buf;
+    wsrep_write_cache_buf(cache, buf);
     WSREP_WARN("binlog trx cache not empty (%zu bytes) @ connection close %lld",
-               len, (longlong) thd->thread_id);
-    if (len > 0) wsrep_dump_rbr_buf(thd, buf, len);
+               buf.size(), (longlong) thd->thread_id);
+    if (buf.size() > 0) wsrep_dump_rbr_buf(thd, buf.data(), buf.size());
 
     cache = cache_mngr->get_binlog_cache_log(false);
-    wsrep_write_cache_buf(cache, &buf, &len);
+    wsrep_write_cache_buf(cache, buf);
     WSREP_WARN("binlog stmt cache not empty (%zu bytes) @ connection close %lld",
-               len, (longlong) thd->thread_id);
-    if (len > 0) wsrep_dump_rbr_buf(thd, buf, len);
+               buf.size(), (longlong) thd->thread_id);
+    if (buf.size() > 0) wsrep_dump_rbr_buf(thd, buf.data(), buf.size());
   }
 #endif /* WITH_WSREP */
   DBUG_ASSERT(cache_mngr->trx_cache.empty() && cache_mngr->stmt_cache.empty());
