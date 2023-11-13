@@ -6491,14 +6491,17 @@ and less modified rows. Bit 0 is used to prefer orig_trx in case of a tie.
           victim */
   static undo_no_t calc_victim_weight(trx_t *trx, const trx_t *orig_trx)
   {
+#ifdef WITH_WSREP
+    /* Return the maximum possible weight for WSREP BF-transaction. */
+    if (trx->is_wsrep() && wsrep_thd_is_BF(trx->mysql_thd, false))
+    {
+      return IB_UINT64_MAX;
+    }
+#endif /* WITH_WSREP */
+
     const undo_no_t trx_weight= (trx != orig_trx) | (TRX_WEIGHT(trx) << 1) |
       (trx->mysql_thd &&
-#ifdef WITH_WSREP
-       (thd_has_edited_nontrans_tables(trx->mysql_thd) ||
-        (trx->is_wsrep() && wsrep_thd_is_BF(trx->mysql_thd, false)))
-#else
        thd_has_edited_nontrans_tables(trx->mysql_thd)
-#endif /* WITH_WSREP */
        ? 1ULL << 62 : 0);
     return trx_weight;
   }
@@ -6658,6 +6661,7 @@ and less modified rows. Bit 0 is used to prefer orig_trx in case of a tie.
       DEBUG_SYNC_C("deadlock_report_before_lock_releasing");
       lock_cancel_waiting_and_release<true>(victim->lock.wait_lock);
 #ifdef WITH_WSREP
+      ut_ad(victim_weight != IB_UINT64_MAX);
       if (victim->is_wsrep() && wsrep_thd_is_SR(victim->mysql_thd))
         wsrep_handle_SR_rollback(trx->mysql_thd, victim->mysql_thd);
 #endif
