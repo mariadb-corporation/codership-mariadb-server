@@ -261,13 +261,45 @@ int ha_sequence::write_row(const uchar *buf)
   }
 
 #ifdef WITH_WSREP
-  /* We need to start Galera transaction for select NEXT VALUE FOR
-  sequence if it is not yet started. Note that ALTER is handled
-  as TOI. */
-  if (WSREP_ON && WSREP(thd) &&
-      !thd->wsrep_trx().active() &&
-      wsrep_thd_is_local(thd))
-    wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+  /*
+     We need to start Galera transaction for select NEXT VALUE FOR
+     sequence if it is not yet started. Note that ALTER is handled
+     as TOI.
+  */
+  if (WSREP_ON && WSREP(thd) && wsrep_thd_is_local(thd))
+  {
+    if (!thd->wsrep_trx().active())
+    {
+      wsrep_start_transaction(thd, thd->wsrep_next_trx_id());
+    }
+    if (sequence_locked) // Sequence is locked if called from next_value()
+    {
+      int error= 0;
+
+      Log_func *log_func= Write_rows_log_event::binlog_row_logging_function;
+      error= binlog_log_row(table, 0, buf, log_func);
+
+      if (!error &&
+          (error= wsrep_replicate_sequence_next_value(
+               thd, table_share->db.str, table_share->table_name.str)))
+      {
+        wsrep_thd_binlog_stmt_rollback(thd);
+      }
+
+      if (!error && (error= file->update_first_row(buf)))
+      {
+        // TODO is this a fatal error?
+      }
+
+      if (!error)
+      {
+        rows_changed++;
+        row_already_logged= 1;
+      }
+      sequence->all_values_used= 0;
+      DBUG_RETURN(error);
+    }
+  }
 #endif
 
   if (likely(!(error= file->update_first_row(buf))))

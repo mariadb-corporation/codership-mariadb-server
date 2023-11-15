@@ -616,4 +616,13 @@ static inline void wsrep_commit_empty(THD* thd, bool all)
   DBUG_VOID_RETURN;
 }
 
+static inline int wsrep_replicate_sequence_next_value(THD *thd,
+                                                      const char *db_name,
+                                                      const char *seq_name)
+{
+  int ret= wsrep_append_table_level_key(thd, db_name, seq_name,
+                                        wsrep::key::exclusive);
+  ret= ret || thd->wsrep_cs().stream();
+  return ret;
+}
 #endif /* WSREP_TRANS_OBSERVER */

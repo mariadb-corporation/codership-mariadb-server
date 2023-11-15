@@ -1,0 +1,134 @@
+#
+# Test IST and SEQUENCEs
+#
+# Test outline:
+# We initially have a 3 node cluster, and node 3 is shutdown.
+# Meanwhile nodes 1 and 2 perform operations on sequences,
+# including operations that succeed, rollback, and fail
+# certification. Check that when node 3 rejoins the cluster
+# it receives all the events through IST.
+#
+
+--source include/galera_cluster.inc
+--source include/have_debug_sync.inc
+
+--connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3
+--connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection node_2a
+SET SESSION wsrep_sync_wait = 0;
+
+CREATE SEQUENCE s1 NOCACHE ENGINE=InnoDB;
+CREATE SEQUENCE s2 NOCACHE ENGINE=InnoDB;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
+
+--connection node_1
+SELECT NEXTVAL(s1);
+
+--connection node_1
+SELECT next_not_cached_value FROM s1;
+
+--connection node_2
+SELECT next_not_cached_value FROM s1;
+
+--connection node_3
+SELECT next_not_cached_value FROM s1;
+
+#
+# Shutdown node 3 and wait for the cluster to shrink
+#
+--source include/shutdown_mysqld.inc
+
+--connection node_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+
+--connection node_2
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+
+#
+# Consume some values from the sequence
+#
+--connection node_1
+SELECT NEXTVAL(s1);
+
+--connection node_2
+SELECT NEXTVAL(s1);
+
+--connection node_1
+BEGIN;
+INSERT INTO t1 SELECT NEXTVAL(s1);
+INSERT INTO t1 SELECT NEXTVAL(s1);
+INSERT INTO t1 SELECT NEXTVAL(s1);
+ROLLBACK;
+
+--connection node_2
+BEGIN;
+INSERT INTO t1 SELECT NEXTVAL(s1);
+INSERT INTO t1 SELECT NEXTVAL(s1);
+INSERT INTO t1 SELECT NEXTVAL(s1);
+COMMIT;
+
+#
+# Cause a certification failure
+#
+--connection node_2
+SET GLOBAL DEBUG_DBUG = 'd,sync.wsrep_apply_cb';
+--let $expected_cert_failures = `SELECT VARIABLE_VALUE + 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_cert_failures'`
+
+# This transaction will fail certification later
+BEGIN;
+SELECT NEXTVAL(s2);
+INSERT INTO t1 VALUES(0);
+INSERT INTO t1 VALUES(NEXTVAL(s2));
+
+# The conflicting transaction
+--connection node_1
+BEGIN;
+SELECT NEXTVAL(s1);
+
+# Wait for transaction from node 1 to be delivered
+# and observe the certification failure on the
+# concurrent write to sequence s1.
+--connection node_2
+SET SESSION debug_sync = "now WAIT_FOR sync.wsrep_apply_cb_reached";
+--send SELECT NEXTVAL(s1);
+
+--connection node_2a
+--let $wait_condition = SELECT VARIABLE_VALUE = $expected_cert_failures FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_cert_failures'
+--source include/wait_condition.inc
+
+SET DEBUG_SYNC='now SIGNAL signal.wsrep_apply_cb';
+SET GLOBAL DEBUG_DBUG = '';
+
+--connection node_2
+--error ER_LOCK_DEADLOCK
+--reap
+
+--connection node_1
+COMMIT;
+
+#
+# Restart node 3 and check the state of t1 and s1
+# matches on all nodes
+#
+--connection node_3
+--source include/start_mysqld.inc
+SELECT * FROM t1;
+SELECT next_not_cached_value FROM s1;
+SELECT next_not_cached_value FROM s2;
+
+--connection node_1
+SELECT * FROM t1;
+SELECT next_not_cached_value FROM s1;
+SELECT next_not_cached_value FROM s2;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT next_not_cached_value FROM s1;
+SELECT next_not_cached_value FROM s2;
+
+#
+# Cleanup
+#
+--connection node_2
+SET DEBUG_SYNC='RESET';
+DROP TABLE t1,s1,s2;

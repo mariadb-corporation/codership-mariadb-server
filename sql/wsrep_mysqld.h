@@ -358,6 +358,13 @@ bool wsrep_prepare_keys_for_isolation(THD*              thd,
                                       wsrep_key_arr_t*  ka);
 void wsrep_keys_free(wsrep_key_arr_t* key_arr);
 
+/**
+   Append a table level key for certification,
+   with given db and table, and for the given type.
+*/
+int wsrep_append_table_level_key(THD *thd, const char *db, const char *table,
+                                 enum wsrep::key::type type);
+
 extern void
 wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                           MDL_ticket *ticket,

@@ -783,13 +783,6 @@ longlong SEQUENCE::next_value(TABLE *table, bool second_round, int *error)
   }
 
   write_unlock(table);
-#ifdef WITH_WSREP
-  if (WSREP(thd) && table->s->table_category != TABLE_CATEGORY_TEMPORARY)
-  {
-    // TODO error handling
-    thd->wsrep_cs().stream();
-  }
-#endif /* WITH_WSREP */
   DBUG_RETURN(res_value);
 
 err:

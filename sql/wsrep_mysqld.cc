@@ -1594,6 +1594,15 @@ wsrep::key wsrep_prepare_key_for_toi(const char* db, const char* table,
   return ret;
 }
 
+int wsrep_append_table_level_key(THD *thd, const char *db, const char *table,
+                                 enum wsrep::key::type type)
+{
+  // Make sure trx is started before appending table level key
+  wsrep_start_trx_if_not_started(thd);
+  wsrep::key key= wsrep_prepare_key_for_toi(db, table, type);
+  return thd->wsrep_cs().append_key(key);
+}
+
 wsrep::key_array
 wsrep_prepare_keys_for_alter_add_fk(const char* child_table_db,
                                     Alter_info* alter_info)
