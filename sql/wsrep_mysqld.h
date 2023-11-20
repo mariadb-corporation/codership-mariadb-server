@@ -389,8 +389,10 @@ class Wsrep_gtid_server
 public:
   uint32 domain_id;
   uint32 server_id;
+  mutable uint64 last_seqno;
   Wsrep_gtid_server()
-    : m_force_signal(false)
+    : last_seqno(0)
+    , m_force_signal(false)
     , m_seqno(0)
     , m_committed_seqno(0)
   { }
@@ -399,21 +401,43 @@ public:
     domain_id=  gtid.domain_id;
     server_id=  gtid.server_id;
     m_seqno=    gtid.seqno;
+    last_seqno= gtid.seqno;
+    WSREP_INFO("gtid() did seqno set %llu", last_seqno);
   }
-  wsrep_server_gtid_t gtid()
+  wsrep_server_gtid_t gtid(bool count_seqno=true)
   {
+    DBUG_ENTER("gtid()");
     wsrep_server_gtid_t gtid;
     gtid.domain_id= domain_id;
     gtid.server_id= server_id;
     gtid.seqno=     m_seqno;
-    return gtid;
+    if (m_seqno == last_seqno && m_seqno !=0) {
+      WSREP_INFO("same gtid seqno retrieved 2 times %llu", last_seqno);
+      assert(0);
+    }
+    if (count_seqno) last_seqno= m_seqno;
+    WSREP_INFO("seqno set in gtid() %llu", last_seqno);
+    DBUG_RETURN( gtid );
   }
-  void seqno(const uint64 seqno) { m_seqno= seqno; }
-  uint64 seqno() const { return m_seqno; }
+  void seqno(const uint64 seqno) {
+    WSREP_INFO("gtid update %llu -> %llu", m_seqno, seqno);
+    m_seqno= seqno;
+  }
+  uint64 seqno() const {
+    if (m_seqno == last_seqno && m_seqno !=0) {
+      WSREP_INFO("same seqno retrived 2 times %llu", last_seqno);
+      assert(0);
+    }
+    last_seqno= m_seqno;
+    WSREP_INFO("seqno() set %llu", last_seqno);
+    return m_seqno;
+  }
   uint64 seqno_committed() const { return m_committed_seqno; }
   uint64 seqno_inc()
   {
+    WSREP_INFO("gtid inc %llu -> %llu", m_seqno, m_seqno+1);
     m_seqno++;
+    //last_seqno= m_seqno;
     return m_seqno;
   }
   const wsrep_server_gtid_t& undefined()

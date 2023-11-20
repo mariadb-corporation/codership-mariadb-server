@@ -386,6 +386,7 @@ void wsrep_init_gtid()
       stored_gtid.seqno= 0;
     }
   }
+  WSREP_INFO("GTID initialize %llu", stored_gtid.seqno);
   wsrep_gtid_server.gtid(stored_gtid);
 }
 
@@ -401,6 +402,7 @@ bool wsrep_get_binlog_gtid_seqno(wsrep_server_gtid_t& gtid)
     gtid.domain_id= binlog_gtid.domain_id;
     gtid.server_id= binlog_gtid.server_id;
     gtid.seqno=     binlog_gtid.seq_no;
+    WSREP_INFO("get binlog GTID %llu", gtid.seqno);
     ret= 1;
   }
   return ret;
@@ -2785,7 +2787,7 @@ static void wsrep_TOI_end(THD *thd) {
     wsrep::mutable_buffer err;
 
     thd->wsrep_last_written_gtid_seqno= thd->wsrep_current_gtid_seqno;
-    wsrep_set_SE_checkpoint(client_state.toi_meta().gtid(), wsrep_gtid_server.gtid());
+    wsrep_set_SE_checkpoint(client_state.toi_meta().gtid(), wsrep_gtid_server.gtid(false));
 
     if (thd->is_error() && !wsrep_must_ignore_error(thd))
     {
