@@ -1,0 +1,10 @@
+this file is created to test jenkins logic applicable to revire procedure
+* this is one more trigger
+* this is one more trigger
+* this is one more trigger
+* this is one more trigger
+* this is one more trigger
+* this is one more trigger
+* this is one more trigger
+* this is one more trigger
+
