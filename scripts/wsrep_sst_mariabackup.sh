@@ -809,9 +809,9 @@ recv_joiner()
                 fi
             fi
             if [ $koption -ne 0 ]; then
-                ltcmd="timeout -k $(( tmt+10 )) $tmt $tcmd"
+                ltcmd="timeout --foreground -k $(( tmt+10 )) $tmt $tcmd"
             else
-                ltcmd="timeout -s 9 $tmt $tcmd"
+                ltcmd="timeout --foreground -s 9 $tmt $tcmd"
             fi
         fi
     fi

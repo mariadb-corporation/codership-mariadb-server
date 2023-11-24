@@ -142,6 +142,8 @@ check_pid_and_port()
         if ! check_port $pid "$port" "$utils"; then
             wsrep_log_error "rsync or stunnel daemon port '$port'" \
                             "has been taken by another program"
+            ps --forest 1>&2
+            netstat -natp | grep "$port" 1>&2
             exit 16 # EBUSY
         fi
     fi
@@ -551,6 +553,7 @@ EOF
             WHOLE_FILE_OPT='--whole-file'
         fi
 
+        ps --forest 1>&2
 # Old filter - include everything except selected
 # FILTER=(--exclude '*.err' --exclude '*.pid' --exclude '*.sock' \
 #         --exclude '*.conf' --exclude core --exclude 'galera.*' \
@@ -876,6 +879,8 @@ EOF
     do
         sleep 0.2
     done
+
+    ps --forest 1>&2
 
     echo "ready $ADDR:$RSYNC_PORT/$MODULE"
 
