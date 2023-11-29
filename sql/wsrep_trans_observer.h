@@ -259,7 +259,7 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
     DBUG_ASSERT(!thd->wsrep_trx().ws_meta().gtid().is_undefined());
     wsrep_xid_init(&thd->wsrep_xid,
                    thd->wsrep_trx().ws_meta().gtid(),
-                   wsrep_gtid_server.gtid());
+                   wsrep_gtid_server.gtid(false));
   }
 
   mysql_mutex_lock(&thd->LOCK_thd_kill);
@@ -330,7 +330,7 @@ static inline int wsrep_before_commit(THD* thd, bool all)
 
     wsrep_xid_init(&thd->wsrep_xid,
                    thd->wsrep_trx().ws_meta().gtid(),
-                   wsrep_gtid_server.gtid());
+                   wsrep_gtid_server.gtid((thd->wsrep_trx().is_streaming()) ? false : true));
     wsrep_register_for_group_commit(thd);
   }
 

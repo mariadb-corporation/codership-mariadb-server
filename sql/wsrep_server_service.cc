@@ -331,7 +331,7 @@ void Wsrep_server_service::set_position(wsrep::client_service& c WSREP_UNUSED,
     WSREP_WARN("Wait for gtid returned error %d while waiting for "
                "prior transactions to commit before setting position", err);
   }
-  wsrep_set_SE_checkpoint(gtid, wsrep_gtid_server.gtid());
+  wsrep_set_SE_checkpoint(gtid, wsrep_gtid_server.gtid(false));
 }
 
 void Wsrep_server_service::log_state_change(

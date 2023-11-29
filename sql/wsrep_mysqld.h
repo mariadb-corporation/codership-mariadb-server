@@ -41,6 +41,7 @@ typedef struct st_mysql_show_var SHOW_VAR;
 
 #define WSREP_UNDEFINED_TRX_ID ULONGLONG_MAX
 
+#include "sql_class.h"
 class THD;
 
 // Global wsrep parameters
@@ -411,8 +412,10 @@ public:
     gtid.domain_id= domain_id;
     gtid.server_id= server_id;
     gtid.seqno=     m_seqno;
-    if (m_seqno == last_seqno && m_seqno !=0) {
-      WSREP_INFO("same gtid seqno retrieved 2 times %llu", last_seqno);
+    if (count_seqno && m_seqno == last_seqno && m_seqno !=0) {
+      THD* thd = current_thd;
+      WSREP_INFO("same gtid seqno retrieved 2 times: %llu, SQL: ",
+                 last_seqno, thd->query());
       assert(0);
     }
     if (count_seqno) last_seqno= m_seqno;
@@ -424,9 +427,11 @@ public:
     m_seqno= seqno;
   }
   uint64 seqno() const {
-    if (m_seqno == last_seqno && m_seqno !=0) {
-      WSREP_INFO("same seqno retrived 2 times %llu", last_seqno);
-      assert(0);
+    if (m_seqno == last_seqno && m_seqno != 0) {
+      THD* thd = current_thd;
+      WSREP_INFO("same seqno retrived 2 times: %llu, SQL %s",
+                 last_seqno, thd->query());
+      //assert(0);
     }
     last_seqno= m_seqno;
     WSREP_INFO("seqno() set %llu", last_seqno);
