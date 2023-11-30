@@ -95,7 +95,8 @@ my_bool wsrep_replicate_myisam;                 // Enable MyISAM replication
 my_bool wsrep_log_conflicts;
 my_bool wsrep_load_data_splitting= 0;           // Commit load data every 10K intervals
 my_bool wsrep_slave_UK_checks;                  // Slave thread does UK checks
-my_bool wsrep_slave_FK_checks;                  // Slave thread does FK checks
+ulong  wsrep_slave_FK_checks;                // applier thread FK checking policy
+uint wsrep_applier_FK_failure_retries;       // how many times FK failure to retry in applying
 my_bool wsrep_restart_slave;                    // Should mysql slave thread be
                                                 // restarted, when node joins back?
 my_bool wsrep_desync;                           // De(re)synchronize the node from the
@@ -3433,6 +3434,22 @@ bool wsrep_provider_is_SR_capable()
 int wsrep_thd_retry_counter(const THD *thd)
 {
   return thd->wsrep_retry_counter;
+}
+
+uint wsrep_retry_FK_failure()
+{
+  return wsrep_applier_FK_failure_retries;
+}
+
+bool wsrep_abort_on_FK_failure()
+{
+  return wsrep_slave_FK_checks == WSREP_APPLIER_FK_CHECK_ON_FAIL_ABORT;
+}
+
+bool wsrep_warn_FK_failure()
+{
+  return (wsrep_slave_FK_checks == WSREP_APPLIER_FK_CHECK_ON_FAIL_WARN ||
+          wsrep_slave_FK_checks == WSREP_APPLIER_FK_CHECK_ON_FAIL_ABORT);
 }
 
 extern  bool wsrep_thd_ignore_table(THD *thd)

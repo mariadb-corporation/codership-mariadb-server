@@ -1596,6 +1596,14 @@ row_ins_check_foreign_constraint(
 			fputs("\nor its .ibd file or the required index does"
 			      " not currently exist!\n", ef);
 			err = DB_NO_REFERENCED_ROW;
+#ifdef WITH_WSREP
+                        if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                            wsrep_warn_FK_failure())
+                          ib::warn() << "FK check fail for missing table"
+                                     << " err " << err
+                                     << " gap " << skip_gap_lock
+                                     << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 		} else {
 			if (foreign->referenced_index) {
 				fprintf(ef, "\nTrying to modify index %s"
@@ -1609,6 +1617,14 @@ row_ins_check_foreign_constraint(
 			ut_print_name(ef, trx, foreign->foreign_table_name);
 			fputs("\nor its .ibd file or the required index does"
 			      " not currently exist!\n", ef);
+#ifdef WITH_WSREP
+                        if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                            wsrep_warn_FK_failure())
+                          ib::warn() << "FK check fail for missing table"
+                                     << " err " << err
+                                     << " gap " << skip_gap_lock
+                                     << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 			err = DB_ROW_IS_REFERENCED;
 		}
 
@@ -1659,6 +1675,14 @@ row_ins_check_foreign_constraint(
 			case DB_SUCCESS:
 				continue;
 			default:
+#ifdef WITH_WSREP
+                          if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                              wsrep_warn_FK_failure())
+                            ib::warn() << "FK check fail to set shared rec lock"
+                                       << " err " << err
+                                       << " gap " << skip_gap_lock
+                                       << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 				goto end_scan;
 			}
 		}
@@ -1684,6 +1708,14 @@ row_ins_check_foreign_constraint(
 				case DB_SUCCESS:
 					break;
 				default:
+#ifdef WITH_WSREP
+                                  if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                                      wsrep_warn_FK_failure())
+                                    ib::warn() << "FK check fail for delete flag"
+                                               << " err " << err
+                                               << " gap " << skip_gap_lock
+                                               << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 					goto end_scan;
 				}
 			} else {
@@ -1717,6 +1749,14 @@ row_ins_check_foreign_constraint(
 				case DB_SUCCESS:
 					break;
 				default:
+#ifdef WITH_WSREP
+                                  if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                                      wsrep_warn_FK_failure())
+                                    ib::warn() << "FK check fail to lock the found row"
+                                               << " err " << err
+                                               << " gap " << skip_gap_lock
+                                               << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 					goto end_scan;
 				}
 
@@ -1760,6 +1800,15 @@ row_ins_check_foreign_constraint(
 						if (err == DB_DUPLICATE_KEY) {
 							err = DB_FOREIGN_DUPLICATE_KEY;
 						}
+#ifdef WITH_WSREP
+                                                if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                                                    wsrep_warn_FK_failure())
+                                                  ib::warn() << "FK check fail for CASCADE"
+                                                             << " err "  << err
+                                                             << " gap " << skip_gap_lock
+                                                             << " check_ref " << check_ref;
+                                                
+#endif /* WITH_WSREP */
 
 						goto end_scan;
 					}
@@ -1773,6 +1822,14 @@ row_ins_check_foreign_constraint(
 						"Trying to delete or update",
 						thr, foreign, rec, entry);
 
+#ifdef WITH_WSREP
+                                        if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                                            wsrep_warn_FK_failure())
+                                          ib::warn() << "FK check fail for"
+                                                     << " err " << err
+                                                     << " gap " << skip_gap_lock
+                                                     << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 					err = DB_ROW_IS_REFERENCED;
 					goto end_scan;
 				}
@@ -1795,6 +1852,14 @@ row_ins_check_foreign_constraint(
 					err = DB_NO_REFERENCED_ROW;
 					row_ins_foreign_report_add_err(
 						trx, foreign, rec, entry);
+#ifdef WITH_WSREP
+                                        if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                                            wsrep_warn_FK_failure())
+                                          ib::warn() << "FK check fail to set rec S lock"
+                                                     << " err " << err
+                                                     << " gap " << skip_gap_lock
+                                                     << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 				}
 			default:
 				break;
@@ -1807,6 +1872,14 @@ row_ins_check_foreign_constraint(
 	if (check_ref) {
 		row_ins_foreign_report_add_err(
 			trx, foreign, btr_pcur_get_rec(&pcur), entry);
+#ifdef WITH_WSREP
+                if (!wsrep_thd_is_local(trx->mysql_thd) &&
+                    wsrep_warn_FK_failure())
+                  ib::warn() << "FK check fail after while loop"
+                             << " err " << err
+                             << " gap " << skip_gap_lock
+                             << " check_ref " << check_ref;
+#endif /* WITH_WSREP */
 		err = DB_NO_REFERENCED_ROW;
 	} else {
 		err = DB_SUCCESS;
@@ -1832,6 +1905,19 @@ do_possible_lock_wait:
 		if (err == DB_SUCCESS) {
 			err = DB_LOCK_WAIT;
 		}
+#ifdef WITH_WSREP
+                switch (trx->error_state) {
+                case DB_DEADLOCK:
+                  if (wsrep_warn_FK_failure())
+                    ib::warn() <<
+                      "WSREP: innodb trx state changed during wait "
+                               << " trx: " << trx->id << " with error_state: "
+                               << trx->error_state << " err: " << err;
+                  break;
+                default:
+                  break;
+                }
+#endif /* WITH_WSREP */
 	}
 
 exit_func:
@@ -3174,6 +3260,38 @@ func_exit:
 	mtr_commit(&mtr);
 	DBUG_RETURN(err);
 }
+#ifdef WITH_WSREP
+static uint wsrep_retries(trx_t *trx, uint err, uint retries) {
+  
+  if (err != DB_SUCCESS && !wsrep_thd_is_local(trx->mysql_thd)) {
+
+    ulint trx_start, trx_end= ULINT_UNDEFINED;
+
+    if (retries > 0) {
+      if (wsrep_warn_FK_failure()) {
+        ib::warn() << "FK check retry for err: " <<
+          err << " retries left: " << retries;
+
+        srv_printf_innodb_monitor(stderr, true, &trx_start, &trx_end);
+        retries--;
+      }
+    } else {
+      if (wsrep_warn_FK_failure()) {
+        ib::warn() << "FK check failed for " << err;
+
+        srv_printf_innodb_monitor(stderr, true, &trx_start, &trx_end);
+      }
+      if (!wsrep_abort_on_FK_failure()) {
+        if (wsrep_warn_FK_failure())
+          ib::warn() << "continuing with FK constraint violated";
+      }
+    }
+  } else retries = 0;
+  
+  return retries;
+}
+
+#endif /* WITH_WSREP */
 
 /***************************************************************//**
 Inserts an entry into a clustered index. Tries first optimistic,
@@ -3193,10 +3311,32 @@ row_ins_clust_index_entry(
 	ulint	n_uniq;
 
 	DBUG_ENTER("row_ins_clust_index_entry");
+#ifdef WITH_WSREP
+        trx_t *trx= thr_get_trx(thr);
+        uint wsrep_FK_retries=
+          (trx->check_foreigns && trx->mysql_thd && 
+           !wsrep_thd_is_local(trx->mysql_thd)) ? wsrep_retry_FK_failure() : 0;
+#endif /* WITH_WSREP */
 
 	if (!index->table->foreign_set.empty()) {
+#ifdef WITH_WSREP
+          do {
+#endif /* WITH_WSREP */
 		err = row_ins_check_foreign_constraints(
 			index->table, index, true, entry, thr);
+#ifdef WITH_WSREP
+              wsrep_FK_retries= wsrep_retries(trx, err, wsrep_FK_retries);
+          }
+          while(wsrep_FK_retries);
+          
+          if (err != DB_SUCCESS &&
+              !wsrep_thd_is_local(trx->mysql_thd) &&
+              !wsrep_abort_on_FK_failure()) {
+            if (wsrep_warn_FK_failure())
+              ib::warn() << "continuing with FK constraint violated (PK)";
+            err= DB_SUCCESS;
+          }
+#endif /* WITH_WSREP */
 		if (err != DB_SUCCESS) {
 
 			DBUG_RETURN(err);
@@ -3289,14 +3429,35 @@ row_ins_sec_index_entry(
 			DBUG_SET("-d,row_ins_sec_index_entry_timeout");
 			return(DB_LOCK_WAIT);});
 
-	if (check_foreign && !index->table->foreign_set.empty()) {
-		err = row_ins_check_foreign_constraints(index->table, index,
-							false, entry, thr);
-		if (err != DB_SUCCESS) {
-
-			return(err);
-		}
-	}
+#ifdef WITH_WSREP
+        trx_t *trx= thr_get_trx(thr);
+        uint wsrep_FK_retries=
+          (trx->check_foreigns && trx->mysql_thd && 
+           !wsrep_thd_is_local(trx->mysql_thd)) ? wsrep_retry_FK_failure() : 0;
+#endif /* WITH_WSREP */
+        if (check_foreign && !index->table->foreign_set.empty()) {
+#ifdef WITH_WSREP
+          do {
+#endif /* WITH_WSREP */
+              err = row_ins_check_foreign_constraints(index->table, index,
+                                                      false, entry, thr);
+#ifdef WITH_WSREP
+              wsrep_FK_retries= wsrep_retries(trx, err, wsrep_FK_retries);
+          }
+          while(wsrep_FK_retries);
+          
+          if (err != DB_SUCCESS &&
+              !wsrep_thd_is_local(trx->mysql_thd) &&
+              !wsrep_abort_on_FK_failure()) {
+            if (wsrep_warn_FK_failure())
+              ib::warn() << "continuing with FK constraint violated (sec)";
+            err= DB_SUCCESS;
+          }
+#endif /* WITH_WSREP */
+          if (err != DB_SUCCESS) {
+            return(err);
+          }
+       }
 
 	ut_ad(thr_get_trx(thr)->id != 0);
 

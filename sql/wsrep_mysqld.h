@@ -41,6 +41,14 @@ typedef struct st_mysql_show_var SHOW_VAR;
 
 #define WSREP_UNDEFINED_TRX_ID ULONGLONG_MAX
 
+/* policies for FK check failures in applying */
+enum enum_wsrep_applier_FK_fail_types {
+  WSREP_APPLIER_FK_CHECK_OFF,    /* no FK check for applier */
+  WSREP_APPLIER_FK_CHECK_ON_FAIL_IGNORE, /* check, ignore silently failure */
+  WSREP_APPLIER_FK_CHECK_ON_FAIL_WARN, /* check, warn on fail */
+  WSREP_APPLIER_FK_CHECK_ON_FAIL_ABORT /* check, abort on fail */
+};
+
 class THD;
 
 // Global wsrep parameters
@@ -78,7 +86,7 @@ extern ulong       wsrep_mysql_replication_bundle;
 extern my_bool     wsrep_load_data_splitting;
 extern my_bool     wsrep_restart_slave;
 extern my_bool     wsrep_restart_slave_activated;
-extern my_bool     wsrep_slave_FK_checks;
+extern ulong       wsrep_slave_FK_checks;
 extern my_bool     wsrep_slave_UK_checks;
 extern ulong       wsrep_trx_fragment_unit;
 extern ulong       wsrep_SR_store_type;
@@ -92,6 +100,7 @@ extern uint32      wsrep_gtid_domain_id;
 extern std::atomic <bool > wsrep_thread_create_failed;
 extern ulonglong   wsrep_mode;
 extern my_bool     wsrep_strict_ddl;
+extern uint        wsrep_applier_FK_failure_retries;
 
 enum enum_wsrep_reject_types {
   WSREP_REJECT_NONE,    /* nothing rejected */

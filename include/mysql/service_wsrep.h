@@ -95,6 +95,9 @@ extern struct wsrep_service_st {
   void                        (*wsrep_thd_kill_LOCK_func)(const MYSQL_THD thd);
   void                        (*wsrep_thd_kill_UNLOCK_func)(const MYSQL_THD thd);
   void                        (*wsrep_thd_set_wsrep_PA_unsafe_func)(MYSQL_THD thd);
+  uint                        (*wsrep_retry_FK_failure)();
+  bool                        (*wsrep_abort_on_FK_failure)();
+  bool                        (*wsrep_warn_FK_failure)();
 } *wsrep_service;
 
 #define MYSQL_SERVICE_WSREP_INCLUDED
@@ -144,6 +147,9 @@ extern struct wsrep_service_st {
 #define wsrep_thd_set_ignored_error(T,V) wsrep_service->wsrep_thd_set_ignored_error_func(T,V)
 #define wsrep_report_bf_lock_wait(T,I) wsrep_service->wsrep_report_bf_lock_wait(T,I)
 #define wsrep_thd_set_PA_unsafe(T) wsrep_service->wsrep_thd_set_PA_unsafe_func(T)
+#define wsrep_retry_FK_failure() wsrep_service->wsrep_retry_FK_failure()
+#define wsrep_abort_on_FK_failure() wsrep_service->wsrep_abort_on_FK_failure()
+#define wsrep_warn_FK_failure() wsrep_service->wsrep_warn_FK_failure()
 #else
 
 #define MYSQL_SERVICE_WSREP_STATIC_INCLUDED
@@ -253,5 +259,8 @@ extern "C" void wsrep_report_bf_lock_wait(const THD *thd,
                                           unsigned long long trx_id);
 /* declare parallel applying unsafety for the THD */
 extern "C" void wsrep_thd_set_PA_unsafe(MYSQL_THD thd);
+extern "C" uint wsrep_retry_FK_failure();
+extern "C" bool wsrep_abort_on_FK_failure();
+extern "C" bool wsrep_warn_FK_failure();
 #endif
 #endif /* MYSQL_SERVICE_WSREP_INCLUDED */

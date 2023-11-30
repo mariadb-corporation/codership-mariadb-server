@@ -5855,6 +5855,12 @@ static Sys_var_ulong Sys_wsrep_retry_autocommit(
        SESSION_VAR(wsrep_retry_autocommit), CMD_LINE(REQUIRED_ARG),
        VALID_RANGE(0, 10000), DEFAULT(1), BLOCK_SIZE(1));
 
+static Sys_var_uint Sys_wsrep_applier_FK_failure_retries(
+      "wsrep_applier_FK_failure_retries", "Max number of times to retry "
+      "FK constraint check failure in applying",
+       GLOBAL_VAR(wsrep_applier_FK_failure_retries), CMD_LINE(OPT_ARG),
+       VALID_RANGE(0, 10000), DEFAULT(1), BLOCK_SIZE(1));
+
 static bool update_wsrep_auto_increment_control (sys_var *self, THD *thd, enum_var_type type)
 {
   if (wsrep_auto_increment_control)
@@ -6107,11 +6113,15 @@ static Sys_var_mybool Sys_wsrep_load_data_splitting(
        CMD_LINE(OPT_ARG), DEFAULT(0), NO_MUTEX_GUARD, NOT_IN_BINLOG,
        ON_CHECK(0), ON_UPDATE(0), DEPRECATED("")); // since 10.4.3
 
-static Sys_var_mybool Sys_wsrep_slave_FK_checks(
+static const char *wsrep_slave_FK_check_names[]= { "OFF", "ON_FAIL_IGNORE", "ON_FAIL_WARN", "ON_FAIL_ABORT", NullS };
+
+static Sys_var_enum Sys_wsrep_slave_FK_checks(
        "wsrep_slave_FK_checks", "Should slave thread do "
        "foreign key constraint checks",
        GLOBAL_VAR(wsrep_slave_FK_checks), 
-       CMD_LINE(OPT_ARG), DEFAULT(TRUE));
+       CMD_LINE(OPT_ARG), wsrep_slave_FK_check_names, DEFAULT(WSREP_APPLIER_FK_CHECK_ON_FAIL_ABORT),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0));
+
 
 static Sys_var_mybool Sys_wsrep_slave_UK_checks(
        "wsrep_slave_UK_checks", "Should slave thread do "
