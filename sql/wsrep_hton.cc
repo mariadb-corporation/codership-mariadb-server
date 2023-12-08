@@ -496,9 +496,9 @@ wsrep_run_wsrep_commit(THD *thd, bool all)
 
     WSREP_WARN("SQL statement was ineffective  thd: %llu  buf: %zu\n"
                "schema: %s \n"
-	       "QUERY: %s\n"
-	       " => Skipping replication",
-	       (ulonglong) thd->thread_id, data_len,
+               "QUERY: %s\n"
+               " => Skipping replication",
+               (ulonglong) thd->thread_id, data_len,
                (thd->db ? thd->db : "(null)"), thd->query());
 
     rcode = WSREP_TRX_FAIL;
