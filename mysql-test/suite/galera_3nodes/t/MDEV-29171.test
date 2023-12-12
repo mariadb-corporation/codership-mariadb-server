@@ -4,11 +4,13 @@
 #
 
 --source include/galera_cluster.inc
---source include/have_innodb.inc
+--source include/galera_sst_method.inc
+--source include/force_restart.inc
 
 #
 # Initially wsrep gtid domain id is 100
 #
+
 --connection node_1
 select @@wsrep_gtid_domain_id,@@wsrep_node_name;
 
