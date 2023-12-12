@@ -277,7 +277,7 @@ void Wsrep_server_service::log_view(
           Wsrep_server_state::instance().provider().last_committed_gtid().seqno();
       if (checkpoint_was_reset || last_committed != view.state_id().seqno())
       {
-        wsrep_set_SE_checkpoint(view.state_id(), wsrep_gtid_server.gtid());
+        wsrep_set_SE_checkpoint(view.state_id(), wsrep_gtid_server.gtid(false));
       }
       DBUG_ASSERT(wsrep_get_SE_checkpoint<wsrep::gtid>().id() == view.state_id().id());
     }
