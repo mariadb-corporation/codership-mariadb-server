@@ -1,0 +1,136 @@
+#
+# Test retrying applying of a transaction
+#
+
+--source include/galera_cluster.inc
+--source include/have_debug_sync.inc
+
+CALL mtr.add_suppression("Event .* Update_rows.* apply failed");
+CALL mtr.add_suppression("Inconsistency detected");
+CALL mtr.add_suppression("Failed to apply write set:.*");
+CALL mtr.add_suppression("Event .* Write_rows.* apply failed");
+
+#
+# Case 1: Retrying succeeds after one retry event, no error is raised.
+#
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY DEFAULT 0, f2 char(12));
+CREATE TABLE t3 (f1 INTEGER PRIMARY KEY DEFAULT 0, f2 char(12));
+
+START TRANSACTION;
+INSERT INTO t3 (f1, f2) VALUES (1, 'a');
+INSERT INTO t3 (f1, f2) VALUES (2, 'b');
+INSERT INTO t3 (f1, f2) VALUES (3, 'c'), (4, 'd'), (5, 'e');
+COMMIT;
+
+# wait till the insert transaction has been replicated and committed in node_2
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) > 0 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't3';
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) > 0 FROM t3;
+--source include/wait_condition.inc
+
+SET GLOBAL wsrep_applier_retry_count = 2;
+SET GLOBAL debug_dbug = "d,apply_event_fail_once:o,/dev/null";
+
+--connection node_1
+START TRANSACTION;
+UPDATE t3 SET f2 = 'ax' WHERE f1 = 1;
+UPDATE t3 SET f2 = 'bx' WHERE f1 = 2;
+INSERT INTO t1 (f1, f2) VALUES (3, 'c'), (4, 'd'), (5, 'e');
+UPDATE t3 SET f2 = 'cx' WHERE f1 = 3;
+UPDATE t3 SET f2 = 'dx' WHERE f1 = 4;
+DELETE FROM t3 WHERE f1 = 5;
+COMMIT;
+
+# wait till the transaction has been replicated and committed in node_2
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 4 FROM t3;
+--source include/wait_condition.inc
+
+--connection node_1
+SELECT COUNT(*) AS expect_3 FROM t1;
+SELECT COUNT(*) AS expect_4 FROM t3;
+
+--connection node_2
+SELECT COUNT(*) AS expect_3 FROM t1;
+SELECT COUNT(*) AS expect_4 FROM t3;
+
+#
+# Cleanup after Case 1.
+#
+
+--connection node_1
+DROP TABLE t1;
+DROP TABLE t3;
+
+# shutdown node 2 and restart it
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't3';
+--source include/wait_condition.inc
+--echo Shutting down server ...
+SET wsrep_on=OFF;
+--source include/shutdown_mysqld.inc
+--remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
+--echo Restarting server ...
+--source include/start_mysqld.inc
+
+# wait till node 2 is back in the cluster
+--connection node_1
+SET wsrep_sync_wait=0;
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM performance_schema.global_status WHERE VARIABLE_NAME = 'wsrep_cluster_size'
+--source include/wait_condition.inc
+
+
+#
+# Case 2: Slave retries applying of a transaction multiple times. All
+# retry attempts fail, and the applying will fail with the expected
+# error.
+#
+
+CREATE TABLE t2 (f1 INTEGER PRIMARY KEY DEFAULT 0, f2 char(12));
+
+--connection node_2
+
+SET GLOBAL wsrep_applier_retry_count = 2;
+SET GLOBAL debug_dbug = '';
+SET GLOBAL debug_dbug = "d,apply_event_fail_always:o,/dev/null";
+
+--connection node_1
+START TRANSACTION;
+INSERT INTO t2 (f1, f2) VALUES (1, 'a'), (2, 'b');
+COMMIT;
+
+# node 2 should crash now, wait for the crash
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM performance_schema.global_status WHERE VARIABLE_NAME = 'wsrep_cluster_size'
+--source include/wait_condition.inc
+
+# restart node 2
+--connection node_2
+--echo Shutting down server ...
+SET wsrep_on=OFF;
+--source include/shutdown_mysqld.inc
+--source include/wait_until_disconnected.inc
+--remove_file $MYSQLTEST_VARDIR/mysqld.2/data/grastate.dat
+--echo Restarting server ...
+--source include/start_mysqld.inc
+
+# wait till node 2 is back in the cluster
+--connection node_1
+SET wsrep_sync_wait=0;
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM performance_schema.global_status WHERE VARIABLE_NAME = 'wsrep_cluster_size'
+--source include/wait_condition.inc
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 2 FROM t2;
+--source include/wait_condition.inc
+SELECT COUNT(*) AS expect_2 FROM t2;
+SET GLOBAL debug_dbug = DEFAULT;
+
+#
+# Cleanup
+#
+
+--connection node_1
+SET GLOBAL wsrep_applier_retry_count = 0;
+SET DEBUG_SYNC = 'RESET';
+DROP TABLE t2;
