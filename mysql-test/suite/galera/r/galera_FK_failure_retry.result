@@ -1,0 +1,46 @@
+connection node_2;
+connection node_1;
+CREATE TABLE parent (
+id INT PRIMARY KEY,
+j INT
+) ENGINE=InnoDB;
+CREATE TABLE child (
+id INT PRIMARY KEY AUTO_INCREMENT,
+parent_id INT,
+KEY (parent_id),
+CONSTRAINT FOREIGN KEY (parent_id) REFERENCES parent(id)
+) ENGINE=InnoDB;
+connection node_1;
+INSERT INTO parent VALUES (1,1);
+connection node_2;
+SET GLOBAL debug_dbug ='+d,wsrep_force_FK_check_fail';
+SET GLOBAL wsrep_slave_FK_checks = ON;
+SET GLOBAL wsrep_applier_FK_failure_retries = 5;
+SET wsrep_sync_wait = 15;
+connection node_1;
+INSERT INTO child VALUES (1,1);
+connection node_2;
+SELECT * from child;
+id	parent_id
+1	1
+include/assert_grep.inc [warning for FK constraint failure exists]
+SET GLOBAL wsrep_applier_FK_failure_retries = 1;
+connection node_1;
+INSERT INTO child VALUES (2,1);
+SELECT * from child;
+id	parent_id
+1	1
+2	1
+connection node_2;
+select * from parent;
+id	j
+1	1
+SET GLOBAL debug_dbug = NULL;
+connection node_2;
+SET GLOBAL wsrep_slave_FK_checks = DEFAULT;
+SET GLOBAL wsrep_applier_FK_failure_retries = DEFAULT;
+include/assert_grep.inc [warning for FK constraint failure missing]
+CALL mtr.add_suppression("final FK constraint check failed for.*");
+connection node_1;
+DROP TABLE child;
+DROP TABLE parent;

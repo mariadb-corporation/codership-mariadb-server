@@ -3221,6 +3221,32 @@ func_exit:
 	mtr_commit(&mtr);
 	DBUG_RETURN(err);
 }
+#ifdef WITH_WSREP
+static uint wsrep_retries(trx_t *trx, uint err, uint retries) {
+
+  if (trx->wsrep_is_BF && err != DB_SUCCESS && err != DB_LOCK_WAIT) {
+
+    ulint trx_start, trx_end= ULINT_UNDEFINED;
+
+    if (retries > 0) {
+      retries--;
+      WSREP_DEBUG("FK constraint check retry for %d retries %d",
+                  err, retries);
+
+      if (wsrep_debug)
+        srv_printf_innodb_monitor(stderr, true, &trx_start, &trx_end);
+
+      /* force warning messages, if final retry did not help */
+      if (retries == 0) {
+        WSREP_WARN("final FK constraint check failed for %d ", err);
+        srv_printf_innodb_monitor(stderr, true, &trx_start, &trx_end);
+      }
+    }
+  } else retries = 0;
+
+  return retries;
+}
+#endif /* WITH_WSREP */
 
 /***************************************************************//**
 Inserts an entry into a clustered index. Tries first optimistic,
@@ -3240,10 +3266,28 @@ row_ins_clust_index_entry(
 	ulint	n_uniq;
 
 	DBUG_ENTER("row_ins_clust_index_entry");
+#ifdef WITH_WSREP
+	trx_t *trx= thr_get_trx(thr);
+	uint wsrep_FK_retries= (trx->wsrep_is_BF) ? wsrep_retry_FK_failure() : 0;
+	/* This counter is for galera_FK_failure_retry test,
+	DBUG_EXECUTE_IF("wsrep_force_FK_check_fail"...) below. */
+	ut_d(uint fail_count=4);
+#endif /* WITH_WSREP */
 
 	if (!index->table->foreign_set.empty()) {
+#ifdef WITH_WSREP
+		do {
+#endif /* WITH_WSREP */
 		err = row_ins_check_foreign_constraints(
 			index->table, index, true, entry, thr);
+#ifdef WITH_WSREP
+		DBUG_EXECUTE_IF("wsrep_force_FK_check_fail",
+			if (--fail_count) { err= DB_FAIL; } );
+		wsrep_FK_retries= wsrep_retries(trx, err, wsrep_FK_retries);
+		} while(wsrep_FK_retries);
+/* don't let the injected error to propagate and crash this node */
+DBUG_EXECUTE_IF("wsrep_force_FK_check_fail", err= DB_SUCCESS; );
+#endif /* WITH_WSREP */
 		if (err != DB_SUCCESS) {
 
 			DBUG_RETURN(err);
@@ -3335,10 +3379,23 @@ row_ins_sec_index_entry(
 	DBUG_EXECUTE_IF("row_ins_sec_index_entry_timeout", {
 			DBUG_SET("-d,row_ins_sec_index_entry_timeout");
 			return(DB_LOCK_WAIT);});
+#ifdef WITH_WSREP
+	trx_t *trx= thr_get_trx(thr);
+	uint wsrep_FK_retries= (trx->wsrep_is_BF) ? wsrep_retry_FK_failure() : 0;
+#endif /* WITH_WSREP */
 
 	if (check_foreign && !index->table->foreign_set.empty()) {
+#ifdef WITH_WSREP
+		do {
+#endif /* WITH_WSREP */
 		err = row_ins_check_foreign_constraints(index->table, index,
 							false, entry, thr);
+#ifdef WITH_WSREP
+		wsrep_FK_retries= wsrep_retries(trx, err, wsrep_FK_retries);
+		}
+		while(wsrep_FK_retries);
+#endif /* WITH_WSREP */
+
 		if (err != DB_SUCCESS) {
 
 			return(err);

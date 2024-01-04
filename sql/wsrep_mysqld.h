@@ -90,6 +90,7 @@ extern bool        wsrep_gtid_mode;
 extern uint32      wsrep_gtid_domain_id;
 extern std::atomic <bool > wsrep_thread_create_failed;
 
+extern uint               wsrep_applier_FK_failure_retries;
 enum enum_wsrep_reject_types {
   WSREP_REJECT_NONE,    /* nothing rejected */
   WSREP_REJECT_ALL,     /* reject all queries, with UNKNOWN_COMMAND error */
