@@ -10,6 +10,7 @@ wsrep-provider=@ENV.WSREP_PROVIDER
 # enforce read-committed characteristics across the cluster
 # wsrep-causal-reads=ON
 wsrep-sync-wait=15
+innodb_log_file_size=20M
 
 [mysqld.1]
 wsrep-on=1
