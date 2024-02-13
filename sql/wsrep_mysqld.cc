@@ -3951,11 +3951,12 @@ void wsrep_commit_empty(THD* thd, bool all)
     /* Here transaction is either empty (i.e. no changes) or
        it was CREATE TABLE with no row binlog format or
        we have already aborted transaction e.g. because max writeset size
-       has been reached. */
+       has been reached or it got BF aborted and must replay. */
     DBUG_ASSERT(!wsrep_has_changes(thd) ||
                 (thd->lex->sql_command == SQLCOM_CREATE_TABLE &&
                  !thd->is_current_stmt_binlog_format_row()) ||
-                thd->wsrep_cs().transaction().state() == wsrep::transaction::s_aborted);
+                thd->wsrep_cs().transaction().state() == wsrep::transaction::s_aborted ||
+                thd->wsrep_cs().transaction().state() == wsrep::transaction::s_must_replay);
     bool have_error= wsrep_current_error(thd);
     int ret= wsrep_before_rollback(thd, all) ||
       wsrep_after_rollback(thd, all) ||
