@@ -9881,6 +9881,7 @@ wsrep_append_foreign_key(
 
 	ulint rcode = DB_SUCCESS;
 	char  cache_key[513] = {'\0'};
+	char  result_cache_key[513] = {'\0'};
 	size_t cache_key_len = 0;
 
 	if ( !((referenced) ?
@@ -10000,15 +10001,11 @@ wsrep_append_foreign_key(
 	wsrep_buf_t wkey_part[3];
         wsrep_key_t wkey = {wkey_part, 3};
 
-	if (!wsrep_prepare_key_for_innodb(
-		thd,
-		(const uchar*)cache_key,
-		cache_key_len +  1,
-		(const uchar*)key, len+1,
-		wkey_part,
-		(size_t*)&wkey.key_parts_num)) {
+	if (!wsrep_prepare_key_for_innodb(thd, (const uchar*)cache_key,
+		cache_key_len +  1, (const uchar*)key, len+1,wkey_part,
+		(size_t*)&wkey.key_parts_num, result_cache_key)) {
 		WSREP_WARN("key prepare failed for cascaded FK: %s",
-			   wsrep_thd_query(thd));
+			wsrep_thd_query(thd));
 		return DB_ERROR;
 	}
 
@@ -10066,7 +10063,8 @@ wsrep_append_key(
 			table_share->table_cache_key.length,
 			(const uchar*)key, key_len,
 			wkey_part,
-			(size_t*)&wkey.key_parts_num)) {
+			(size_t*)&wkey.key_parts_num,
+                        nullptr)) {
 		WSREP_WARN("key prepare failed for: %s",
 			   (wsrep_thd_query(thd)) ?
 			   wsrep_thd_query(thd) : "void");

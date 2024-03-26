@@ -2114,16 +2114,38 @@ bool wsrep_prepare_key(const uchar* cache_key, size_t cache_key_len,
     return true;
 }
 
-bool wsrep_prepare_key_for_innodb(THD* thd,
-                                  const uchar* cache_key,
-                                  size_t cache_key_len,
-                                  const uchar* row_id,
-                                  size_t row_id_len,
-                                  wsrep_buf_t* key,
-                                  size_t* key_len)
+bool wsrep_prepare_key_for_innodb(THD* thd, const uchar* cache_key,
+                                  size_t cache_key_len, const uchar* row_id,
+                                  size_t row_id_len, wsrep_buf_t* key,
+                                  size_t* key_len, char* result_key)
 {
+  if (result_key)
+  {
+    /* keys for foreign key references are in filename format
+       converting here to logical table name format to be comtatible with
+       otherwhere used key definitions in table_share
+    */
 
-  return wsrep_prepare_key(cache_key, cache_key_len, row_id, row_id_len, key, key_len);
+    /* cache_key string contains: db\0table
+       first part in the string is db name, conver it first
+    */
+    size_t new_len= filename_to_tablename((const char*)cache_key, result_key,
+                                          cache_key_len, true);
+
+    /* table name follows after the '\0' */
+    const char* p= strchr((const char*)cache_key, '\0') + 1;
+
+    new_len+= filename_to_tablename(p, result_key+new_len+1,
+                                    cache_key_len-new_len-1, true);
+
+    return wsrep_prepare_key((const uchar*)result_key, new_len+1, row_id,
+                             row_id_len, key, key_len);
+  }
+  else
+  {
+    return wsrep_prepare_key(cache_key, cache_key_len, row_id, row_id_len,
+                             key, key_len);
+  }
 }
 
 wsrep::key wsrep_prepare_key_for_toi(const char* db, const char* table,

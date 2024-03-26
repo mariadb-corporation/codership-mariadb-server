@@ -55,7 +55,7 @@ extern struct wsrep_service_st {
   long long                   (*wsrep_xid_seqno_func)(const struct xid_t *xid);
   const unsigned char*        (*wsrep_xid_uuid_func)(const struct xid_t *xid);
   my_bool                     (*wsrep_on_func)(const MYSQL_THD thd);
-  bool                        (*wsrep_prepare_key_for_innodb_func)(MYSQL_THD thd, const unsigned char*, size_t, const unsigned char*, size_t, struct wsrep_buf*, size_t*);
+  bool                        (*wsrep_prepare_key_for_innodb_func)(MYSQL_THD thd, const unsigned char*, size_t, const unsigned char*, size_t, struct wsrep_buf*, size_t*, char*);
   void                        (*wsrep_thd_LOCK_func)(const MYSQL_THD thd);
   int                         (*wsrep_thd_TRYLOCK_func)(const MYSQL_THD thd);
   void                        (*wsrep_thd_UNLOCK_func)(const MYSQL_THD thd);
@@ -110,7 +110,7 @@ extern struct wsrep_service_st {
 #define wsrep_xid_seqno(X) wsrep_service->wsrep_xid_seqno_func(X)
 #define wsrep_xid_uuid(X) wsrep_service->wsrep_xid_uuid_func(X)
 #define wsrep_on(thd) (thd) && WSREP_ON && wsrep_service->wsrep_on_func(thd)
-#define wsrep_prepare_key_for_innodb(A,B,C,D,E,F,G) wsrep_service->wsrep_prepare_key_for_innodb_func(A,B,C,D,E,F,G)
+#define wsrep_prepare_key_for_innodb(A,B,C,D,E,F,G,H) wsrep_service->wsrep_prepare_key_for_innodb_func(A,B,C,D,E,F,G,H)
 #define wsrep_thd_LOCK(T) wsrep_service->wsrep_thd_LOCK_func(T)
 #define wsrep_thd_TRYLOCK(T) wsrep_service->wsrep_thd_TRYLOCK_func(T)
 #define wsrep_thd_UNLOCK(T) wsrep_service->wsrep_thd_UNLOCK_func(T)
@@ -158,7 +158,7 @@ extern my_bool wsrep_recovery;
 extern long wsrep_protocol_version;
 
 extern "C" bool wsrep_consistency_check(MYSQL_THD thd);
-bool wsrep_prepare_key_for_innodb(MYSQL_THD thd, const unsigned char* cache_key, size_t cache_key_len, const unsigned char* row_id, size_t row_id_len, struct wsrep_buf* key, size_t* key_len);
+bool wsrep_prepare_key_for_innodb(MYSQL_THD thd, const unsigned char* cache_key, size_t cache_key_len, const unsigned char* row_id, size_t row_id_len, struct wsrep_buf* key, size_t* key_len, char* result_key);
 extern "C" const char *wsrep_thd_query(const MYSQL_THD thd);
 extern "C" int wsrep_is_wsrep_xid(const void* xid);
 extern "C" long long wsrep_xid_seqno(const struct xid_t* xid);
