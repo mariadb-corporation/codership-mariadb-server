@@ -4388,7 +4388,7 @@ innobase_commit_low(
 {
 #ifdef WITH_WSREP
 	const char* tmp = 0;
-	const bool is_wsrep = trx->is_wsrep();
+	const bool is_wsrep = wsrep_on(trx->mysql_thd);
 	if (is_wsrep) {
 		tmp = thd_proc_info(trx->mysql_thd, "innobase_commit_low()");
 	}
@@ -4493,7 +4493,7 @@ innobase_commit_ordered_2(
 #ifdef WITH_WSREP
 	/* If the transaction is not run in 2pc, we must assign wsrep
 	XID here in order to get it written in rollback segment. */
-	if (trx->is_wsrep()) {
+	if (wsrep_on(thd)) {
 		thd_get_xid(thd, &reinterpret_cast<MYSQL_XID&>(trx->xid));
 	}
 #endif /* WITH_WSREP */
@@ -5036,7 +5036,7 @@ static void innobase_kill_query(handlerton*, THD *thd, enum thd_kill_levels)
     if (!lock)
       /* The transaction is not waiting for any lock. */;
 #ifdef WITH_WSREP
-    else if (trx->is_wsrep() && wsrep_thd_is_aborting(thd))
+    else if (wsrep_on(thd) && wsrep_thd_is_aborting(thd))
       /* if victim has been signaled by BF thread and/or aborting is already
       progressing, following query aborting is not necessary any more.
       Also, BF thread should own trx mutex for the victim. */;
@@ -7847,7 +7847,7 @@ ha_innobase::write_row(
 		m_prebuilt->autoinc_error = DB_SUCCESS;
 
 #ifdef WITH_WSREP
-		wsrep_auto_inc_inserted = trx->is_wsrep()
+		wsrep_auto_inc_inserted = wsrep_on(m_user_thd)
 			&& wsrep_drupal_282555_workaround
 			&& table->next_number_field->val_int() == 0;
 #endif
@@ -8002,7 +8002,7 @@ set_max_autoinc:
 		error, m_prebuilt->table->flags, m_user_thd);
 
 #ifdef WITH_WSREP
-	if (!error_result && trx->is_wsrep()
+	if (!error_result && wsrep_on(m_user_thd)
 	    && !trx->is_bulk_insert()
 	    && wsrep_thd_is_local(m_user_thd)
 	    && !wsrep_thd_ignore_table(m_user_thd)
@@ -8718,7 +8718,7 @@ func_exit:
 	}
 
 #ifdef WITH_WSREP
-	if (error == DB_SUCCESS && trx->is_wsrep()
+	if (error == DB_SUCCESS && wsrep_on(m_user_thd)
 	    && wsrep_thd_is_local(m_user_thd)
 	    && !wsrep_thd_ignore_table(m_user_thd)) {
 		DBUG_PRINT("wsrep", ("update row key"));
@@ -8780,7 +8780,7 @@ ha_innobase::delete_row(
 	error = row_update_for_mysql(m_prebuilt);
 
 #ifdef WITH_WSREP
-	if (error == DB_SUCCESS && trx->is_wsrep()
+	if (error == DB_SUCCESS && wsrep_on(m_user_thd)
 	    && wsrep_thd_is_local(m_user_thd)
 	    && !wsrep_thd_ignore_table(m_user_thd)) {
 		if (wsrep_append_keys(m_user_thd, WSREP_SERVICE_KEY_EXCLUSIVE,
@@ -16027,7 +16027,7 @@ ha_innobase::external_lock(
 	    && thd_sqlcom_can_generate_row_events(thd)) {
 		bool skip = false;
 #ifdef WITH_WSREP
-		skip = trx->is_wsrep() && !wsrep_thd_is_local(thd);
+		skip = wsrep_on(thd) && !wsrep_thd_is_local(thd);
 #endif /* WITH_WSREP */
 		/* used by test case */
 		DBUG_EXECUTE_IF("no_innodb_binlog_errors", skip = true;);
