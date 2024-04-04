@@ -1,5 +1,0 @@
-!include ../galera_2nodes.cnf
-
-# Disable retry for autocommit statements.
-[mysqld]
-wsrep-retry-autocommit=0
