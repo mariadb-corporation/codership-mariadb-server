@@ -739,6 +739,14 @@ int Wsrep_schema::store_view(THD* thd, const Wsrep_view& view)
   Wsrep_schema_impl::binlog_off binlog_off(thd);
   Wsrep_schema_impl::sql_safe_updates sql_safe_updates(thd);
 
+  bool trans_started= false;
+  if (trans_begin(thd, MYSQL_START_TRANS_OPT_READ_WRITE))
+  {
+    WSREP_ERROR("Failed to start transaction for store view");
+    goto out;
+  }
+  trans_started= true;
+
   /*
     Clean up cluster table and members table.
   */
@@ -832,6 +840,23 @@ int Wsrep_schema::store_view(THD* thd, const Wsrep_view& view)
 #endif /* WSREP_SCHEMA_MEMBERS_HISTORY */
   ret= 0;
  out:
+  if (trans_started)
+  {
+    if (ret)
+    {
+      trans_rollback_stmt(thd);
+      if (!trans_rollback(thd))
+      {
+        close_thread_tables(thd);
+      }
+    }
+    else if (trans_commit(thd))
+    {
+      ret= 1;
+      WSREP_ERROR("Failed to commit transaction for store view");
+    }
+    thd->release_transactional_locks();
+  }
 
   DBUG_RETURN(ret);
 }
