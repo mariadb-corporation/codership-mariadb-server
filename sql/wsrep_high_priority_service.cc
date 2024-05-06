@@ -125,6 +125,7 @@ static int apply_events(THD*                       thd,
                         const wsrep::const_buffer& data,
                         wsrep::mutable_buffer&     err)
 {
+  WSREP_INFO("DEBUG: %s: thd = %llu", __FUNCTION__, thd->thread_id);
   int const ret= wsrep_apply_events(thd, rli, data.data(), data.size());
   if (ret || wsrep_thd_has_ignored_error(thd))
   {
@@ -425,6 +426,10 @@ int Wsrep_high_priority_service::apply_toi(const wsrep::ws_meta& ws_meta,
                   };);
 #endif
 
+  WSREP_INFO("DEBUG: %s: thd = %llu, ws seqno = %llu, flags = %s, client = %llu",
+             __FUNCTION__, thd->thread_id, ws_meta.seqno(),
+             wsrep::flags_to_string(ws_meta.flags()).c_str(),
+             ws_meta.client_id());
   int ret= apply_events(thd, m_rli, data, err);
   wsrep_thd_set_ignored_error(thd, false);
   trans_commit(thd);
@@ -592,6 +597,10 @@ int Wsrep_applier_service::apply_write_set(const wsrep::ws_meta& ws_meta,
                  };);
 #endif /* ENABLED_DEBUG_SYNC */
 
+  WSREP_INFO("DEBUG: %s: thd = %llu, ws seqno = %llu, flags = %s, client = %llu",
+             __FUNCTION__, thd->thread_id, ws_meta.seqno(),
+             wsrep::flags_to_string(ws_meta.flags()).c_str(),
+             ws_meta.client_id());
   wsrep_setup_uk_and_fk_checks(thd);
   int ret= apply_events(thd, m_rli, data, err);
 

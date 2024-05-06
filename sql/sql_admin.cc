@@ -1603,12 +1603,52 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
   bool res= TRUE;
   Recreate_info recreate_info;
   DBUG_ENTER("Sql_cmd_optimize_table::execute");
-
+#ifdef WITH_WSREP
+  WSREP_INFO("DEBUG: Sql_cmd_optimize_table::execute: enter");
+  for (TABLE_LIST *table= first_table; table; table= table->next_local) {
+    WSREP_INFO("DEBUG: Sql_cmd_optimize_table::execute: table = %s",
+               table->table_name.str);
+  }
+  
+#endif
   if (check_table_access(thd, SELECT_ACL | INSERT_ACL, first_table,
                          FALSE, UINT_MAX, FALSE))
     goto error; /* purecov: inspected */
 
+#if defined(WITH_WSREP) && !defined(REMOVED)
+  if (WSREP(thd) &&
+      (!thd->is_current_stmt_binlog_format_row() ||
+       !thd->find_temporary_table(first_table)))
+  {
+    /*
+      It makes sense to set auto_increment_* to defaults in TOI operations.
+      Must be done before wsrep_TOI_begin() since Query_log_event encapsulating
+      TOI statement and auto inc variables for wsrep replication is constructed
+      there. Variables are reset back in THD::reset_for_next_command() before
+      processing of next command.
+    */
+    if (wsrep_auto_increment_control)
+    {
+      thd->variables.auto_increment_offset = 1;
+      thd->variables.auto_increment_increment = 1;
+    }
+
+    wsrep::key_array keys;
+    if (!wsrep_append_fk_parent_table(thd, first_table, &keys))
+    {
+      WSREP_INFO("DEBUG: %s(%u): #keys = %u", __FUNCTION__, __LINE__, keys.size());
+      WSREP_TO_ISOLATION_BEGIN_ALTER(first_table->db.str,
+                                     first_table->table_name.str,
+                                     first_table, NULL, &keys, NULL)
+      {
+        WSREP_WARN("OPTIMIZE TABLE isolation failure");
+        DBUG_RETURN(TRUE);
+      }
+    }
+  }
+#else
   WSREP_TO_ISOLATION_BEGIN_WRTCHK(NULL, NULL, first_table);
+#endif /* WITH_WSREP */
   res= (specialflag & SPECIAL_NO_NEW_FUNC) ?
     mysql_recreate_table(thd, first_table, &recreate_info, true) :
     mysql_admin_table(thd, first_table, &m_lex->check_opt,
@@ -1618,7 +1658,10 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
   m_lex->query_tables= first_table;
 
 #ifdef WITH_WSREP
+  WSREP_INFO("DEBUG: Sql_cmd_optimize_table::execute: leave");
+#if 0
 wsrep_error_label:
+#endif
 #endif /* WITH_WSREP */
 error:
   DBUG_RETURN(res);
