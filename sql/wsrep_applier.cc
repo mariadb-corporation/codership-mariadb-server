@@ -213,9 +213,6 @@ int wsrep_apply_events(THD*        thd,
     exec_res= ev->apply_event(thd->wsrep_rgi);
     DBUG_PRINT("info", ("exec_event result: %d", exec_res));
 
-    WSREP_INFO("Event %d %s applied: rcode %d, seqno %lld",
-	       event, ev->get_type_str(), exec_res,
-	       (long long) wsrep_thd_trx_seqno(thd));
     if (exec_res)
     {
       WSREP_WARN("Event %d %s apply failed: %d, seqno %lld",

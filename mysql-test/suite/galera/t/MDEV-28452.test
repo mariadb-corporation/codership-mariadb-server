@@ -17,7 +17,7 @@ CREATE TABLE `user` (
   `username` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `password` char(60) COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('sign_up','invited','active','archived')
-  	   COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'invited',
+           COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'invited',
   `token` char(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `token_valid_till` datetime DEFAULT NULL,
   `last_login` datetime DEFAULT NULL,
@@ -32,10 +32,10 @@ CREATE TABLE `user` (
  
 CREATE TABLE `log_history_daily` (
   `type` enum('unknown','user','developer','api_key','api_env',
-  	 'mail_token','device') COLLATE utf8mb4_unicode_ci NOT NULL,
+         'mail_token','device') COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('valid','invalid') COLLATE utf8mb4_unicode_ci NOT NULL,
   `origin` enum('unknown','browser','go','android','ios','third_party')
-  	   COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'unknown',
+           COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'unknown',
   `ip` varchar(45) COLLATE utf8mb4_unicode_ci NOT NULL,
   `value` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `user_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE `log_history_daily` (
   PRIMARY KEY (`type`,`status`,`origin`,`ip`,`value`,`date`),
   KEY `log_history_daily_user_id_foreign` (`user_id`),
   CONSTRAINT `log_history_daily_user_id_foreign` FOREIGN KEY (`user_id`)
-  	     REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+             REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET SESSION autocommit = 0;

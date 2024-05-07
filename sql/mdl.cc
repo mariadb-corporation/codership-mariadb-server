@@ -1752,9 +1752,6 @@ MDL_lock::can_grant_lock(enum_mdl_type type_arg,
   bitmap_t granted_incompat_map= incompatible_granted_types_bitmap()[type_arg];
 
 #ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s: thd=%lu, %s", __FUNCTION__,
-                  thd_get_thread_id(requestor_ctx->get_thd()),
-                  wsrep_thd_query(requestor_ctx->get_thd()));
   /*
     Approve lock request in BACKUP namespace for BF threads.
   */
@@ -2135,9 +2132,6 @@ MDL_context::try_acquire_lock_impl(MDL_request *mdl_request,
 
   ticket->m_lock= lock;
 
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s", __FUNCTION__);
-#endif
   if (lock->can_grant_lock(mdl_request->type, this, false))
   {
     lock->m_granted.add_ticket(ticket);
@@ -2149,10 +2143,6 @@ MDL_context::try_acquire_lock_impl(MDL_request *mdl_request,
     mdl_request->ticket= ticket;
 
     mysql_mdl_set_status(ticket->m_psi, MDL_ticket::GRANTED);
-#ifdef WITH_WSREP
-    WSREP_INFO("DEBUG: %s: mdl request %p, ticket %p granted",
-	       __FUNCTION__, mdl_request, ticket);
-#endif
   }
   else
     *out_ticket= ticket;
@@ -2199,13 +2189,9 @@ MDL_context::clone_ticket(MDL_request *mdl_request)
 #ifndef DBUG_OFF
                                    , mdl_request->duration
 #endif
-	))) {
-#ifdef WITH_WSREP
-	  WSREP_INFO("calling MDL_ticket::create()");
-#endif
+                                   )))
     return TRUE;
-  }
-  
+
   DBUG_ASSERT(ticket->m_psi == NULL);
   ticket->m_psi= mysql_mdl_create(ticket,
                                   &mdl_request->key,
@@ -2310,10 +2296,6 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
   if (try_acquire_lock_impl(mdl_request, &ticket))
   {
     DBUG_PRINT("mdl", ("OOM: %s", mdl_lock_name));
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s(%u): MDL request %p --> FALSE", __FUNCTION__,
-	     __LINE__, mdl_request);
-#endif
     DBUG_RETURN(TRUE);
   }
 
@@ -2327,14 +2309,9 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
     DBUG_PRINT("info", ("Got lock without waiting"));
     DBUG_PRINT("mdl", ("Seized:   %s", dbug_print_mdl(mdl_request->ticket)));
 #ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s(%u): Seized %s : MDL request %p --> FALSE", __FUNCTION__,
-	     __LINE__, dbug_print_mdl(mdl_request->ticket), mdl_request);
 #ifdef ENABLED_DEBUG_SYNC
   if (0 == strcmp(dbug_print_mdl(mdl_request->ticket),
 		  "test/log_history_daily (MDL_EXCLUSIVE)")) {
-#ifdef WITH_WSREP
-	  WSREP_INFO("DEBUG: DBUG_EXECUTE_IF: %s(%u)", __FUNCTION__, __LINE__);
-#endif
 	  DBUG_EXECUTE_IF("sync.mdev_28452",
 		 {
                    const char act[]=
@@ -2343,12 +2320,9 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
                    DBUG_ASSERT(!debug_sync_set_action(get_thd(),
                                                       STRING_WITH_LEN(act)));
                  };);
-#ifdef WITH_WSREP
-	  WSREP_INFO("DEBUG: DBUG_EXECUTE_IF: %s(%u)", __FUNCTION__, __LINE__);
-#endif
   }
 #endif /* ENABLED_DEBUG_SYNC */
-#endif
+#endif /* WITH_WSREP! */
     DBUG_RETURN(FALSE);
   }
 
@@ -2370,10 +2344,6 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
     mysql_prlock_unlock(&lock->m_rwlock);
     MDL_ticket::destroy(ticket);
     my_error(ER_LOCK_WAIT_TIMEOUT, MYF(0));
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s(%u): MDL request %p --> TRUE", __FUNCTION__,
-	     __LINE__, mdl_request);
-#endif
     DBUG_RETURN(TRUE);
   }
 
@@ -2491,10 +2461,6 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
       DBUG_ASSERT(0);
       break;
     }
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s(%u): MDL request %p --> TRUE", __FUNCTION__,
-	     __LINE__, mdl_request);
-#endif
     DBUG_RETURN(TRUE);
   }
 
@@ -2513,13 +2479,6 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
   mysql_mdl_set_status(ticket->m_psi, MDL_ticket::GRANTED);
 
   DBUG_PRINT("mdl", ("Acquired: %s", ticket_msg));
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: Acquired: %s", ticket_msg);
-#endif
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s(%u): MDL request %p --> FALSE", __FUNCTION__,
-	     __LINE__, mdl_request);
-#endif
   DBUG_RETURN(FALSE);
 }
 
@@ -2942,9 +2901,7 @@ void MDL_context::release_lock(enum_mdl_duration duration, MDL_ticket *ticket)
 
   DBUG_ASSERT(this == ticket->get_ctx());
   DBUG_PRINT("mdl", ("Released: %s", dbug_print_mdl(ticket)));
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s: Released: %s", __FUNCTION__, dbug_print_mdl(ticket));
-#endif
+
   lock->remove_ticket(m_pins, &MDL_lock::m_granted, ticket);
 
   m_tickets[duration].remove(ticket);

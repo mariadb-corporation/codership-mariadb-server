@@ -1603,19 +1603,12 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
   bool res= TRUE;
   Recreate_info recreate_info;
   DBUG_ENTER("Sql_cmd_optimize_table::execute");
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: Sql_cmd_optimize_table::execute: enter");
-  for (TABLE_LIST *table= first_table; table; table= table->next_local) {
-    WSREP_INFO("DEBUG: Sql_cmd_optimize_table::execute: table = %s",
-               table->table_name.str);
-  }
-  
-#endif
+
   if (check_table_access(thd, SELECT_ACL | INSERT_ACL, first_table,
                          FALSE, UINT_MAX, FALSE))
     goto error; /* purecov: inspected */
 
-#if defined(WITH_WSREP) && !defined(REMOVED)
+#ifdef WITH_WSREP
   if (WSREP(thd) &&
       (!thd->is_current_stmt_binlog_format_row() ||
        !thd->find_temporary_table(first_table)))
@@ -1636,7 +1629,6 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
     wsrep::key_array keys;
     if (!wsrep_append_fk_parent_table(thd, first_table, &keys))
     {
-      WSREP_INFO("DEBUG: %s(%u): #keys = %u", __FUNCTION__, __LINE__, keys.size());
       WSREP_TO_ISOLATION_BEGIN_ALTER(first_table->db.str,
                                      first_table->table_name.str,
                                      first_table, NULL, &keys, NULL)
@@ -1657,12 +1649,6 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
   m_lex->first_select_lex()->table_list.first= first_table;
   m_lex->query_tables= first_table;
 
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: Sql_cmd_optimize_table::execute: leave");
-#if 0
-wsrep_error_label:
-#endif
-#endif /* WITH_WSREP */
 error:
   DBUG_RETURN(res);
 }

@@ -2693,7 +2693,7 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
 {
   DBUG_ASSERT(wsrep_OSU_method_get(thd) == WSREP_OSU_TOI);
 
-  WSREP_INFO("TOI Begin: %s, fk_tables = %p", wsrep_thd_query(thd), fk_tables);
+  WSREP_DEBUG("TOI Begin: %s", wsrep_thd_query(thd));
 
   if (wsrep_can_run_in_toi(thd, db, table, table_list, create_info) == false)
   {
@@ -2738,14 +2738,6 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
 
   int ret= cs.enter_toi_local(key_array,
                               wsrep::const_buffer(buff.ptr, buff.len));
-  WSREP_INFO("DEBUG: %s(%u): ret = %d, #key_array = %u", __FUNCTION__, __LINE__, ret,
-	     key_array.size()
-  );
-  std::ostringstream ostream;
-  for (uint i = 0; i < key_array.size(); i++) {
-    ostream << "Key " << i << ":" << key_array[i] << ". ";
-  }
-  WSREP_INFO("DEBUG: %s(%u): keys: %s", __FUNCTION__, __LINE__, ostream.str().c_str());
 
   if (ret)
   {
@@ -2827,7 +2819,6 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
 
   if (rc) wsrep_TOI_begin_failed(thd, NULL);
 
-  WSREP_INFO("DEBUG: %s(%u): rc = %d", __FUNCTION__, __LINE__, rc);
   return rc;
 }
 
@@ -2835,7 +2826,7 @@ static void wsrep_TOI_end(THD *thd) {
   wsrep_to_isolation--;
   wsrep::client_state& client_state(thd->wsrep_cs());
   DBUG_ASSERT(wsrep_thd_is_local_toi(thd));
-  WSREP_INFO("TO END: %lld: %s", client_state.toi_meta().seqno().get(),
+  WSREP_DEBUG("TO END: %lld: %s", client_state.toi_meta().seqno().get(),
               wsrep_thd_query(thd));
 
   wsrep_gtid_server.signal_waiters(thd->wsrep_current_gtid_seqno, false);

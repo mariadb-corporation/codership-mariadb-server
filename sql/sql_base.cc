@@ -1556,9 +1556,6 @@ open_table_get_mdl_lock(THD *thd, Open_table_context *ot_ctx,
       To avoid such situation we skip the trouble-making table if
       there is a conflicting lock.
     */
-#ifdef WITH_WSREP
-	  WSREP_INFO("DEBUG: %s(%u)", __FUNCTION__, __LINE__);
-#endif
     if (thd->mdl_context.try_acquire_lock(mdl_request))
       return TRUE;
     if (mdl_request->ticket == NULL)
@@ -3666,13 +3663,6 @@ open_and_process_table(THD *thd, TABLE_LIST *tables, uint *counter, uint flags,
   DBUG_ENTER("open_and_process_table");
   DEBUG_SYNC(thd, "open_and_process_table");
 
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: %s: table: %p  name: %s  db: %s  flags: %u", __FUNCTION__,
-                      tables, tables->table_name.str,
-                      tables->db.str, tables->for_insert_data);
-
-#endif
- 
   /*
     Ignore placeholders for derived tables. After derived tables
     processing, link to created temporary table will be put here.
@@ -4113,9 +4103,6 @@ lock_table_names(THD *thd, const DDL_options_st &options,
                    MDL_STATEMENT);
   mdl_savepoint= thd->mdl_context.mdl_savepoint();
 
-#ifdef WITH_WSREP
-	  WSREP_INFO("DEBUG: %s(%u)", __FUNCTION__, __LINE__);
-#endif
   while (!thd->mdl_context.acquire_locks(&mdl_requests, lock_wait_timeout) &&
          !upgrade_lock_if_not_exists(thd, options, tables_start,
                                      lock_wait_timeout) &&
@@ -4815,12 +4802,6 @@ bool DML_prelocking_strategy::handle_table(THD *thd,
   /* We rely on a caller to check that table is going to be changed. */
   DBUG_ASSERT(table_list->lock_type >= TL_FIRST_WRITE ||
               thd->lex->default_used);
-#ifdef WITH_WSREP
-  WSREP_INFO("DEBUG: handle_table: table: %p  name: %s  db: %s  flags: %u",
-                      table_list, table_list->table_name.str,
-                      table_list->db.str, table_list->for_insert_data);
-
-#endif
 
   if (table_list->trg_event_map)
   {

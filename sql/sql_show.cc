@@ -4899,9 +4899,6 @@ try_acquire_high_prio_shared_mdl_lock(THD *thd, TABLE_LIST *table,
       other locked tables, we prefer not to wait on a conflicting
       lock.
     */
-#ifdef WITH_WSREP
-	  WSREP_INFO("DEBUG: %s(%u)", __FUNCTION__, __LINE__);
-#endif
     error= thd->mdl_context.try_acquire_lock(&table->mdl_request);
   }
   else
