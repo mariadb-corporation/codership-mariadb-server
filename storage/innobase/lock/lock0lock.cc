@@ -503,8 +503,10 @@ this BF-BF wait correct and if not report BF wait and assert.
 
 @param[in]	lock_rec	other waiting record lock
 @param[in]	trx		trx requesting conflicting record lock
+@param[in]	type_mode	lock type mode of requesting trx
 */
-static void wsrep_assert_no_bf_bf_wait(const lock_t *lock, const trx_t *trx)
+static void wsrep_assert_no_bf_bf_wait(const lock_t *lock, const trx_t *trx,
+                                       const unsigned type_mode)
 {
 	ut_ad(!lock->is_table());
 	lock_sys.assert_locked(*lock);
@@ -546,6 +548,17 @@ static void wsrep_assert_no_bf_bf_wait(const lock_t *lock, const trx_t *trx)
 		return;
 	}
 
+	if (type_mode)
+	{
+		ib::error() << " Requested lock "
+			    << ((type_mode & LOCK_TABLE) ? "on table " : " on record ")
+			    << ((type_mode & LOCK_WAIT) ? " WAIT " : " ")
+			    << ((type_mode & LOCK_GAP) ? " GAP " : " ")
+			    << ((type_mode & LOCK_REC_NOT_GAP) ? " RECORD " : " ")
+			    << ((type_mode & LOCK_INSERT_INTENTION) ? " INSERT INTENTION " : " ")
+			    << ((type_mode & LOCK_X) ? " LOCK_X " : " LOCK_S ");
+	}
+
 	mtr_t mtr;
 
 	ib::error() << "Conflicting lock on table: "
@@ -584,141 +597,177 @@ ATTRIBUTE_NOINLINE static bool wsrep_is_BF_lock_timeout(const trx_t &trx)
 }
 #endif /* WITH_WSREP */
 
-/*********************************************************************//**
-Checks if a lock request for a new lock has to wait for request lock2.
+/** Checks if a lock request for a new lock has to wait for request lock2.
+@param trx                  trx of new lock
+@param type_mode            precise mode of the new lock
+                            to set: LOCK_S or LOCK_X, possibly
+                            ORed to LOCK_GAP or LOCK_REC_NOT_GAP,
+                            LOCK_INSERT_INTENTION.
+@param lock2                another record lock; NOTE that
+                            it is assumed that this has a lock bit
+                            set on the same record as in the new
+	                    lock we are setting.
+@param lock_is_on_supremum  TRUE if we are setting the
+                            lock on the 'supremum' record of an
+                            index page: we know then that the lock
+	                    request is really for a 'gap' type lock.
 @return TRUE if new lock has to wait for lock2 to be removed */
-UNIV_INLINE
-bool
-lock_rec_has_to_wait(
-/*=================*/
-	const trx_t*	trx,	/*!< in: trx of new lock */
-	unsigned	type_mode,/*!< in: precise mode of the new lock
-				to set: LOCK_S or LOCK_X, possibly
-				ORed to LOCK_GAP or LOCK_REC_NOT_GAP,
-				LOCK_INSERT_INTENTION */
-	const lock_t*	lock2,	/*!< in: another record lock; NOTE that
-				it is assumed that this has a lock bit
-				set on the same record as in the new
-				lock we are setting */
-	bool		lock_is_on_supremum)
-				/*!< in: TRUE if we are setting the
-				lock on the 'supremum' record of an
-				index page: we know then that the lock
-				request is really for a 'gap' type lock */
+inline
+bool lock_rec_has_to_wait(const trx_t *trx, unsigned type_mode,
+                          const lock_t* lock2, bool lock_is_on_supremum)
 {
-	ut_ad(trx);
-	ut_ad(!lock2->is_table());
-	ut_d(lock_sys.hash_get(type_mode).assert_locked(
-		     lock2->un_member.rec_lock.page_id));
+  ut_ad(trx);
+  ut_ad(!lock2->is_table());
+  ut_d(lock_sys.hash_get(type_mode).assert_locked(
+         lock2->un_member.rec_lock.page_id));
 
-	if (trx == lock2->trx
-	    || lock_mode_compatible(
-		       static_cast<lock_mode>(LOCK_MODE_MASK & type_mode),
-		       lock2->mode())) {
-		return false;
-	}
+  if (trx == lock2->trx
+      || lock_mode_compatible(
+           static_cast<lock_mode>(LOCK_MODE_MASK & type_mode),
+           lock2->mode()))
+  {
+    /* If trx of new lock is same as another record lock or
+     lock modes are compatible there is no need to wait. */
 
-	/* We have somewhat complex rules when gap type record locks
-	cause waits */
+    return false;
+  }
 
-	if ((lock_is_on_supremum || (type_mode & LOCK_GAP))
-	    && !(type_mode & LOCK_INSERT_INTENTION)) {
+  /* We have somewhat complex rules when gap type record locks
+     cause waits */
 
-		/* Gap type locks without LOCK_INSERT_INTENTION flag
-		do not need to wait for anything. This is because
-		different users can have conflicting lock types
-		on gaps. */
+  if ((lock_is_on_supremum || (type_mode & LOCK_GAP))
+      && !(type_mode & LOCK_INSERT_INTENTION))
+  {
 
-		return false;
-	}
+    /* Gap type locks without LOCK_INSERT_INTENTION flag
+       do not need to wait for anything. This is because
+       different users can have conflicting lock types
+       on gaps. */
 
-	if (!(type_mode & LOCK_INSERT_INTENTION) && lock2->is_gap()) {
+    return false;
+  }
 
-		/* Record lock (LOCK_ORDINARY or LOCK_REC_NOT_GAP
-		does not need to wait for a gap type lock */
+  if (!(type_mode & LOCK_INSERT_INTENTION) && lock2->is_gap())
+  {
 
-		return false;
-	}
+    /* Record lock (LOCK_ORDINARY or LOCK_REC_NOT_GAP
+       does not need to wait for a gap type lock */
 
-	if ((type_mode & LOCK_GAP) && lock2->is_record_not_gap()) {
+    return false;
+  }
 
-		/* Lock on gap does not need to wait for
-		a LOCK_REC_NOT_GAP type lock */
+  if ((type_mode & LOCK_GAP) && lock2->is_record_not_gap())
+  {
 
-		return false;
-	}
+    /* Lock on gap does not need to wait for
+       a LOCK_REC_NOT_GAP type lock */
 
-	if (lock2->is_insert_intention()) {
-		/* No lock request needs to wait for an insert
-		intention lock to be removed. This is ok since our
-		rules allow conflicting locks on gaps. This eliminates
-		a spurious deadlock caused by a next-key lock waiting
-		for an insert intention lock; when the insert
-		intention lock was granted, the insert deadlocked on
-		the waiting next-key lock.
+    return false;
+  }
 
-		Also, insert intention locks do not disturb each
-		other. */
+  if (lock2->is_insert_intention())
+  {
+    /* No lock request needs to wait for an insert
+       intention lock to be removed. This is ok since our
+       rules allow conflicting locks on gaps. This eliminates
+       a spurious deadlock caused by a next-key lock waiting
+       for an insert intention lock; when the insert
+       intention lock was granted, the insert deadlocked on
+       the waiting next-key lock.
 
-		return false;
-	}
+       Also, insert intention locks do not disturb each
+       other. */
+
+    return false;
+  }
 
 #ifdef HAVE_REPLICATION
-	if ((type_mode & LOCK_GAP || lock2->is_gap())
-	    && !thd_need_ordering_with(trx->mysql_thd, lock2->trx->mysql_thd)) {
-		/* If the upper server layer has already decided on the
-		commit order between the transaction requesting the
-		lock and the transaction owning the lock, we do not
-		need to wait for gap locks. Such ordeering by the upper
-		server layer happens in parallel replication, where the
-		commit order is fixed to match the original order on the
-		master.
+  if ((type_mode & LOCK_GAP || lock2->is_gap())
+      && !thd_need_ordering_with(trx->mysql_thd, lock2->trx->mysql_thd))
+  {
+    /* If the upper server layer has already decided on the
+       commit order between the transaction requesting the
+       lock and the transaction owning the lock, we do not
+       need to wait for gap locks. Such ordeering by the upper
+       server layer happens in parallel replication, where the
+       commit order is fixed to match the original order on the
+       master.
 
-		Such gap locks are mainly needed to get serialisability
-		between transactions so that they will be binlogged in
-		the correct order so that statement-based replication
-		will give the correct results. Since the right order
-		was already determined on the master, we do not need
-		to enforce it again here.
+       Such gap locks are mainly needed to get serialisability
+       between transactions so that they will be binlogged in
+       the correct order so that statement-based replication
+       will give the correct results. Since the right order
+       was already determined on the master, we do not need
+       to enforce it again here.
 
-		Skipping the locks is not essential for correctness,
-		since in case of deadlock we will just kill the later
-		transaction and retry it. But it can save some
-		unnecessary rollbacks and retries. */
+       Skipping the locks is not essential for correctness,
+       since in case of deadlock we will just kill the later
+       transaction and retry it. But it can save some
+       unnecessary rollbacks and retries. */
 
-		return false;
-	}
+    return false;
+  }
 #endif /* HAVE_REPLICATION */
 
 #ifdef WITH_WSREP
-	/* New lock request from a transaction is using unique key
-	scan and this transaction is a wsrep high priority transaction
-	(brute force). If conflicting transaction is also wsrep high
-	priority transaction we should avoid lock conflict because
-	ordering of these transactions is already decided and
-	conflicting transaction will be later replayed. */
-	if (trx->is_wsrep_UK_scan()
-	    && wsrep_thd_is_BF(lock2->trx->mysql_thd, false)) {
-		return false;
-	}
+  if (trx->is_wsrep())
+  {
+    /* We have some additional rules for wsrep transactions. */
+    if (trx->is_wsrep_UK_scan()
+        && wsrep_thd_is_BF(lock2->trx->mysql_thd, false))
+    {
+      /* New lock request from a transaction is using unique key
+         scan and this transaction is a wsrep high priority transaction
+         (brute force). If conflicting transaction is also wsrep high
+         priority transaction we should avoid lock conflict because
+         ordering of these transactions is already decided and
+         conflicting transaction will be later replayed. */
 
-	/* if BF-BF conflict, we have to look at write set order */
-	if (trx->is_wsrep() &&
-	   (type_mode & LOCK_MODE_MASK) == LOCK_X &&
-	   (lock2->type_mode & LOCK_MODE_MASK) == LOCK_X &&
-	   wsrep_thd_order_before(trx->mysql_thd,
-				  lock2->trx->mysql_thd)) {
-		return false;
-	}
+      return false;
+    }
 
-	/* We very well can let bf to wait normally as other
-	BF will be replayed in case of conflict. For debug
-	builds we will do additional sanity checks to catch
-	unsupported bf wait if any. */
-	ut_d(wsrep_assert_no_bf_bf_wait(lock2, trx));
+    if (wsrep_thd_is_BF(trx->mysql_thd, false)
+        && wsrep_thd_is_BF(lock2->trx->mysql_thd, false))
+    {
+      /* Both transactions are high priority transactions. */
+
+      if (((type_mode & LOCK_S) && lock2->is_insert_intention())
+          || ((type_mode & LOCK_INSERT_INTENTION) && lock2->mode() == LOCK_S))
+      {
+	ut_ad(!wsrep_thd_is_local(trx->mysql_thd));
+	ut_ad(!wsrep_thd_is_local(lock2->trx->mysql_thd));
+
+	/* High priority applier transaction might take S-locks to
+	   conflicting primary/unique key records and those local
+	   transactions are BF-killed. However, these S-locks
+	   are released at commit time. Therefore, high priority
+	   applier transaction when requesting insert intention (II-lock)
+	   lock for primary/unique index might notice conflicting
+	   S-lock. Certification makes sure that applier transactions
+	   do not insert duplicate keys and so we can allow
+	   S-lock and II-lock. */
+        return false;
+      }
+
+      if (wsrep_thd_order_before(trx->mysql_thd,
+                                 lock2->trx->mysql_thd))
+      {
+        /* If two high priority threads have lock conflict, we look at the
+           order of these transactions and honor the earlier transaction. */
+
+        return false;
+      }
+
+      /* We very well can let bf to wait normally as other
+         BF will be replayed in case of conflict. For debug
+         builds we will do additional sanity checks to catch
+         unsupported bf wait if any. */
+      ut_d(wsrep_assert_no_bf_bf_wait(lock2, trx, type_mode));
+    }
+  }
 #endif /* WITH_WSREP */
 
-	return true;
+  return true;
 }
 
 /*********************************************************************//**
@@ -937,7 +986,7 @@ void wsrep_report_error(const lock_t* victim_lock, const trx_t *bf_trx)
   lock_rec_print(stderr, bf_trx->lock.wait_lock, mtr);
   WSREP_ERROR("victim holding lock: ");
   lock_rec_print(stderr, victim_lock, mtr);
-  wsrep_assert_no_bf_bf_wait(victim_lock, bf_trx);
+  wsrep_assert_no_bf_bf_wait(victim_lock, bf_trx, 0);
 }
 #endif /* WITH_DEBUG */
 
@@ -1748,14 +1797,6 @@ lock_rec_has_to_wait_in_queue(const hash_cell_t &cell, const lock_t *wait_lock)
 		if (heap_no < lock_rec_get_n_bits(lock)
 		    && (p[bit_offset] & bit_mask)
 		    && lock_has_to_wait(wait_lock, lock)) {
-#ifdef WITH_WSREP
-			if (lock->trx->is_wsrep() &&
-			    wsrep_thd_order_before(wait_lock->trx->mysql_thd,
-						   lock->trx->mysql_thd)) {
-				/* don't wait for another BF lock */
-				continue;
-			}
-#endif
 			return(lock);
 		}
 	}
