@@ -1638,8 +1638,6 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
       }
     }
   }
-#else
-  WSREP_TO_ISOLATION_BEGIN_WRTCHK(NULL, NULL, first_table);
 #endif /* WITH_WSREP */
   res= (specialflag & SPECIAL_NO_NEW_FUNC) ?
     mysql_recreate_table(thd, first_table, &recreate_info, true) :
@@ -1648,7 +1646,6 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
                       &handler::ha_optimize, 0, true);
   m_lex->first_select_lex()->table_list.first= first_table;
   m_lex->query_tables= first_table;
-
 error:
   DBUG_RETURN(res);
 }

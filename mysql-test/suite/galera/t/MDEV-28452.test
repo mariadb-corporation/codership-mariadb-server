@@ -18,12 +18,7 @@ CREATE TABLE `user` (
   `password` char(60) COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('sign_up','invited','active','archived')
            COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'invited',
-  `token` char(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `token_valid_till` datetime DEFAULT NULL,
   `last_login` datetime DEFAULT NULL,
-  `password_updated_at` datetime DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `user_username_unique` (`username`),
   KEY `user_environment_id_index` (`environment_id`)
@@ -40,9 +35,6 @@ CREATE TABLE `log_history_daily` (
   `value` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `user_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `date` date NOT NULL,
-  `count` int(10) unsigned NOT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`type`,`status`,`origin`,`ip`,`value`,`date`),
   KEY `log_history_daily_user_id_foreign` (`user_id`),
   CONSTRAINT `log_history_daily_user_id_foreign` FOREIGN KEY (`user_id`)
@@ -52,10 +44,9 @@ CREATE TABLE `log_history_daily` (
 SET SESSION autocommit = 0;
 
 # insert one row in each table
-INSERT INTO `user` VALUES ("id_1", "abc", "user 1", "secret", "active",
-       NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO `user` VALUES ("id_1", "abc", "user 1", "secret", "active", NULL);
 INSERT INTO `log_history_daily` VALUES ("user", "valid", "unknown",
-       "192.168.0.1", "Sample", "id_1", "2024-04-22", 1, NULL, NULL);
+       "192.168.0.1", "Sample", "id_1", "2024-04-22");
 COMMIT;
 
 # Start two slave threads in node 2.
@@ -67,16 +58,13 @@ SET GLOBAL wsrep_slave_threads = 2;
 SELECT @@wsrep_slave_threads;
 SET GLOBAL debug_dbug = "+d,sync.mdev_28452";
 
-# Run two transactions in parallel in node 1:
+# Run two transactions sequentially on node 1:
 # 1) OPTIMIZE TABLE on the child table of the foreign key constraint,
---connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
---connection node_1a
---sleep 5
+--connection node_1
 OPTIMIZE TABLE `log_history_daily`;
 COMMIT;
 
 # 2) and UPDATE on the parent table of the foreign key constraint.
---connection node_1
 # update the row in "user" so that it affects the foreign key in
 # "log_history_daily"
 UPDATE `user` SET `last_login` = '2024-04-23' WHERE `id`="id_1";
@@ -89,9 +77,12 @@ SET GLOBAL debug_dbug = 'RESET';
 SET DEBUG_SYNC = 'now SIGNAL signal.mdev_28452';
 SET DEBUG_SYNC = 'RESET';
 
+# wait till the UPDATE has finished on node 2
+--let $wait_condition = SELECT COUNT(*) > 0 FROM `user` WHERE `last_login` = '2024-04-23'
+--source include/wait_condition.inc
+
 # cleanup
 --connection node_1
---sleep 5
 DROP TABLE `log_history_daily`;
 DROP TABLE `user`;
 --connection node_2
