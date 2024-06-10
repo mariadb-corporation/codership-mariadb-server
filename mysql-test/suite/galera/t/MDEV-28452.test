@@ -41,6 +41,7 @@ CREATE TABLE `log_history_daily` (
              REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
 SET SESSION autocommit = 0;
 
 # insert one row in each table
@@ -72,7 +73,10 @@ COMMIT;
 
 # allow the stopped OPTIMIZE TABLE transaction to proceed
 --connection node_2a
---sleep 5
+
+# wait till debug sync point has been set on node 2
+#--sleep 5
+
 SET GLOBAL debug_dbug = 'RESET';
 SET DEBUG_SYNC = 'now SIGNAL signal.mdev_28452';
 SET DEBUG_SYNC = 'RESET';
