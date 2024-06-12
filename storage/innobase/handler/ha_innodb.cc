@@ -1886,16 +1886,16 @@ static void sst_disable_innodb_writes()
   buf_flush_page_cleaner(). Let us prevent that by invoking another
   checkpoint (which will write the FILE_CHECKPOINT record). */
   log_make_checkpoint();
-  ut_d(recv_no_log_write= true);
+  recv_no_log_write= true;
   /* If this were not a no-op, an assertion would fail due to
   recv_no_log_write. */
-  ut_d(log_make_checkpoint());
+  log_make_checkpoint();
 }
 
 static void sst_enable_innodb_writes()
 {
-  ut_ad(recv_no_log_write);
-  ut_d(recv_no_log_write= false);
+  ut_a(recv_no_log_write);
+  recv_no_log_write= false;
   purge_sys.resume();
   wsrep_sst_disable_writes= false;
   const uint old_count= srv_n_fil_crypt_threads;
