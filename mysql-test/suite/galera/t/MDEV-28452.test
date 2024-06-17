@@ -75,7 +75,7 @@ COMMIT;
 --connection node_2a
 
 # wait till debug sync point has been set on node 2
-#--sleep 5
+SET DEBUG_SYNC='NOW WAIT_FOR mdev_28452_reached';
 
 SET GLOBAL debug_dbug = 'RESET';
 SET DEBUG_SYNC = 'now SIGNAL signal.mdev_28452';

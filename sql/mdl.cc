@@ -2315,8 +2315,8 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
 	  DBUG_EXECUTE_IF("sync.mdev_28452",
 		 {
                    const char act[]=
-                     "now "
-                     "wait_for signal.mdev_28452";
+                     "NOW SIGNAL mdev_28452_reached "
+                     "WAIT_FOR signal.mdev_28452";
                    DBUG_ASSERT(!debug_sync_set_action(get_thd(),
                                                       STRING_WITH_LEN(act)));
                  };);
