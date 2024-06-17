@@ -1627,7 +1627,8 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
     }
 
     wsrep::key_array keys;
-    if (!wsrep_append_fk_parent_table(thd, first_table, &keys))
+    if (wsrep_thd_is_local(thd) &&
+        !wsrep_append_fk_parent_table(thd, first_table, &keys))
     {
       WSREP_TO_ISOLATION_BEGIN_ALTER(first_table->db.str,
                                      first_table->table_name.str,
