@@ -11,3 +11,7 @@
 [submodule "extra/wolfssl/wolfssl"]
 	path = extra/wolfssl/wolfssl
 	url = https://github.com/wolfSSL/wolfssl.git
+[submodule "plugin/galera_replication/galera"]
+	path = plugin/galera_replication/galera
+	url = git@github.com:MariaDB/galera.git
+	branch = mariadb-4.x

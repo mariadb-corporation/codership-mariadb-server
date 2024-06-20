@@ -2491,6 +2491,7 @@ sub setup_vardir() {
 
         for (<$bindir/storage/*$multiconfig/*.so>,
              <$bindir/plugin/*$multiconfig/*.so>,
+	     <$bindir/plugin/galera_replication/galera/*.so>,
              <$bindir/libmariadb/plugins/*/*.so>,
              <$bindir/libmariadb/$multiconfig/*.so>,
              <$bindir/sql$multiconfig/*.so>)
