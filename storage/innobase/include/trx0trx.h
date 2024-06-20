@@ -737,6 +737,11 @@ public:
 	/** whether wsrep_on(mysql_thd) held at the start of transaction */
 	bool		wsrep;
 	bool is_wsrep() const { return UNIV_UNLIKELY(wsrep); }
+	/* Boolean denoting whether to trx belongs to BF thread. This is
+	   initialized at the beginning of the transaction, and the
+	   value stays the same over whole transaction lifetime. */
+	bool wsrep_is_BF;
+
 	/** true, if BF thread is performing unique secondary index scanning */
 	bool wsrep_UK_scan;
 	bool is_wsrep_UK_scan() const { return UNIV_UNLIKELY(wsrep_UK_scan); }

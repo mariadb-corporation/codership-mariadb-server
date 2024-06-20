@@ -89,6 +89,7 @@ extern struct wsrep_service_st {
   void                        (*wsrep_thd_kill_LOCK_func)(const MYSQL_THD thd);
   void                        (*wsrep_thd_kill_UNLOCK_func)(const MYSQL_THD thd);
   void                        (*wsrep_thd_set_wsrep_PA_unsafe_func)(MYSQL_THD thd);
+  uint                        (*wsrep_retry_FK_failure)();
 } *wsrep_service;
 
 #define MYSQL_SERVICE_WSREP_INCLUDED
@@ -133,8 +134,8 @@ extern struct wsrep_service_st {
 #define wsrep_thd_is_applying(T) wsrep_service->wsrep_thd_is_applying_func(T)
 #define wsrep_report_bf_lock_wait(T,I) wsrep_service->wsrep_report_bf_lock_wait(T,I)
 #define wsrep_thd_set_PA_unsafe(T) wsrep_service->wsrep_thd_set_PA_unsafe_func(T)
+#define wsrep_retry_FK_failure() wsrep_service->wsrep_retry_FK_failure()
 #else
-
 #define MYSQL_SERVICE_WSREP_STATIC_INCLUDED
 extern ulong   wsrep_debug;
 extern my_bool wsrep_log_conflicts;
@@ -232,5 +233,6 @@ extern "C" void wsrep_report_bf_lock_wait(const THD *thd,
                                           unsigned long long trx_id);
 /* declare parallel applying unsafety for the THD */
 extern "C" void wsrep_thd_set_PA_unsafe(MYSQL_THD thd);
+extern "C" uint wsrep_retry_FK_failure();
 #endif
 #endif /* MYSQL_SERVICE_WSREP_INCLUDED */

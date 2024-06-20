@@ -5550,6 +5550,12 @@ static Sys_var_ulong Sys_wsrep_retry_autocommit(
        SESSION_VAR(wsrep_retry_autocommit), CMD_LINE(REQUIRED_ARG),
        VALID_RANGE(0, 10000), DEFAULT(1), BLOCK_SIZE(1));
 
+static Sys_var_uint Sys_wsrep_applier_FK_failure_retries(
+      "wsrep_applier_FK_failure_retries", "Max number of times to retry "
+      "FK constraint check failure in applying",
+       GLOBAL_VAR(wsrep_applier_FK_failure_retries), CMD_LINE(OPT_ARG),
+       VALID_RANGE(0, 10000), DEFAULT(1), BLOCK_SIZE(1));
+
 static bool update_wsrep_auto_increment_control (sys_var *self, THD *thd, enum_var_type type)
 {
   if (wsrep_auto_increment_control)

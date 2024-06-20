@@ -2743,6 +2743,7 @@ innobase_trx_init(
 		thd, OPTION_RELAXED_UNIQUE_CHECKS);
 #ifdef WITH_WSREP
 	trx->wsrep = wsrep_on(thd);
+        trx->wsrep_is_BF = wsrep_thd_is_BF(thd, false);
 #endif
 
 	DBUG_VOID_RETURN;
