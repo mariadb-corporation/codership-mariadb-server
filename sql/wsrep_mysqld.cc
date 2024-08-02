@@ -1414,12 +1414,23 @@ bool wsrep_check_mode_after_open_table (THD *thd,
     return true;
 
   const legacy_db_type db_type= hton->db_type;
-  bool replicate= ((db_type == DB_TYPE_MYISAM && wsrep_check_mode(WSREP_MODE_REPLICATE_MYISAM)) ||
-                   (db_type == DB_TYPE_ARIA && wsrep_check_mode(WSREP_MODE_REPLICATE_ARIA)));
+  const bool replicate= ((db_type == DB_TYPE_MYISAM && wsrep_check_mode(WSREP_MODE_REPLICATE_MYISAM)) ||
+                         (db_type == DB_TYPE_ARIA && wsrep_check_mode(WSREP_MODE_REPLICATE_ARIA)));
   TABLE *tbl= tables->table;
 
   if (replicate)
   {
+    const bool in_trans= (thd->variables.option_bits & OPTION_BEGIN);
+    /* If wsrep already has changes it means we are inside a transaction OR
+       if begin has issued we are inside a transaction. Do not allow DML
+       to MyISAM or Aria then. */
+    if (wsrep_has_changes(thd) || in_trans)
+    {
+      my_message(ER_GALERA_REPLICATION_NOT_SUPPORTED,
+		 "Galera does not support transactions containing engines "
+		 "not supporting 2 phase commit", MYF(0));
+      return false;
+    }
     /* It is not recommended to replicate MyISAM as it lacks rollback feature
     but if user demands then actions are replicated using TOI.
     Following code will kick-start the TOI but this has to be done only once

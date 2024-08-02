@@ -107,39 +107,16 @@ SELECT COUNT(*) AS EXPECT_1 FROM t2;
 --connection node_1
 SET AUTOCOMMIT=OFF;
 START TRANSACTION;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
 INSERT INTO t1 VALUES (2);
 INSERT INTO t2 VALUES (2);
 ROLLBACK;
 
 --connection node_2
-SELECT COUNT(*) AS EXPECT_2 FROM t1;
+SELECT COUNT(*) AS EXPECT_1 FROM t1;
 SELECT COUNT(*) AS EXPECT_1 FROM t2;
 
 --connection node_1
-DROP TABLE t1,t2;
-
-#
-# Transaction conflict
-#
-
---connection node_1
-CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=Aria;
-CREATE TABLE t2 (f2 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-
-START TRANSACTION;
-INSERT INTO t1 VALUES (1);
-INSERT INTO t2 VALUES (1);
-
---connection node_2
-# The Aria update is replicated immediately, so a duplicate key error happens even before the COMMIT
---error ER_DUP_ENTRY
-INSERT INTO t1 VALUES (1);
-
---connection node_1
-
---error ER_ERROR_DURING_COMMIT
-COMMIT;
-
 DROP TABLE t1,t2;
 
 --connection node_1
