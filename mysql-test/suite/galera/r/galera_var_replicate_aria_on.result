@@ -103,31 +103,17 @@ connection node_1;
 SET AUTOCOMMIT=OFF;
 START TRANSACTION;
 INSERT INTO t1 VALUES (2);
+ERROR HY000: Galera does not support transactions containing engines not supporting 2 phase commit
 INSERT INTO t2 VALUES (2);
 ROLLBACK;
-Warnings:
-Warning	1196	Some non-transactional changed tables couldn't be rolled back
 connection node_2;
-SELECT COUNT(*) AS EXPECT_2 FROM t1;
-EXPECT_2
-2
+SELECT COUNT(*) AS EXPECT_1 FROM t1;
+EXPECT_1
+1
 SELECT COUNT(*) AS EXPECT_1 FROM t2;
 EXPECT_1
 1
 connection node_1;
-DROP TABLE t1,t2;
-connection node_1;
-CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=Aria;
-CREATE TABLE t2 (f2 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-START TRANSACTION;
-INSERT INTO t1 VALUES (1);
-INSERT INTO t2 VALUES (1);
-connection node_2;
-INSERT INTO t1 VALUES (1);
-ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
-connection node_1;
-COMMIT;
-ERROR HY000: Transactional commit not supported by involved engine(s)
 DROP TABLE t1,t2;
 connection node_1;
 CREATE TABLE t1 (i INT NOT NULL PRIMARY KEY) ENGINE=INNODB;
