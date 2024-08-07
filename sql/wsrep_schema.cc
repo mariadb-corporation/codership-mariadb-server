@@ -682,7 +682,7 @@ Wsrep_schema::Wsrep_schema() = default;
 
 Wsrep_schema::~Wsrep_schema() = default;
 
-static void wsrep_init_thd_for_schema(THD *thd)
+void wsrep_init_thd_for_schema(THD *thd)
 {
   thd->security_ctx->skip_grants();
   thd->system_thread= SYSTEM_THREAD_GENERIC;

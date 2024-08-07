@@ -176,4 +176,7 @@ class Wsrep_schema
 
 extern Wsrep_schema* wsrep_schema;
 
+void wsrep_init_thd_for_schema(THD *thd);
+
+
 #endif /* !WSREP_SCHEMA_H */

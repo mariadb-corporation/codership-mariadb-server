@@ -16,8 +16,6 @@
 /*
 */
 
-#ifdef WITH_WSREP
-
 #include "my_global.h"
 #include "mysqld_error.h"
 #include <mysql/plugin.h>
@@ -28,10 +26,14 @@
 #include "sql_acl.h"
 #include "sql_i_s.h"
 #include "wsrep_mysqld.h"
+#include "wsrep_schema.h"
 
 #include <list>
 #include <mutex>
 
+#include "wsrep_connection_monitor_service.h"
+
+#ifdef WITH_WSREP
 static bool connection_monitor_plugin_enabled= false;
 
 typedef struct
@@ -51,31 +53,19 @@ bool wsrep_connection_monitor_plugin_enabled()
   return connection_monitor_plugin_enabled;
 }
 
-static int wsrep_connection_monitor_plugin_init(void *p)
-{
-  if (!WSREP_ON)
-  {
-    sql_print_information("Plugin '%s' is disabled.", "wsrep-connection-monitor");
-    return 0;
-  }
-
-  connection_monitor_plugin_enabled= true;
-  return 0;
-}
-
 static int wsrep_connection_monitor_plugin_deinit(void *p)
 {
   return 0;
 }
 
 namespace Show {
-static ST_FIELD_INFO wsrep_connenections_fields_info[]=
+static ST_FIELD_INFO wsrep_connections_fields_info[]=
 {
 #define NODE_UUID 0
   Column ("node_uuid", Varchar(13), NOT_NULL),
-#define CONNECTION_SCHEME
+#define CONNECTION_SCHEME 1
   Column ("connection_scheme", Varchar(3), NOT_NULL),
-#define CONNECTION_ADDRESS
+#define CONNECTION_ADDRESS 2
   Column ("connection_address", Varchar(13), NOT_NULL),
 
   CEnd()
@@ -123,7 +113,7 @@ static int fill_wsrep_connections(THD *thd, TABLE_LIST *tables, Item *)
 
   // Read current cluster members
   std::vector<Wsrep_view::member> members;
-  Wsrep_schema::read_members(thd, members);
+  wsrep_schema->read_members(thd, members);
 
   for (auto const& conn : wsrep_connections)
   {
@@ -142,15 +132,22 @@ static int wsrep_connections_init(void*	p)
 {
   ST_SCHEMA_TABLE* schema;
 
-  schema = (ST_SCHEMA_TABLE*) p;
+  if (!WSREP_ON)
+  {
+    sql_print_information("Plugin '%s' is disabled.", "wsrep-connection-monitor");
+    return 1;
+  }
 
+  connection_monitor_plugin_enabled= true;
+
+  schema = (ST_SCHEMA_TABLE*) p;
   schema->fields_info = Show::wsrep_connections_fields_info;
   schema->fill_table = fill_wsrep_connections;
 
   return 0;
 }
 
-static struct st_mysql_information_schema i_s_info =
+static struct st_mysql_information_schema plugin_descriptor =
 {
   MYSQL_INFORMATION_SCHEMA_INTERFACE_VERSION
 };
@@ -158,13 +155,7 @@ static struct st_mysql_information_schema i_s_info =
 /** version number reported by SHOW PLUGINS */
 constexpr unsigned i_s_version= MYSQL_VERSION_MAJOR << 8 | MYSQL_VERSION_MINOR;
 
-static int i_s_common_deinit(void*)
-{
-  /* Do nothing */
-  return 0;
-}
-
-struct st_maria_plugin	i_s_wsrep_connections=
+maria_declare_plugin(wsrep_connection_monitor)
 {
   /* the plugin type (a MYSQL_XXX_PLUGIN value) */
   /* int */
@@ -172,7 +163,7 @@ struct st_maria_plugin	i_s_wsrep_connections=
 
   /* pointer to type-specific plugin descriptor */
   /* void* */
-  &i_s_info,
+  &plugin_descriptor,
 
   /* plugin name */
   /* const char* */
@@ -184,7 +175,7 @@ struct st_maria_plugin	i_s_wsrep_connections=
 
   /* general descriptive text (for SHOW PLUGINS) */
   /* const char* */
-  "Galera connections",
+  "Provides information about Galera connections",
 
   /* the plugin license (PLUGIN_LICENSE_XXX) */
   /* int */
@@ -196,15 +187,16 @@ struct st_maria_plugin	i_s_wsrep_connections=
 
   /* the function to invoke when plugin is unloaded */
   /* int (*)(void*); */
-  i_s_common_deinit,
+  wsrep_connection_monitor_plugin_deinit,
 
   i_s_version, nullptr, nullptr, PACKAGE_VERSION,
   MariaDB_PLUGIN_MATURITY_STABLE
-};
+}
+maria_declare_plugin_end;
 
 static void wsrep_connection_remove(const std::string &scheme, const std::string addr)
 {
-  std::lock_guard<std::mutex> wsrep_lock(wsrep_connection_mutex);
+  std::lock_guard<std::mutex> wsrep_lock(wsrep_connections_mutex);
   WSREP_DEBUG("wsrep_connection_remove: %s//%s", scheme.c_str(), addr.c_str());
   std::list<wsrep_connection_t>::iterator i = wsrep_connections.begin();
   while(i != wsrep_connections.end())
@@ -223,7 +215,6 @@ static void wsrep_connection_remove(const std::string &scheme, const std::string
 
 static void wsrep_connection_add(const std::string &scheme, const std::string addr)
 {
-  int error=0;
   my_thread_init();
   THD thd(0);
   thd.thread_stack= (char *) &thd;
@@ -231,7 +222,7 @@ static void wsrep_connection_add(const std::string &scheme, const std::string ad
 
   WSREP_DEBUG("wsrep_connection_add: %s%%%s", scheme.c_str(), addr.c_str());
 
-  std::lock_guard<std::mutex> wsrep_lock(wsrep_connection_mutex);
+  std::lock_guard<std::mutex> wsrep_lock(wsrep_connections_mutex);
   std::list<wsrep_connection_t>::iterator i = wsrep_connections.begin();
   while(i != wsrep_connections.end())
   {
@@ -254,11 +245,7 @@ static void wsrep_connection_add(const std::string &scheme, const std::string ad
     wsrep_connections.push_back(new_connection);
   }
   my_thread_end();
-  return 0;
 }
-
-}
-
 
 void wsrep_connection_monitor_update(
 				     wsrep::connection_monitor_service::connection_monitor_key key,
@@ -272,14 +259,15 @@ void wsrep_connection_monitor_update(
     /* Galera library has disconnected one of the connections. Remove it from in-memory
        cache if found. If not found we ignore request. */
     wsrep_connection_remove(scheme, addr);
-    break
+    break;
   }
-  case wsrep::connection_monitor_service::connection_monitor_key::connection_disconnected:
+  case wsrep::connection_monitor_service::connection_monitor_key::connection_connected:
   {
     /* Galera library has created new connection. We identify node UUID and
        add connection information to in-memory cache. If this connection
        is already there we ignore request. */
     wsrep_connection_add(scheme, addr);
+    break;
   }
   default:
   {
