@@ -18,6 +18,8 @@
 IF(WITH_WSREP AND NOT EMBEDDED_LIBRARY)
   SET(WSREP_SOURCES
     wsrep_client_service.cc
+    wsrep_connection_monitor_service.cc
+    wsrep_connection_monitor_plugin.cc
     wsrep_high_priority_service.cc
     wsrep_server_service.cc
     wsrep_storage_service.cc

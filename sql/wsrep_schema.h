@@ -161,6 +161,13 @@ class Wsrep_schema
   */
   bool allowlist_check(Wsrep_allowlist_key key, const std::string& val);
 
+  /**
+     Read mysql.wsrep_members table to a memory cache
+
+     @return Zero on success, non-zero on failure.
+  */
+  int read_members(THD* thd, std::vector<Wsrep_view::member>& members);
+
  private:
   /* Non-copyable */
   Wsrep_schema(const Wsrep_schema&);

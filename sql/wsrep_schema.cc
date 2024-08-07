@@ -1817,3 +1817,81 @@ bool Wsrep_schema::allowlist_check(Wsrep_allowlist_key key,
   pthread_join(allowlist_check_thd, NULL);
   return arg.response;
 }
+
+int Wsrep_schema::read_members(THD* thd, std::vector<Wsrep_view::member>& members)
+{
+  int ret= 1;
+  int error;
+  TABLE_LIST members_table_l;
+  TABLE* members_table = 0;
+  bool end_members_scan= false;
+  Wsrep_id cluster_uuid;
+
+  // we don't want causal waits for reading non-replicated private data
+  int const wsrep_sync_wait_saved= thd->variables.wsrep_sync_wait;
+  thd->variables.wsrep_sync_wait= 0;
+
+  if (trans_begin(thd, MYSQL_START_TRANS_OPT_READ_ONLY))
+  {
+    WSREP_ERROR("wsrep_schema::read_members(): Failed to start transaction");
+    goto out;
+  }
+
+  Wsrep_schema_impl::init_stmt(thd);
+  if (Wsrep_schema_impl::open_for_read(thd, members_table_str.c_str(), &members_table_l))
+  {
+    goto out;
+  }
+  members_table= members_table_l.table;
+
+  if (Wsrep_schema_impl::init_for_scan(members_table)) {
+    goto out;
+  }
+
+  end_members_scan= true;
+
+  while (true)
+  {
+    if ((error= Wsrep_schema_impl::next_record(members_table)) == 0)
+    {
+      if (Wsrep_schema_impl::scan_member(members_table,
+                                         cluster_uuid,
+                                         members)) {
+        goto out;
+      }
+    }
+    else if (error == HA_ERR_END_OF_FILE)
+    {
+      break;
+    }
+    else
+    {
+      goto out;
+    }
+  }
+
+  end_members_scan= false;
+  if (Wsrep_schema_impl::end_scan(members_table))
+  {
+    goto out;
+  }
+  Wsrep_schema_impl::finish_stmt(thd);
+  (void)trans_commit(thd);
+  ret= 0;
+out:
+  if (end_members_scan) Wsrep_schema_impl::end_scan(members_table);
+
+  if (0 != ret)
+  {
+    trans_rollback_stmt(thd);
+    if (!trans_rollback(thd))
+    {
+      close_thread_tables(thd);
+    }
+  }
+
+  thd->release_transactional_locks();
+  thd->variables.wsrep_sync_wait= wsrep_sync_wait_saved;
+
+  return ret;
+}

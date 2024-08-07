@@ -1,0 +1,15 @@
+--source include/galera_cluster.inc
+
+--connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3
+--connection node_1
+# Save original auto_increment_offset values.
+--let $node_1=node_1
+--let $node_2=node_2
+--let $node_3=node_3
+--source ../galera/include/auto_increment_offset_save.inc
+
+SELECT * FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+--connection node_2
+SELECT * FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+--connection node_3
+SELECT * FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
