@@ -59,6 +59,7 @@ Then restart the build.
       "Disable building dbsim for wsrep-lib")
   endif()
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/wsrep-lib/include)
+  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/wsrep-lib/wsrep-API)
   INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/wsrep-lib/wsrep-API/v26)
 
   SET(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})

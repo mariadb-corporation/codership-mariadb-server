@@ -1,0 +1,75 @@
+connection node_2;
+connection node_1;
+connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3;
+connection node_3;
+connection node_1;
+connection node_1;
+connection node_2;
+connection node_3;
+connection node_1;
+CREATE TABLE t1(a int not null primary key) engine=innodb;
+INSERT INTO t1 VALUES (1),(2),(3),(4);
+connection node_2;
+SELECT * FROM t1;
+a
+1
+2
+3
+4
+connection node_3;
+SELECT * from t1;
+a
+1
+2
+3
+4
+connection node_1;
+SHOW CREATE TABLE INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+Table	Create Table
+wsrep_connections	CREATE TEMPORARY TABLE `wsrep_connections` (
+  `connection_id` bigint(21) unsigned NOT NULL,
+  `connection_scheme` varchar(3) NOT NULL,
+  `local_address` varchar(256) NOT NULL,
+  `remote_uuid` varchar(256) NOT NULL,
+  `remote_address` varchar(256) NOT NULL
+) ENGINE=MEMORY DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS,mysql.wsrep_cluster_members WHERE REMOTE_UUID = NODE_UUID;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_3 FROM mysql.wsrep_cluster_members;
+EXPECT_3
+3
+connection node_2;
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS,mysql.wsrep_cluster_members WHERE REMOTE_UUID = NODE_UUID;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_3 FROM mysql.wsrep_cluster_members;
+EXPECT_3
+3
+connection node_3;
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS,mysql.wsrep_cluster_members WHERE REMOTE_UUID = NODE_UUID;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_3 FROM mysql.wsrep_cluster_members;
+EXPECT_3
+3
+connection node_1;
+DROP TABLE t1;

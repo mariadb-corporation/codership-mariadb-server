@@ -18,6 +18,8 @@
 IF(WITH_WSREP AND NOT EMBEDDED_LIBRARY)
   SET(WSREP_SOURCES
     wsrep_client_service.cc
+    wsrep_connection_monitor_plugin.cc
+    wsrep_connection_monitor_service.cc
     wsrep_high_priority_service.cc
     wsrep_server_service.cc
     wsrep_storage_service.cc
@@ -41,12 +43,18 @@ IF(WITH_WSREP AND NOT EMBEDDED_LIBRARY)
     )
   MYSQL_ADD_PLUGIN(wsrep_provider ${WSREP_SOURCES} DEFAULT NOT_EMBEDDED LINK_LIBRARIES wsrep-lib wsrep_api_v26)
   MYSQL_ADD_PLUGIN(wsrep ${WSREP_SOURCES} MANDATORY NOT_EMBEDDED LINK_LIBRARIES wsrep-lib wsrep_api_v26)
+  MYSQL_ADD_PLUGIN(wsrep_connection_monitor ${WSREP_SOURCES} MANDATORY NOT_EMBEDDED LINK_LIBRARIES wsrep-lib wsrep_api_v26)
+  # wsrep and wsrep_connection_monitor plugin needs some wsrep symbols from inside mysqld
+  # we have to remove -fvisibility=hidden from these
   IF(VISIBILITY_HIDDEN_FLAG AND TARGET wsrep)
-    # wsrep_info plugin needs some wsrep symbols from inside mysqld
-    # we have to remove -fvisibility=hidden from wsrep
     GET_TARGET_PROPERTY(f wsrep COMPILE_FLAGS)
     STRING(REPLACE "${VISIBILITY_HIDDEN_FLAG}" "" f ${f})
     SET_TARGET_PROPERTIES(wsrep PROPERTIES COMPILE_FLAGS "${f}")
+  ENDIF()
+  IF(VISIBILITY_HIDDEN_FLAG AND TARGET wsrep_connection_monitor)
+    GET_TARGET_PROPERTY(f wsrep_connection_monitor COMPILE_FLAGS)
+    STRING(REPLACE "${VISIBILITY_HIDDEN_FLAG}" "" f ${f})
+    SET_TARGET_PROPERTIES(wsrep_connection_monitor PROPERTIES COMPILE_FLAGS "${f}")
   ENDIF()
 ELSE()
   ADD_LIBRARY(wsrep STATIC wsrep_dummy.cc)
