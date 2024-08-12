@@ -895,6 +895,19 @@ void init_update_queries(void)
   sql_command_flags[SQLCOM_DROP_TABLE]|=       CF_WSREP_MAY_IGNORE_ERRORS;
   sql_command_flags[SQLCOM_DROP_INDEX]|=       CF_WSREP_MAY_IGNORE_ERRORS;
   sql_command_flags[SQLCOM_ALTER_TABLE]|=      CF_WSREP_MAY_IGNORE_ERRORS;
+  /*
+    Basic DML-statements that create writeset.
+  */
+  sql_command_flags[SQLCOM_INSERT]|=           CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_INSERT_SELECT]|=    CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_REPLACE]|=          CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_REPLACE_SELECT]|=   CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_UPDATE]|=           CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_UPDATE_MULTI]|=     CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_LOAD]|=             CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_DELETE]|=           CF_WSREP_BASIC_DML;
+  sql_command_flags[SQLCOM_DELETE_MULTI]|=     CF_WSREP_BASIC_DML;
+
 #endif /* WITH_WSREP */
 }
 
@@ -4719,7 +4732,16 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
 
         // For !InnoDB we start TOI if it is not yet started and hope for the best
         if (!is_innodb && !wsrep_toi)
-          WSREP_TO_ISOLATION_BEGIN(first_table->db.str, first_table->table_name.str, NULL);
+        {
+          const legacy_db_type db_type= first_table->table->file->partition_ht()->db_type;
+          const bool replicate=
+            ((db_type == DB_TYPE_MYISAM && wsrep_check_mode(WSREP_MODE_REPLICATE_MYISAM)) ||
+             (db_type == DB_TYPE_ARIA && wsrep_check_mode(WSREP_MODE_REPLICATE_ARIA)));
+
+          /* Currently we support TOI for MyISAM and Aria only. */
+          if (replicate)
+            WSREP_TO_ISOLATION_BEGIN(first_table->db.str, first_table->table_name.str, NULL);
+        }
       }
 #endif /* WITH_WSREP */
       /*

@@ -1,0 +1,156 @@
+--source include/galera_cluster.inc
+--source include/have_aria.inc
+
+--connection node_1
+create table t1 (id serial not null primary key, val int) engine=innodb;
+create table t2 (id serial not null primary key, val int) engine=aria;
+ 
+insert into t1 values(1, 23);
+insert into t2 values(2, 42);
+ 
+begin;
+update t1 set val=24 where id=1;
+update t2 set val=41 where id=2;
+--error ER_ERROR_DURING_COMMIT
+commit;
+
+SELECT * FROM t1;
+SELECT * FROM t2;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT * FROM t2;
+DROP TABLE t1, t2;
+
+--connection node_1
+SET GLOBAL wsrep_mode='REPLICATE_ARIA';
+create table t1 (id serial not null primary key, val int) engine=innodb;
+create table t2 (id serial not null primary key, val int) engine=aria;
+ 
+insert into t1 values(1, 23);
+insert into t2 values(2, 42);
+ 
+begin;
+update t1 set val=24 where id=1;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t2 set val=41 where id=2;
+commit;
+
+SELECT * FROM t1;
+SELECT * FROM t2;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT * FROM t2;
+DROP TABLE t1, t2;
+
+--connection node_1
+SET GLOBAL wsrep_mode='';
+
+--connection node_1
+SET GLOBAL wsrep_mode='REPLICATE_MYISAM';
+create table t1 (id serial not null primary key, val int) engine=innodb;
+create table t2 (id serial not null primary key, val int) engine=myisam;
+ 
+insert into t1 values(1, 23);
+insert into t2 values(2, 42);
+ 
+begin;
+update t1 set val=24 where id=1;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t2 set val=41 where id=2;
+commit;
+
+SELECT * FROM t1;
+SELECT * FROM t2;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT * FROM t2;
+DROP TABLE t1, t2;
+
+--connection node_1
+SET GLOBAL wsrep_mode='REPLICATE_MYISAM,REPLICATE_ARIA';
+create table t1 (id serial not null primary key, val int) engine=innodb;
+create table t2 (id serial not null primary key, val int) engine=myisam;
+create table t3 (id serial not null primary key, val int) engine=aria;
+ 
+insert into t1 values(1, 23);
+insert into t2 values(2, 42);
+insert into t3 values(3, 23);
+ 
+begin;
+update t1 set val=24 where id=1;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t2 set val=41 where id=2;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t3 set val=24 where id=3;
+commit;
+
+SELECT * FROM t1;
+SELECT * FROM t2;
+SELECT * FROM t3;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT * FROM t2;
+SELECT * FROM t3;
+DROP TABLE t1,t2,t3;
+
+--connection node_1
+SET GLOBAL wsrep_mode='REPLICATE_MYISAM,REPLICATE_ARIA';
+create table t1 (id serial not null primary key, val int) engine=innodb;
+create table t2 (id serial not null primary key, val int) engine=myisam;
+create table t3 (id serial not null primary key, val int) engine=aria;
+ 
+insert into t1 values(1, 23);
+insert into t2 values(2, 42);
+insert into t3 values(3, 23);
+ 
+begin;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t2 set val=411 where id=2;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t3 set val=500 where id=3;
+update t1 set val=241 where id=1;
+commit;
+
+SELECT * FROM t1;
+SELECT * FROM t2;
+SELECT * FROM t3;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT * FROM t2;
+SELECT * FROM t3;
+DROP TABLE t1, t2, t3;
+
+
+--connection node_1
+create table t1 (id serial not null primary key, val int) engine=myisam;
+create table t2 (id serial not null primary key, val int) engine=aria;
+ 
+insert into t1 values(1, 23);
+insert into t2 values(2, 42);
+#
+# Currently, we can't support single table transactional DML
+#
+begin;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t1 set val=411 where id=2;
+commit;
+begin;
+--error ER_GALERA_REPLICATION_NOT_SUPPORTED
+update t2 set val=411 where id=2;
+commit;
+
+SELECT * FROM t1;
+SELECT * FROM t2;
+
+--connection node_2
+SELECT * FROM t1;
+SELECT * FROM t2;
+DROP TABLE t1, t2;
+
+--connection node_1
+SET GLOBAL wsrep_mode='';
