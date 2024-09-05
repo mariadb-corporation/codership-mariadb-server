@@ -104,6 +104,7 @@ fi
 DATA="$WSREP_SST_OPT_DATA"
 
 INFO_FILE='mariadb_backup_galera_info'
+INFO_FILE_OLD='xtrabackup_galera_info'
 DONOR_INFO_FILE='donor_galera_info'
 IST_FILE='xtrabackup_ist'
 MAGIC_FILE="$DATA/$INFO_FILE"
@@ -681,8 +682,8 @@ cleanup_at_exit()
 
     if [ $estatus -ne 0 ]; then
         wsrep_log_error "Removing $MAGIC_FILE file due to signal"
-        [ -f "$MAGIC_FILE" ] && rm -f "$MAGIC_FILE" || :
-        [ -f "$DONOR_MAGIC_FILE" ] && rm -f "$DONOR_MAGIC_FILE" || :
+        [ -f "$MAGIC_FILE" ] && rm -rf "$MAGIC_FILE" || :
+        [ -f "$DONOR_MAGIC_FILE" ] && rm -rf "$DONOR_MAGIC_FILE" || :
     fi
 
     if [ "$WSREP_SST_OPT_ROLE" = 'joiner' ]; then
@@ -847,6 +848,14 @@ recv_joiner()
 
     if [ $checkf -eq 1 ]; then
         if [ ! -r "$MAGIC_FILE" ]; then
+          if [ -r "$DATA/$INFO_FILE_OLD" ]; then
+            wsrep_log_info "Backup from old release file ($DATA/$INFO_FILE_OLD)" \
+                           " exists but not ($MAGIC_FILE)"
+            mv -f "$DATA/$INFO_FILE_OLD" "$MAGIC_FILE"
+          fi
+	fi
+
+        if [ ! -r "$MAGIC_FILE" ]; then
             # this message should cause joiner to abort:
             wsrep_log_error "receiving process ended without creating" \
                             "magic file ($MAGIC_FILE)"
@@ -919,7 +928,7 @@ monitor_process()
     done
 }
 
-[ -f "$MAGIC_FILE" ] && rm -f "$MAGIC_FILE"
+[ -f "$MAGIC_FILE" ] && rm -rf "$MAGIC_FILE"
 [ -f "$DONOR_MAGIC_FILE" ] && rm -rf "$DONOR_MAGIC_FILE"
 
 read_cnf
@@ -1337,8 +1346,8 @@ else # joiner
     [ -f "$DATA/$IST_FILE" ] && rm -f "$DATA/$IST_FILE"
 
     # May need mariadb_backup_checkpoints later on
-    [ -f "$DATA/xtrabackup_binary" ]      && rm -f "$DATA/xtrabackup_binary"
-    [ -f "$DATA/mariadb_backup_galera_info" ] && rm -f "$DATA/mariadb_backup_galera_info"
+    [ -f "$DATA/xtrabackup_binary" ]      && rm -rf "$DATA/xtrabackup_binary"
+    [ -f "$DATA/mariadb_backup_galera_info" ] && rm -rf "$DATA/mariadb_backup_galera_info"
 
     ADDR="$WSREP_SST_OPT_HOST"
 
@@ -1451,8 +1460,18 @@ else # joiner
         monitor_process $jpid
 
         if [ ! -s "$DATA/mariadb_backup_checkpoints" ]; then
+            if [ -s "$DATA/xtrabackup_checkpoints" ]; then
+                wsrep_log_info "Backup from old release file ($DATA/xtrabackup_checkpoints)" \
+                           " exists but not ($DATA/mariadb_backup_checkpoints)"
+                mv -f "$DATA/xtrabackup_checkpoints" "$DATA/mariadb_backup_checkpoints"
+            fi
+	fi
+
+        if [ ! -s "$DATA/mariadb_backup_checkpoints" ]; then
             wsrep_log_error "mariadb_backup_checkpoints missing," \
                             "failed mariadb-backup/SST on donor"
+            wsrep_log_info "Contents of datadir:"
+            wsrep_log_info $(ls -l "$dir/"*)
             exit 2
         fi
 
