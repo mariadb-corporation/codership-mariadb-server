@@ -622,9 +622,9 @@ static bool wsrep_will_BF_abort(const lock_t *lock, const trx_t *trx)
 {
   ut_ad(wsrep_thd_is_BF(trx->mysql_thd, false));
 
-  /* Lock holder is not BF - can BF abort it. */
-  if (!wsrep_thd_is_BF(lock->trx->mysql_thd, false))
-    return true;
+  /* Don't BF abort system transactions. */
+  if (!lock->trx->is_wsrep())
+    return false;
 
   /* BF trx will wait for the lock, but it doesn't have to according
      to Wsrep rules, meaning it must BF abort the lock holder. */
