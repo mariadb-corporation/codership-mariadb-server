@@ -36,6 +36,13 @@ public:
 
   bool connection_monitor_disconnect_cb(
       wsrep_connection_key_t id) WSREP_NOEXCEPT override;
+
+  bool connection_monitor_ssl_info_cb(
+      wsrep_connection_key_t id,
+      const wsrep::const_buffer& chipher,
+      const wsrep::const_buffer& certificate_subject,
+      const wsrep::const_buffer& certificate_issuer,
+      const wsrep::const_buffer& version) WSREP_NOEXCEPT override;
 };
 
 bool Wsrep_connection_monitor_service::connection_monitor_connect_cb (
@@ -58,6 +65,22 @@ bool Wsrep_connection_monitor_service::connection_monitor_disconnect_cb (
   wsrep_connection_key_t id) WSREP_NOEXCEPT
 {
   return wsrep_connection_monitor_disconnect(id);
+}
+
+bool Wsrep_connection_monitor_service::connection_monitor_ssl_info_cb (
+  wsrep_connection_key_t id,
+  const wsrep::const_buffer& chipher,
+  const wsrep::const_buffer& certificate_subject,
+  const wsrep::const_buffer& certificate_issuer,
+  const wsrep::const_buffer& version)
+  WSREP_NOEXCEPT
+{
+  std::string ch(chipher.data());
+  std::string subject(certificate_subject.data());
+  std::string issuer(certificate_issuer.data());
+  std::string vers(version.data());
+
+  return wsrep_connection_monitor_ssl_info(id, ch, subject, issuer, vers);
 }
 
 std::unique_ptr<wsrep::connection_monitor_service> monitor_entrypoint;

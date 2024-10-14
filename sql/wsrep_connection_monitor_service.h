@@ -36,6 +36,12 @@ bool wsrep_connection_monitor_connect(wsrep_connection_key_t id,
 
 bool wsrep_connection_monitor_disconnect(wsrep_connection_key_t id);
 
+bool wsrep_connection_monitor_ssl_info(wsrep_connection_key_t id,
+                                       const std::string &chipher,
+                                       const std::string &certificate_subject,
+                                       const std::string &certificate_issuer,
+                                       const std::string &version);
+
 /** Structure holding information of one Galera connection */
 typedef struct
 {
@@ -44,6 +50,10 @@ typedef struct
   std::string local_address;
   std::string remote_uuid;
   std::string remote_address;
+  std::string chipher;
+  std::string certificate_subject;
+  std::string certificate_issuer;
+  std::string version;
 } wsrep_connection_t;
 
 #endif /* WSREP_PROVIDER_CONNECTION_MONITOR_H */

@@ -65,6 +65,14 @@ static ST_FIELD_INFO wsrep_connections_fields_info[]=
   Column ("remote_uuid", Varchar(256), NOT_NULL),
 #define REMOTE_ADDRESS 4
   Column ("remote_address", Varchar(256), NOT_NULL),
+#define CHIPHER 5
+  Column ("chipher", Varchar(256), NOT_NULL),
+#define CERTIFICATE_SUBJECT 6
+  Column ("certificate_subject", Varchar(256), NOT_NULL),
+#define CERTIFICATE_ISSUER 7
+  Column ("certificate_issuer", Varchar(256), NOT_NULL),
+#define CERTIFICATE_VERSION 8
+  Column ("certificate_version", Varchar(256), NOT_NULL),
 
   CEnd()
 };
@@ -89,16 +97,6 @@ static int store_string(Field* field, const std::string &str)
   return field->store(str.c_str(), uint(str.size()), system_charset_info);
 }
 
-/**
-  Return Galera connections in-memory cache
-
-  @return reference to list of Galera connections
-*/
-static std::map<uintptr_t, wsrep_connection_t>& get_connections(void)
-{
-  return wsrep_connections;
-}
-
 static int fill_wsrep_connections(THD *thd, TABLE_LIST *tables, Item *)
 {
   // Require wsrep enabled and deny access to non-superusers
@@ -118,9 +116,9 @@ static int fill_wsrep_connections(THD *thd, TABLE_LIST *tables, Item *)
 
   Field** fields= tables->table->field;
   std::lock_guard<std::mutex> wsrep_connections_lock(wsrep_connections_mutex);
-  std::map<uintptr_t, wsrep_connection_t>& wsrep_connections= get_connections();
-
   std::map<uintptr_t, wsrep_connection_t>::iterator c = wsrep_connections.begin();
+
+  WSREP_DEBUG(":::JAN:::FILL_WSREP_CONNECTIONS");
   while( c != wsrep_connections.end())
   {
     wsrep_connection_t &conn = c->second;
@@ -129,6 +127,10 @@ static int fill_wsrep_connections(THD *thd, TABLE_LIST *tables, Item *)
     OK(store_string(fields[LOCAL_ADDRESS], conn.local_address));
     OK(store_string(fields[REMOTE_UUID], conn.remote_uuid));
     OK(store_string(fields[REMOTE_ADDRESS], conn.remote_address));
+    OK(store_string(fields[CHIPHER], conn.chipher));
+    OK(store_string(fields[CERTIFICATE_SUBJECT], conn.certificate_subject));
+    OK(store_string(fields[CERTIFICATE_ISSUER], conn.certificate_issuer));
+    OK(store_string(fields[CERTIFICATE_VERSION], conn.version));
     OK(schema_table_store_record(thd, tables->table));
     c++;
   }
@@ -207,19 +209,19 @@ bool wsrep_connection_monitor_connect(wsrep_connection_key_t id,
   uintptr_t key = (uintptr_t)(id);
 
   std::lock_guard<std::mutex> wsrep_lock(wsrep_connections_mutex);
-  std::map<uintptr_t, wsrep_connection_t> &wsrep_connections = get_connections();
   std::map<uintptr_t, wsrep_connection_t>::iterator i = wsrep_connections.find(key);
 
   WSREP_DEBUG("wsrep_connection_add: %llu : %s %s %s %s",
-	      key, scheme.c_str(), local_addr.c_str(),
-	      remote_uuid.c_str(), remote_addr.c_str());
+              key, scheme.c_str(), local_addr.c_str(),
+              remote_uuid.c_str(), remote_addr.c_str());
 
   // Not found : add
   if (i == wsrep_connections.end())
   {
     WSREP_DEBUG("wsrep_connection_add: key %lld not found add %s %s %s %s", key,
-		scheme.c_str(), local_addr.c_str(), remote_uuid.c_str(), remote_addr.c_str());
-    wsrep_connection_t new_connection {key, scheme, local_addr, remote_uuid, remote_addr};
+                scheme.c_str(), local_addr.c_str(), remote_uuid.c_str(), remote_addr.c_str());
+    wsrep_connection_t new_connection {key, scheme, local_addr, remote_uuid, remote_addr,
+                                       "","","",""};
     wsrep_connections.insert(std::pair<uintptr_t, wsrep_connection_t>(key, new_connection));
   }
   else
@@ -227,9 +229,10 @@ bool wsrep_connection_monitor_connect(wsrep_connection_key_t id,
     // found, update
     wsrep_connection_t &old_conn= i->second;
     WSREP_DEBUG("wsrep_connection_add: key %lld found %s %s %s %s new %s %s %s",
-		key, old_conn.scheme.c_str(), old_conn.local_address.c_str(),
-		old_conn.remote_uuid.c_str(), old_conn.remote_address.c_str(),
-		remote_uuid.c_str(), remote_addr.c_str(), local_addr.c_str());
+                key, old_conn.scheme.c_str(), old_conn.local_address.c_str(),
+                old_conn.remote_uuid.c_str(), old_conn.remote_address.c_str(),
+                remote_uuid.c_str(), remote_addr.c_str(), local_addr.c_str());
+
     old_conn.remote_uuid= remote_uuid;
     old_conn.scheme= scheme;
     old_conn.remote_address= remote_addr;
@@ -242,7 +245,6 @@ bool wsrep_connection_monitor_disconnect(wsrep_connection_key_t id)
 {
   uintptr_t key = (uintptr_t)id;
   std::lock_guard<std::mutex> wsrep_lock(wsrep_connections_mutex);
-  std::map<uintptr_t, wsrep_connection_t> &wsrep_connections= get_connections();
   WSREP_DEBUG("wsrep_connection_remove: %lld", key);
 
   std::map<uintptr_t, wsrep_connection_t>::iterator c = wsrep_connections.find(key);
@@ -251,11 +253,42 @@ bool wsrep_connection_monitor_disconnect(wsrep_connection_key_t id)
   {
     wsrep_connection_t conn= c->second;
     WSREP_DEBUG("wsrep_connection_remove: found for %llu : %s %s %s %s",
-		key,
-		conn.scheme.c_str(), conn.local_address.c_str(),
+                key,
+                conn.scheme.c_str(), conn.local_address.c_str(),
                 conn.remote_uuid.c_str(), conn.remote_address.c_str());
     wsrep_connections.erase(c);
   }
+  return true;
+}
+
+bool wsrep_connection_monitor_ssl_info(wsrep_connection_key_t id,
+                                       const std::string &chipher,
+                                       const std::string &certificate_subject,
+                                       const std::string &certificate_issuer,
+                                       const std::string &version)
+{
+  uintptr_t key = (uintptr_t)(id);
+
+  std::lock_guard<std::mutex> wsrep_lock(wsrep_connections_mutex);
+  std::map<uintptr_t, wsrep_connection_t>::iterator i = wsrep_connections.find(key);
+
+  // Not found : add
+  if (i != wsrep_connections.end())
+  {
+    // found, update
+    wsrep_connection_t &old_conn= i->second;
+    WSREP_DEBUG("wsrep_connection_ssl_info: key %lld %s %s %s %s : %s %s %s %s",
+                key, old_conn.scheme.c_str(), old_conn.local_address.c_str(),
+                old_conn.remote_uuid.c_str(), old_conn.remote_address.c_str(),
+                chipher.c_str(), certificate_subject.c_str(),
+                certificate_issuer.c_str(), version.c_str());
+    old_conn.chipher= chipher;
+    old_conn.certificate_subject= certificate_subject;
+    old_conn.certificate_issuer= certificate_issuer;
+    old_conn.version= version;
+  }
+  else
+    WSREP_DEBUG("::JAN::not found %lld", key);
   return true;
 }
 
