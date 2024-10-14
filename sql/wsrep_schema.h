@@ -1,4 +1,4 @@
-/* Copyright (C) 2015-2023 Codership Oy <info@codership.com>
+/* Copyright (C) 2015-2024 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,6 +23,9 @@
 #include "mysqld.h"
 #include "wsrep_mysqld.h"
 
+#include <mutex>
+#include <map>
+
 /*
   Forward decls
 */
@@ -44,18 +47,25 @@ class Wsrep_schema
   Wsrep_schema();
   ~Wsrep_schema();
 
-  /*
+  /**
     Initialize wsrep schema. Storage engines must be running before
     calling this function.
   */
   int init();
 
-  /*
+  /**
+    Has wsrep schema inited.
+
+    @return true if inited, false if not
+  */
+  bool inited();
+
+  /**
     Store wsrep view info into wsrep schema.
   */
   int store_view(THD*, const Wsrep_view& view);
 
-  /*
+  /**
     Restore view info from stable storage.
   */
   Wsrep_view restore_view(THD* thd, const Wsrep_id& own_id) const;
@@ -162,6 +172,8 @@ class Wsrep_schema
 };
 
 extern Wsrep_schema* wsrep_schema;
+
+extern void wsrep_init_thd_for_schema(THD *thd);
 
 extern LEX_CSTRING WSREP_LEX_SCHEMA;
 extern LEX_CSTRING WSREP_LEX_STREAMING;

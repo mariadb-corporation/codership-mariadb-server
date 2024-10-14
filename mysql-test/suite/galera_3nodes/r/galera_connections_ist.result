@@ -1,0 +1,126 @@
+connection node_2;
+connection node_1;
+connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3;
+connection node_3;
+connection node_1;
+connection node_1;
+connection node_2;
+connection node_3;
+connection node_1;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY, f2 CHAR(1));
+INSERT INTO t1 VALUES (1, 'a'), (2, 'a'), (3, 'a'), (4, 'a'), (5, 'a'),(6, 'a');
+connection node_2;
+SELECT * FROM t1;
+f1	f2
+1	a
+2	a
+3	a
+4	a
+5	a
+6	a
+connection node_3;
+SELECT * from t1;
+f1	f2
+1	a
+2	a
+3	a
+4	a
+5	a
+6	a
+connection node_1;
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+# Disconnect node_2
+connection node_2;
+SET SESSION wsrep_sync_wait=0;
+Unloading wsrep provider ...
+SET GLOBAL wsrep_cluster_address = '';
+connection node_1;
+UPDATE t1 SET f2 = 'b' WHERE f1 > 1;
+# We should now have only 1 connection
+SELECT COUNT(*) AS EXPECT_1 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_1
+1
+connection node_3;
+# We should now have only 1 connection
+SELECT COUNT(*) AS EXPECT_1 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_1
+1
+connection node_1;
+UPDATE t1 SET f2 = 'c' WHERE f1 > 2;
+connection node_2;
+Loading wsrep_provider ...
+SET SESSION wsrep_on = 0;
+SET SESSION wsrep_on = 1;
+SET GLOBAL wsrep_provider_options = 'dbug=';
+connection node_1;
+UPDATE t1 SET f2 = 'd' WHERE f1 > 3;
+# We should see IST connection
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+connection node_2;
+SET GLOBAL wsrep_provider_options = 'signal=recv_IST_after_apply_trx';
+connection node_1;
+connection node_1;
+SELECT * FROM t1;
+f1	f2
+1	a
+2	b
+3	c
+4	d
+5	d
+6	d
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+connection node_2;
+SELECT * FROM t1;
+f1	f2
+1	a
+2	b
+3	c
+4	d
+5	d
+6	d
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+connection node_3;
+SELECT * FROM t1;
+f1	f2
+1	a
+2	b
+3	c
+4	d
+5	d
+6	d
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+EXPECT_2
+2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+EXPECT_2
+2
+connection node_1;
+DROP TABLE t1;
+disconnect node_2;
+disconnect node_1;

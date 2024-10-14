@@ -1,0 +1,59 @@
+--source include/galera_cluster.inc
+
+--connect node_3, 127.0.0.1, root, , test, $NODE_MYPORT_3
+--connection node_3
+--let $wait_condition = SELECT VARIABLE_VALUE = 3 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size'
+--source include/wait_condition.inc
+
+--connection node_1
+# Save original auto_increment_offset values.
+--let $node_1=node_1
+--let $node_2=node_2
+--let $node_3=node_3
+--source ../galera/include/auto_increment_offset_save.inc
+
+--connection node_1
+CREATE TABLE t1(a int not null primary key) engine=innodb;
+INSERT INTO t1 VALUES (1),(2),(3),(4);
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't1'
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) = 4 FROM test.t1;
+--source include/wait_condition.inc
+SELECT * FROM t1;
+
+--connection node_3
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't1'
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) = 4 FROM test.t1;
+--source include/wait_condition.inc
+SELECT * from t1;
+
+#
+# Table contents is not deterministic only number of connections is
+#
+--connection node_1
+SHOW CREATE TABLE INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+#
+# Two of the connections should be from exactly same node as in cluster members table, one is naturally this node
+#
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS,mysql.wsrep_cluster_members WHERE REMOTE_UUID = NODE_UUID;
+SELECT COUNT(*) AS EXPECT_3 FROM mysql.wsrep_cluster_members;
+
+--connection node_2
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS,mysql.wsrep_cluster_members WHERE REMOTE_UUID = NODE_UUID;
+SELECT COUNT(*) AS EXPECT_3 FROM mysql.wsrep_cluster_members;
+
+--connection node_3
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS;
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS WHERE CONNECTION_SCHEME='tcp';
+SELECT COUNT(*) AS EXPECT_2 FROM INFORMATION_SCHEMA.WSREP_CONNECTIONS,mysql.wsrep_cluster_members WHERE REMOTE_UUID = NODE_UUID;
+SELECT COUNT(*) AS EXPECT_3 FROM mysql.wsrep_cluster_members;
+
+--connection node_1
+DROP TABLE t1;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2015-2023 Codership Oy <info@codership.com>
+/* Copyright (C) 2015-2024 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@
 
 #include <string>
 #include <sstream>
-
+#include <map>
 #define WSREP_SCHEMA          "mysql"
 #define WSREP_STREAMING_TABLE "wsrep_streaming_log"
 #define WSREP_CLUSTER_TABLE   "wsrep_cluster"
@@ -612,9 +612,8 @@ static int scan_member(TABLE* table,
   }
 
   try {
-    members.push_back(Wsrep_view::member(member_id,
-                                         member_name,
-                                         member_incoming));
+    Wsrep_view::member member(member_id, member_name, member_incoming);
+    members.push_back(member);
   }
   catch (...) {
     WSREP_ERROR("Caught exception while scanning members table");
@@ -694,7 +693,7 @@ Wsrep_schema::Wsrep_schema() = default;
 
 Wsrep_schema::~Wsrep_schema() = default;
 
-static void wsrep_init_thd_for_schema(THD *thd)
+void wsrep_init_thd_for_schema(THD *thd)
 {
   thd->security_ctx->skip_grants();
   thd->system_thread= SYSTEM_THREAD_GENERIC;
@@ -719,6 +718,11 @@ static void wsrep_init_thd_for_schema(THD *thd)
 }
 
 static bool wsrep_schema_ready= false;
+
+bool Wsrep_schema::inited()
+{
+  return wsrep_schema_ready;
+}
 
 int Wsrep_schema::init()
 {
