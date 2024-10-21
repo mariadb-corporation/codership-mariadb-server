@@ -1659,6 +1659,9 @@ rpl_binlog_state::update_nolock(const struct rpl_gtid *gtid, bool strict)
   {
     if (strict && elem->last_gtid && elem->last_gtid->seq_no >= gtid->seq_no)
     {
+      WSREP_DEBUG("::JAN::update_nolock last_gtid %lld:%lld:%llu >= %lld%lld:%llu",
+		  elem->last_gtid->domain_id, elem->last_gtid->server_id,
+		  elem->last_gtid->seq_no, gtid->domain_id, gtid->server_id, gtid->seq_no);
       my_error(ER_GTID_STRICT_OUT_OF_ORDER, MYF(0), gtid->domain_id,
                gtid->server_id, gtid->seq_no, elem->last_gtid->domain_id,
                elem->last_gtid->server_id, elem->last_gtid->seq_no);
@@ -1822,6 +1825,9 @@ rpl_binlog_state::check_strict_sequence(uint32 domain_id, uint32 server_id,
                                        sizeof(domain_id))) &&
       elem->last_gtid && elem->last_gtid->seq_no >= seq_no)
   {
+    WSREP_DEBUG("::JAN::check_strict_sequence last_gtid %lld:%lld:%llu >= %lld%lld:%llu",
+		elem->last_gtid->domain_id, elem->last_gtid->server_id,
+		elem->last_gtid->seq_no, domain_id, server_id, seq_no);
     if (!no_error)
       my_error(ER_GTID_STRICT_OUT_OF_ORDER, MYF(0), domain_id, server_id, seq_no,
                elem->last_gtid->domain_id, elem->last_gtid->server_id,

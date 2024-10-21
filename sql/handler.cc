@@ -1962,7 +1962,17 @@ int ha_commit_trans(THD *thd, bool all)
                                 need_commit_ordered);
   if (!cookie)
   {
-    WSREP_DEBUG("log_and_order has failed %llu %d", thd->thread_id, cookie);
+    WSREP_DEBUG("log_and_order has failed %llu %d need_prepare %d need_commit_ordered %d query=%s",
+                thd->thread_id, cookie, need_prepare_ordered, need_commit_ordered, wsrep_thd_query(thd));
+    wsrep::seqno const s = wsrep_xid_seqno(thd->wsrep_xid);
+    if (!s.is_undefined())
+    {
+      const unsigned char *uuid= wsrep_xid_uuid((const xid_t*)&thd->wsrep_xid);
+      char uuid_str[40]= {0, };
+      wsrep_uuid_print((const wsrep_uuid_t*)uuid, uuid_str, sizeof(uuid_str));
+      WSREP_DEBUG("Current WSREPXid:  %s:%lld",
+                  uuid_str, wsrep_xid_seqno(thd->wsrep_xid));
+    }
     goto err;
   }
   DEBUG_SYNC(thd, "ha_commit_trans_after_log_and_order");
