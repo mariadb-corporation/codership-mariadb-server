@@ -1,4 +1,4 @@
-/* Copyright (C) 2013-2019 Codership Oy <info@codership.com>
+/* Copyright (C) 2013-2024 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -211,6 +211,7 @@ int wsrep_apply_events(THD*        thd,
     }
 
     ev->thd= thd;
+    thd->set_time();
     exec_res= ev->apply_event(thd->wsrep_rgi);
     DBUG_PRINT("info", ("exec_event result: %d", exec_res));
 
