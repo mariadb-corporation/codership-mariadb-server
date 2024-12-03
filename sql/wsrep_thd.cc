@@ -323,7 +323,7 @@ static bool wsrep_bf_abort_low(THD *bf_thd, THD *victim_thd)
                   };);
 #endif
 
-  wsrep::seqno bf_seqno(bf_thd->wsrep_trx().ws_meta().seqno());
+  wsrep::seqno bf_seqno(wsrep_thd_trx_seqno(bf_thd));
   bool ret;
 
   {

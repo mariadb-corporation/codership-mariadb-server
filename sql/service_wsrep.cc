@@ -201,25 +201,21 @@ extern "C" void wsrep_handle_SR_rollback(THD *bf_thd,
               victim_thd->wsrep_sr().fragments_certified(),
               wsrep_thd_transaction_state_str(victim_thd));
 
-  /* Note: do not store/reset globals before wsrep_bf_abort() call
-     to avoid losing BF thd context. */
-  if (!(bf_thd && bf_thd != victim_thd))
+  const bool self_abort= (!bf_thd || bf_thd == victim_thd);
+  if (self_abort)
   {
+    /* Don't hold the lock in sync wait. wsrep_thd_self_abort() grabs
+       the same lock again before performing BF abort. */
+    wsrep_thd_UNLOCK(victim_thd);
     DEBUG_SYNC(victim_thd, "wsrep_before_SR_rollback");
-  }
-  if (bf_thd)
-  {
-    wsrep_bf_abort(bf_thd, victim_thd);
+    wsrep_thd_self_abort(victim_thd);
   }
   else
   {
-    wsrep_thd_self_abort(victim_thd);
-  }
-
-  wsrep_thd_UNLOCK(victim_thd);
-
-  if (bf_thd)
-  {
+    /* Note: do not store/reset globals before wsrep_bf_abort() call
+       to avoid losing BF thd context. */
+    wsrep_bf_abort(bf_thd, victim_thd);
+    wsrep_thd_UNLOCK(victim_thd);
     wsrep_store_threadvars(bf_thd);
   }
 }
