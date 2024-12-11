@@ -5049,10 +5049,10 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
       for (TABLE_LIST *table= all_tables; table; table= table->next_global)
       {
         if (!lex->tmp_table() &&
-           (!thd->is_current_stmt_binlog_format_row() ||
-	    !is_temporary_table(table)))
+            (!thd->is_current_stmt_binlog_format_row() ||
+             !is_temporary_table(table)))
         {
-          WSREP_TO_ISOLATION_BEGIN(NULL, NULL, all_tables);
+          WSREP_TO_ISOLATION_BEGIN_DROP(NULL, NULL, all_tables);
           break;
         }
       }

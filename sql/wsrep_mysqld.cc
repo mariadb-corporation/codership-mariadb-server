@@ -1729,6 +1729,83 @@ static void wsrep_keys_free(wsrep_key_arr_t* key_arr)
  * @return 0 if parent table append was successful, non-zero otherwise.
 */
 bool
+wsrep_append_fk_parent_single_table(THD* thd, TABLE_LIST* tables,
+                                    wsrep::key_array* keys)
+{
+    DBUG_ENTER("wsrep_append_fk_parent_single_table");
+    bool fail= false;
+    TABLE_LIST *table;
+
+    for (table= tables; table; table= table->next_local)
+    {
+      if (is_temporary_table(table))
+      {
+        WSREP_DEBUG("Temporary table %s.%s already opened query=%s", table->db.str,
+                    table->table_name.str, wsrep_thd_query(thd));
+        DBUG_RETURN(false);
+      }
+    }
+
+    uint counter;
+    if (open_tables(thd, &tables, &counter, MYSQL_OPEN_FORCE_SHARED_HIGH_PRIO_MDL))
+    {
+      WSREP_DEBUG("Unable to open table for FK checks for %s", wsrep_thd_query(thd));
+      fail= true;
+      goto exit;
+    }
+
+    for (table= tables; table; table= table->next_local)
+    {
+      if (!is_temporary_table(table) && table->table)
+      {
+        FOREIGN_KEY_INFO *f_key_info;
+        List<FOREIGN_KEY_INFO> f_key_list;
+
+        table->table->file->get_foreign_key_list(thd, &f_key_list);
+        List_iterator_fast<FOREIGN_KEY_INFO> it(f_key_list);
+        while ((f_key_info=it++))
+        {
+          keys->push_back(wsrep_prepare_key_for_toi(f_key_info->referenced_db->str,
+                                                    f_key_info->referenced_table->str,
+                                                    wsrep::key::shared));
+
+          TABLE_LIST *tl_tmp= (TABLE_LIST *) thd->alloc(sizeof(TABLE_LIST));
+          tl_tmp->init_one_table(f_key_info->referenced_db,
+                                 f_key_info->referenced_table, 0, TL_READ);
+          table->next_local = tl_tmp;
+          if (wsrep_append_fk_parent_single_table(thd, table->next_local, keys))
+          {
+            fail= true;
+            goto exit;
+          }
+        }
+      } else {
+        DBUG_RETURN(false);
+      }
+    }
+
+exit:
+    if (!fail)
+    {
+      mysql_mutex_lock(&thd->LOCK_thd_kill);
+      if (thd->killed)
+      {
+        fail= true;
+      }
+      mysql_mutex_unlock(&thd->LOCK_thd_kill);
+    }
+
+    DBUG_RETURN(fail);
+}
+
+/*!
+ * @param thd    thread
+ * @param tables list of tables
+ * @param keys   prepared keys
+
+ * @return 0 if parent table append was successful, non-zero otherwise.
+*/
+bool
 wsrep_append_fk_parent_table(THD* thd, TABLE_LIST* tables, wsrep::key_array* keys)
 {
     bool fail= false;
@@ -2083,14 +2160,41 @@ wsrep::key wsrep_prepare_key_for_toi(const char* db, const char* table,
   return ret;
 }
 
-wsrep::key_array
-wsrep_prepare_keys_for_alter_add_fk(const char* child_table_db,
-                                    const Alter_info* alter_info)
+void
+wsrep_prepare_keys_for_drop_table_fk(THD* thd, const char* db_name,
+                                     const char* table_name,
+                                     wsrep::key_array &ret)
 
 {
-  wsrep::key_array ret;
+  ret.push_back(wsrep_prepare_key_for_toi(db_name, table_name,
+                                          wsrep::key::exclusive));
+  thd->release_transactional_locks();
+  MDL_savepoint mdl_savepoint= thd->mdl_context.mdl_savepoint();
+  TABLE_LIST *table;
+  TABLE_LIST *tl_tmp= (TABLE_LIST *) thd->alloc(sizeof(TABLE_LIST));
+  LEX_CSTRING db_name_lex = {db_name, strlen(db_name)};
+  LEX_CSTRING table_name_lex = {table_name, strlen(table_name)};
+  tl_tmp->init_one_table(&db_name_lex, &table_name_lex, 0, TL_READ);
+  wsrep_append_fk_parent_single_table(thd, tl_tmp, &ret);
+
+  close_thread_tables(thd);
+  thd->mdl_context.rollback_to_savepoint(mdl_savepoint);
+
+  for (table= tl_tmp; table; table= table->next_local)
+  {
+    table->table= NULL;
+    table->next_global= NULL;
+    table->mdl_request.ticket= NULL;
+  }
+}
+
+void
+wsrep_prepare_keys_for_alter_add_fk(THD* thd, const char* child_table_db,
+                                    List_iterator<Key> &key_iterator,
+                                    wsrep::key_array &ret)
+
+{
   Key *key;
-  List_iterator<Key> key_iterator(const_cast<Alter_info*>(alter_info)->key_list);
   while ((key= key_iterator++))
   {
     if (key->type == Key::FOREIGN_KEY)
@@ -2104,39 +2208,77 @@ wsrep_prepare_keys_for_alter_add_fk(const char* child_table_db,
       }
       ret.push_back(wsrep_prepare_key_for_toi(db_name, table_name,
                                               wsrep::key::exclusive));
+      thd->release_transactional_locks();
+      MDL_savepoint mdl_savepoint= thd->mdl_context.mdl_savepoint();
+      TABLE_LIST *table;
+      TABLE_LIST *tl_tmp= (TABLE_LIST *) thd->alloc(sizeof(TABLE_LIST));
+      LEX_CSTRING db_name_lex = {db_name, strlen(db_name)};
+      tl_tmp->init_one_table(&db_name_lex, &fk_key->ref_table, 0, TL_READ);
+      wsrep_append_fk_parent_single_table(thd, tl_tmp, &ret);
+
+      close_thread_tables(thd);
+      thd->mdl_context.rollback_to_savepoint(mdl_savepoint);
+
+      for (table= tl_tmp; table; table= table->next_local)
+      {
+        table->table= NULL;
+        table->next_global= NULL;
+        table->mdl_request.ticket= NULL;
+      }
     }
   }
-  return ret;
 }
 
-wsrep::key_array wsrep_prepare_keys_for_toi(const char *db,
+wsrep::key_array wsrep_prepare_keys_for_toi(THD* thd, const char *db,
                                             const char *table,
                                             const TABLE_LIST *table_list,
                                             const Alter_info *alter_info,
-                                            const wsrep::key_array *fk_tables)
+                                            const wsrep::key_array *fk_tables,
+                                            bool is_drop_table_enable= false)
 {
   wsrep::key_array ret;
+
   if (db || table)
   {
     ret.push_back(wsrep_prepare_key_for_toi(db, table, wsrep::key::exclusive));
   }
+
   for (const TABLE_LIST* table= table_list; table; table= table->next_global)
   {
-    ret.push_back(wsrep_prepare_key_for_toi(table->db.str, table->table_name.str,
+    ret.push_back(wsrep_prepare_key_for_toi(table->db.str,
+                                            table->table_name.str,
                                             wsrep::key::exclusive));
   }
+
   if (alter_info)
   {
-    wsrep::key_array fk(wsrep_prepare_keys_for_alter_add_fk(table_list->db.str, alter_info));
+    wsrep::key_array fk;
+    List_iterator<Key> key_iterator(
+        const_cast<Alter_info*>(alter_info)->key_list);
+    wsrep_prepare_keys_for_alter_add_fk(thd, table_list->db.str, key_iterator,
+                                        fk);
     if (!fk.empty())
     {
       ret.insert(ret.end(), fk.begin(), fk.end());
     }
   }
+
+  if (is_drop_table_enable)
+  {
+    wsrep::key_array fk;
+    wsrep_prepare_keys_for_drop_table_fk(thd, table_list->db.str,
+                                         table_list->table_name.str, fk);
+    if (!fk.empty())
+    {
+      ret.insert(ret.end(), fk.begin(), fk.end());
+    }
+  }
+
   if (fk_tables && !fk_tables->empty())
   {
     ret.insert(ret.end(), fk_tables->begin(), fk_tables->end());
   }
+
   return ret;
 }
 
@@ -2702,7 +2844,8 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
                            const TABLE_LIST *table_list,
                            const Alter_info *alter_info,
                            const wsrep::key_array *fk_tables,
-                           const HA_CREATE_INFO *create_info)
+                           const HA_CREATE_INFO *create_info,
+                           bool is_drop_table_enable= false)
 {
   DBUG_ASSERT(wsrep_OSU_method_get(thd) == WSREP_OSU_TOI);
 
@@ -2733,7 +2876,8 @@ static int wsrep_TOI_begin(THD *thd, const char *db, const char *table,
   struct wsrep_buf buff= { buf, buf_len };
 
   wsrep::key_array key_array=
-    wsrep_prepare_keys_for_toi(db, table, table_list, alter_info, fk_tables);
+    wsrep_prepare_keys_for_toi(thd, db, table, table_list, alter_info,
+                               fk_tables, is_drop_table_enable);
 
   if (thd->has_read_only_protection())
   {
@@ -2940,7 +3084,8 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
                              const TABLE_LIST* table_list,
                              const Alter_info *alter_info,
                              const wsrep::key_array *fk_tables,
-                             const HA_CREATE_INFO *create_info)
+                             const HA_CREATE_INFO *create_info,
+                             bool is_drop_table_enable)
 {
   mysql_mutex_lock(&thd->LOCK_thd_kill);
   const killed_state killed = thd->killed;
@@ -3030,7 +3175,7 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
     switch (wsrep_OSU_method_get(thd)) {
     case WSREP_OSU_TOI:
       ret= wsrep_TOI_begin(thd, db_, table_, table_list, alter_info, fk_tables,
-                           create_info);
+                           create_info, is_drop_table_enable);
       break;
     case WSREP_OSU_RSU:
       ret= wsrep_RSU_begin(thd, db_, table_);
