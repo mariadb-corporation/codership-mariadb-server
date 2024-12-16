@@ -12313,12 +12313,16 @@ bool Sql_cmd_create_table_like::execute(THD *thd)
               wsrep_check_sequence(thd, lex->create_info.seq_create_info, used_engine))
             DBUG_RETURN(true);
 
-          WSREP_TO_ISOLATION_BEGIN_ALTER(create_table->db.str, create_table->table_name.str,
-                                         first_table, &alter_info, NULL, &create_info)
+          wsrep::key_array keys;
+          if (!wsrep_append_fk_parent_table(thd, create_table, &keys))
           {
-            WSREP_WARN("CREATE TABLE isolation failure");
-            res= true;
-            goto end_with_restore_list;
+            WSREP_TO_ISOLATION_BEGIN_ALTER(create_table->db.str, create_table->table_name.str,
+                                           first_table, &alter_info, &keys, &create_info)
+            {
+              WSREP_WARN("CREATE TABLE isolation failure");
+              res= true;
+              goto end_with_restore_list;
+            }
           }
         }
         // check_engine will set db_type to  NULL if e.g. TEMPORARY is

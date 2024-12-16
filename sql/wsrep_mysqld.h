@@ -241,6 +241,12 @@ void WSREP_LOG(void (*fun)(const char* fmt, ...), const char* fmt, ...);
   if (WSREP_ON && WSREP(thd) && wsrep_to_isolation_begin(thd, db_, table_, table_list_)) \
     goto wsrep_error_label;
 
+#define WSREP_TO_ISOLATION_BEGIN_DROP(db_, table_, table_list_)	\
+  if (WSREP_ON && WSREP(thd) &&                                         \
+      wsrep_to_isolation_begin(thd, db_, table_,                        \
+                               table_list_, nullptr, nullptr, nullptr, true))\
+    goto wsrep_error_label;
+
 #define WSREP_TO_ISOLATION_BEGIN_CREATE(db_, table_, table_list_, create_info_)	\
   if (WSREP_ON && WSREP(thd) &&                                         \
       wsrep_to_isolation_begin(thd, db_, table_,                        \
@@ -353,7 +359,8 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
                              const TABLE_LIST* table_list,
                              const Alter_info* alter_info= nullptr,
                              const wsrep::key_array *fk_tables= nullptr,
-                             const HA_CREATE_INFO* create_info= nullptr);
+                             const HA_CREATE_INFO* create_info= nullptr,
+                             bool is_drop_table_enable= false);
 
 bool wsrep_should_replicate_ddl(THD* thd, const handlerton *db_type);
 bool wsrep_should_replicate_ddl_iterate(THD* thd, const TABLE_LIST* table_list);
