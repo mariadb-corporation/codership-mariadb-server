@@ -324,4 +324,8 @@ ERROR 42000: You have an error in your SQL syntax; check the manual that corresp
 ALTER SEQUENCE IF EXISTS t MINVALUE=1;
 ERROR 42000: This version of MariaDB doesn't yet support 'CACHE without INCREMENT BY 0 in Galera cluster'
 DROP TABLE t;
+connection node_2;
+call mtr.add_suppression("InnoDB: Transaction was aborted due to Deadlock");
+connection node_1;
+call mtr.add_suppression("InnoDB: Transaction was aborted due to Deadlock");
 End of 10.5 tests

@@ -355,4 +355,10 @@ CREATE TABLE t1 (c VARCHAR) ENGINE=InnoDB;
 ALTER SEQUENCE IF EXISTS t MINVALUE=1;
 
 DROP TABLE t;
+
+--connection node_2
+call mtr.add_suppression("InnoDB: Transaction was aborted due to Deadlock");
+--connection node_1
+call mtr.add_suppression("InnoDB: Transaction was aborted due to Deadlock");
+
 --echo End of 10.5 tests
