@@ -258,7 +258,6 @@ static inline bool wsrep_run_commit_hook(THD* thd, bool all)
 static inline int wsrep_before_prepare(THD* thd, bool all)
 {
   DBUG_ENTER("wsrep_before_prepare");
-  WSREP_DEBUG("wsrep_before_prepare: %d", wsrep_is_real(thd, all));
   int ret= 0;
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   if ((ret= thd->wsrep_parallel_slave_wait_for_prior_commit()))
@@ -279,11 +278,12 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
                    thd->wsrep_trx().ws_meta().gtid(),
                    wsrep_gtid_server.undefined());
   }
-  else
-  {
-    WSREP_DEBUG("before_prepare failed for %s ret=%s (%d)",
-		wsrep_xid_print(&thd->wsrep_xid), strerror(ret), ret);
-  }
+
+  WSREP_DEBUG("wsrep_before_prepare: %d for %s ret=%s",
+              wsrep_is_real(thd, all),
+              wsrep_xid_print(&thd->wsrep_xid).c_str(),
+              wsrep::to_c_string(thd->wsrep_cs().current_error()));
+  
   mysql_mutex_lock(&thd->LOCK_thd_kill);
   if (thd->killed) wsrep_backup_kill_for_commit(thd);
   mysql_mutex_unlock(&thd->LOCK_thd_kill);
@@ -318,9 +318,6 @@ static inline int wsrep_after_prepare(THD* thd, bool all)
 static inline int wsrep_before_commit(THD* thd, bool all)
 {
   DBUG_ENTER("wsrep_before_commit");
-  WSREP_DEBUG("wsrep_before_commit: %d, %lld",
-              wsrep_is_real(thd, all),
-              (long long)wsrep_thd_trx_seqno(thd));
   int ret= 0;
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
   if ((ret= thd->wsrep_cs().before_commit()) == 0)
@@ -355,6 +352,12 @@ static inline int wsrep_before_commit(THD* thd, bool all)
                    wsrep_gtid_server.gtid());
     wsrep_register_for_group_commit(thd);
   }
+
+  WSREP_DEBUG("wsrep_before_commit: %d seqno=%lld for %s ret=%s",
+              wsrep_is_real(thd, all),
+              wsrep_thd_trx_seqno(thd),
+              wsrep_xid_print(&thd->wsrep_xid).c_str(),
+              wsrep::to_c_string(thd->wsrep_cs().current_error()));
 
   mysql_mutex_lock(&thd->LOCK_thd_kill);
   if (thd->killed) wsrep_backup_kill_for_commit(thd);
@@ -486,15 +489,13 @@ int wsrep_after_statement(THD* thd)
               !thd->internal_transaction() ?
               thd->wsrep_cs().after_statement() : 0);
 
-  if (ret)
-      WSREP_DEBUG("wsrep_after_statement for %lu client_state %s "
-                  " client_mode %s trans_state %s ret=%s (%d)",
-                  thd_get_thread_id(thd),
-                  wsrep::to_c_string(thd->wsrep_cs().state()),
-                  wsrep::to_c_string(thd->wsrep_cs().mode()),
-                  wsrep::to_c_string(thd->wsrep_cs().transaction().state()),
-                  strerror(ret), ret);
-
+  WSREP_DEBUG("wsrep_after_statement for %lu client_state %s "
+              " client_mode %s trans_state %s ret=%s",
+	      thd_get_thread_id(thd),
+	      wsrep::to_c_string(thd->wsrep_cs().state()),
+	      wsrep::to_c_string(thd->wsrep_cs().mode()),
+	      wsrep::to_c_string(thd->wsrep_cs().transaction().state()),
+	      wsrep::to_c_string(thd->wsrep_cs().current_error()));
 
   if (wsrep_is_active(thd))
   {
