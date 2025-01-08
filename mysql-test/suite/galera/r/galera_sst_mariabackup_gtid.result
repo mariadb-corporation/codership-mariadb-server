@@ -523,6 +523,10 @@ Variable_name	Value
 gtid_binlog_pos	100-10-24
 gtid_current_pos	100-10-24
 gtid_slave_pos	
+Expect 100-10-24 (Release) 100-10-33 (Debug)
+SELECT WSREP_LAST_SEEN_GTID();
+WSREP_LAST_SEEN_GTID()
+100-10-24
 connection node_2;
 # Node_2
 SHOW global variables like 'gtid%pos';
@@ -530,5 +534,9 @@ Variable_name	Value
 gtid_binlog_pos	100-10-24
 gtid_current_pos	100-10-24
 gtid_slave_pos	
+Expect 100-10-24 (Release) 100-10-33 (Debug)
+SELECT WSREP_LAST_SEEN_GTID();
+WSREP_LAST_SEEN_GTID()
+100-10-24
 disconnect node_2;
 disconnect node_1;

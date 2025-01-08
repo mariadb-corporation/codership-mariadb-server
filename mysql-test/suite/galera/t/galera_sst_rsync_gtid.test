@@ -21,9 +21,13 @@
 --connection node_1
 --echo # Node_1
 SHOW global variables like 'gtid%pos';
+--echo Expect 100-10-24 (Release) 100-10-33 (Debug)
+SELECT WSREP_LAST_SEEN_GTID();
 
 --connection node_2
 --echo # Node_2
 SHOW global variables like 'gtid%pos';
+--echo Expect 100-10-24 (Release) 100-10-33 (Debug)
+SELECT WSREP_LAST_SEEN_GTID();
 
 --source include/galera_end.inc

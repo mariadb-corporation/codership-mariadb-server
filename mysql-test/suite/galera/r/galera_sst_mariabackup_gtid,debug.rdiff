@@ -1,6 +1,6 @@
---- suite/galera/r/galera_sst_mariabackup_gtid.result	2025-01-02 15:34:28.251593452 +0200
-+++ suite/galera/r/galera_sst_mariabackup_gtid.reject	2025-01-02 16:01:18.058469177 +0200
-@@ -516,19 +516,203 @@
+--- suite/galera/r/galera_sst_mariabackup_gtid.result	2025-01-08 07:43:36.883366596 +0200
++++ suite/galera/r/galera_sst_mariabackup_gtid,debug.reject	2025-01-08 07:59:27.330696723 +0200
+@@ -516,27 +516,211 @@
  1
  DROP TABLE t1;
  COMMIT;
@@ -197,6 +197,11 @@
 +gtid_binlog_pos	100-10-33
 +gtid_current_pos	100-10-33
  gtid_slave_pos	
+ Expect 100-10-24 (Release) 100-10-33 (Debug)
+ SELECT WSREP_LAST_SEEN_GTID();
+ WSREP_LAST_SEEN_GTID()
+-100-10-24
++100-10-33
  connection node_2;
  # Node_2
  SHOW global variables like 'gtid%pos';
@@ -206,5 +211,10 @@
 +gtid_binlog_pos	100-10-33
 +gtid_current_pos	100-10-33
  gtid_slave_pos	
+ Expect 100-10-24 (Release) 100-10-33 (Debug)
+ SELECT WSREP_LAST_SEEN_GTID();
+ WSREP_LAST_SEEN_GTID()
+-100-10-24
++100-10-33
  disconnect node_2;
  disconnect node_1;
