@@ -86,7 +86,14 @@ extern "C" const char *wsrep_thd_query(const THD *thd)
         return "SET PASSWORD";
       /* fallthrough */
     default:
+    {
+      // Note that DELAYED thread might delete thd->query() when
+      // it is destroyed, but trans_rollback is called after it
+      if (thd->system_thread == SYSTEM_THREAD_DELAYED_INSERT &&
+	  thd->killed == KILL_QUERY_HARD)
+	return "NULL";
       return (thd->query() ? thd->query() : "NULL");
+    }
   }
   return "NULL";
 }
