@@ -34,6 +34,7 @@ IF(WITH_WSREP AND NOT EMBEDDED_LIBRARY)
     wsrep_thd.cc
     wsrep_schema.cc
     wsrep_plugin.cc
+    wsrep_key_check.cc
     service_wsrep.cc
   )
   MYSQL_ADD_PLUGIN(wsrep ${WSREP_SOURCES} MANDATORY NOT_EMBEDDED LINK_LIBRARIES wsrep-lib wsrep_api_v26)

@@ -23,6 +23,7 @@
 #include "wsrep_thd.h"
 #include "wsrep_binlog.h" /* register/deregister group commit */
 #include "my_dbug.h"
+#include "wsrep_key_check.h"
 
 class THD;
 
@@ -343,6 +344,11 @@ static inline int wsrep_before_commit(THD* thd, bool all)
                    thd->wsrep_trx().ws_meta().gtid(),
                    wsrep_gtid_server.gtid());
     wsrep_register_for_group_commit(thd);
+
+    if (wsrep_thd_is_local(thd))
+    {
+      wsrep_check_keys(thd);
+    }
   }
 
   mysql_mutex_lock(&thd->LOCK_thd_kill);
