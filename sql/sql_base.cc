@@ -3800,6 +3800,33 @@ open_and_process_table(THD *thd, TABLE_LIST *tables, uint *counter, uint flags,
 
     thd->pop_internal_handler();
     safe_to_ignore_table= no_such_table_handler.safely_trapped_errors();
+
+#ifdef WITH_WSREP
+    if (WSREP(thd) && !thd->wsrep_applier && !error &&
+        wsrep_is_active(thd) &&
+        thd->wsrep_cs().state() == wsrep::client_state::s_exec)
+    {
+      /*
+        Append a table level shared key for the referenced/foreign table.
+        This to avoid potential MDL conflicts with concurrent DDLs.
+      */
+      const int rcode = wsrep_thd_append_table_key(thd, tables->db.str,
+          tables->table_name.str, WSREP_SERVICE_KEY_SHARED);
+      if (rcode)
+      {
+        WSREP_ERROR("Appending table key failed: %s, %d",
+                    wsrep_thd_query(thd), rcode);
+        error = true;
+      }
+
+      DBUG_EXECUTE_IF(
+        "wsrep_print_foreign_keys_table",
+        sql_print_information("Foreign key referenced table found: %s.%s",
+                              tables->db.str,
+                              tables->table_name.str);
+      );
+    }
+#endif
   }
   else if (tables->parent_l && (thd->open_options & HA_OPEN_FOR_REPAIR))
   {
