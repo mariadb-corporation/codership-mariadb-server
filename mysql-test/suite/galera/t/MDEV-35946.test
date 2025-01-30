@@ -1,0 +1,65 @@
+#
+# MDEV-35946: Assertion `thd->is_error()' failed in Sql_cmd_dml::prepare
+#
+--source include/have_innodb.inc
+--source include/galera_cluster.inc
+
+call mtr.add_suppression("Inconsistency detected: Inconsistent by consensus");
+
+# Save original auto_increment_offset values.
+--let $node_1=node_1
+--let $node_2=node_2
+--source include/auto_increment_offset_save.inc
+
+--connection node_1
+SET lock_wait_timeout=0;
+SET GLOBAL wsrep_ignore_apply_errors= 0;
+
+CREATE TABLE t (a DATE) ENGINE=InnoDB;
+--error ER_BAD_FIELD_ERROR
+ALTER TABLE t MODIFY b INT;
+
+#
+# Wait for the node to disconnect from cluster.
+# This is due to ALTER failing and error voting
+# not agreeing on the error
+# (wsrep_ignore_apply_errors set differently on node_1)
+#
+SET SESSION wsrep_sync_wait=0;
+--let $wait_condition = SELECT VARIABLE_VALUE = 'Disconnected' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
+--source include/wait_condition.inc
+SET SESSION wsrep_sync_wait=DEFAULT;
+
+#
+# If bug is present, assertion will fire
+# during the execution of the following DELETE
+#
+--error ER_LOCK_WAIT_TIMEOUT
+DELETE FROM mysql.wsrep_streaming_log;
+
+#
+# Kill the entire cluster and restart
+#
+--connection node_2
+SET SESSION wsrep_sync_wait = 0;
+--source include/kill_galera.inc
+
+--connection node_1
+SET SESSION wsrep_sync_wait = 0;
+--source include/kill_galera.inc
+
+--remove_file $MYSQLTEST_VARDIR/mysqld.1/data/grastate.dat
+--let $start_mysqld_params =--wsrep-new-cluster
+--let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--source include/start_mysqld.inc
+
+--connection node_2
+--let $start_mysqld_params =
+--let $_expect_file_name= $MYSQLTEST_VARDIR/tmp/mysqld.2.expect
+--source include/start_mysqld.inc
+
+#
+# Cleanup
+#
+DROP TABLE t;
+--source include/auto_increment_offset_restore.inc

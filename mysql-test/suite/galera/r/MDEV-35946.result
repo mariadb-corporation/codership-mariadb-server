@@ -1,0 +1,23 @@
+connection node_2;
+connection node_1;
+call mtr.add_suppression("Inconsistency detected: Inconsistent by consensus");
+connection node_1;
+connection node_2;
+connection node_1;
+SET lock_wait_timeout=0;
+SET GLOBAL wsrep_ignore_apply_errors= 0;
+CREATE TABLE t (a DATE) ENGINE=InnoDB;
+ALTER TABLE t MODIFY b INT;
+ERROR 42S22: Unknown column 'b' in 't'
+SET SESSION wsrep_sync_wait=0;
+SET SESSION wsrep_sync_wait=DEFAULT;
+DELETE FROM mysql.wsrep_streaming_log;
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+connection node_2;
+SET SESSION wsrep_sync_wait = 0;
+Killing server ...
+connection node_1;
+SET SESSION wsrep_sync_wait = 0;
+Killing server ...
+connection node_2;
+DROP TABLE t;
