@@ -1,11 +1,11 @@
 --echo Performing --wsrep-recover ...
 if ($wsrep_recover_additional)
 {
---exec $MYSQLD --defaults-group-suffix=.$galera_wsrep_recover_server_id --defaults-file=$MYSQLTEST_VARDIR/my.cnf --log-error=$MYSQL_TMP_DIR/galera_wsrep_recover.log --innodb --wsrep-recover $wsrep_recover_additional > $MYSQL_TMP_DIR/galera_wsrep_recover.log 2>&1
+--exec $MYSQLD --defaults-group-suffix=.$galera_wsrep_recover_server_id --defaults-file=$MYSQLTEST_VARDIR/my.cnf --log-error=$MYSQL_TMP_DIR/galera_wsrep_recover.log --innodb --wsrep-debug=1 --wsrep-recover $wsrep_recover_additional > $MYSQL_TMP_DIR/galera_wsrep_recover.log 2>&1
 }
 if (!$wsrep_recover_additional)
 {
---exec $MYSQLD --defaults-group-suffix=.$galera_wsrep_recover_server_id --defaults-file=$MYSQLTEST_VARDIR/my.cnf --log-error=$MYSQL_TMP_DIR/galera_wsrep_recover.log --innodb --wsrep-recover > $MYSQL_TMP_DIR/galera_wsrep_recover.log 2>&1
+--exec $MYSQLD --defaults-group-suffix=.$galera_wsrep_recover_server_id --defaults-file=$MYSQLTEST_VARDIR/my.cnf --log-error=$MYSQL_TMP_DIR/galera_wsrep_recover.log --innodb --wsrep-debug=1 --wsrep-recover > $MYSQL_TMP_DIR/galera_wsrep_recover.log 2>&1
 }
 
 --perl
