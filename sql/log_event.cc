@@ -1139,7 +1139,7 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
       ev= new Intvar_log_event(buf, fdle);
       break;
     case XID_EVENT:
-      ev= new Xid_log_event(buf, fdle);
+      ev= new Xid_log_event(buf, event_len, fdle);
       break;
     case XA_PREPARE_LOG_EVENT:
       ev= new XA_prepare_log_event(buf, fdle);
@@ -2743,6 +2743,7 @@ Rand_log_event::Rand_log_event(const uchar *buf,
 
 Xid_log_event::
 Xid_log_event(const uchar *buf,
+              uint event_len,
               const Format_description_log_event *description_event)
   :Xid_apply_log_event(buf, description_event)
 {
@@ -2750,6 +2751,21 @@ Xid_log_event(const uchar *buf,
   buf+= description_event->common_header_len +
     description_event->post_header_len[XID_EVENT-1];
   memcpy((char*) &xid, buf, sizeof(xid));
+  const uint len_with_wsrep= description_event->common_header_len +
+    description_event->post_header_len[XID_EVENT-1] +
+    sizeof(xid) + sizeof(wsrep_seqno) + sizeof(wsrep_uuid);
+  if (event_len == len_with_wsrep)
+  {
+    buf += sizeof(xid);
+    wsrep_seqno= sint8korr(buf);
+    buf += sizeof(wsrep_seqno);
+    memcpy(wsrep_uuid, buf, sizeof(wsrep_uuid));
+  }
+  else
+  {
+    wsrep_seqno= wsrep_seqno_undefined;
+    memset(wsrep_uuid, 0, sizeof(wsrep_uuid));
+  }
 }
 
 /**************************************************************************

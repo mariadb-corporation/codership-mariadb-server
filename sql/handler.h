@@ -44,6 +44,10 @@
 #include "mem_root_array.h"
 #include <utility>     // pair
 #include <my_attribute.h> /* __attribute__ */
+#ifdef WITH_WSREP
+#include "wsrep/id.hpp"
+#include "wsrep/seqno.hpp"
+#endif /* WITH_WSREP */
 
 class Alter_info;
 class Virtual_column_info;
@@ -1028,12 +1032,29 @@ struct xid_recovery_member
   XID *full_xid;           // needed by wsrep or past it recovery
   decltype(::server_id) server_id;         // server id of orginal server
 
+#ifdef WITH_WSREP
+  /* wsrep specific fields to reconstruct wsrep_xid for commit.
+     If wsrep_seqno is undefined, the transaction is not a wsrep transaction. */
+  wsrep::seqno wsrep_seqno;
+  wsrep::id wsrep_uuid;
+  uint32 wsrep_gtid_domain_id;
+  uint32 wsrep_gtid_server_id;
+  uint64 wsrep_gtid_seq_no;
+#endif /* WITH_WSREP */
+
   xid_recovery_member(my_xid xid_arg, uint prepare_arg, bool decided_arg,
                       XID *full_xid_arg, decltype(::server_id) server_id_arg)
     : xid(xid_arg), in_engine_prepare(prepare_arg),
       decided_to_commit(decided_arg),
       binlog_coord(Binlog_offset(MAX_binlog_id, MAX_off_t)),
-      full_xid(full_xid_arg), server_id(server_id_arg) {};
+      full_xid(full_xid_arg), server_id(server_id_arg)
+#ifdef WITH_WSREP
+      ,
+      wsrep_seqno(wsrep::seqno::undefined()),
+      wsrep_uuid(wsrep::id::undefined()), wsrep_gtid_domain_id(0),
+      wsrep_gtid_server_id(0), wsrep_gtid_seq_no(0)
+#endif /* WITH_WSREP */
+  {}
 };
 
 /* for recover() handlerton call */
