@@ -4553,9 +4553,23 @@ int Xid_log_event::do_commit()
 bool Xid_log_event::write()
 {
   DBUG_EXECUTE_IF("do_not_write_xid", return 0;);
-  return write_header(sizeof(xid)) ||
-         write_data((uchar*)&xid, sizeof(xid)) ||
-         write_footer();
+#ifdef WITH_WSREP
+  if (wsrep_seqno == wsrep_seqno_undefined)
+#endif /* WITH_WSREP */
+    return write_header(sizeof(xid)) ||
+           write_data((uchar*)&xid, sizeof(xid)) ||
+           write_footer();
+#ifdef WITH_WSREP
+  else
+  {
+    uchar data[8 + 8 + 16];
+    memcpy(data, &xid, 8);
+    int8store(data + 8, wsrep_seqno);
+    memcpy(data + 8 + 8, wsrep_uuid, 16);
+    return write_header(8 + 8 + 16) ||
+           write_data( data, sizeof(data)) || write_footer();
+  }
+#endif /* WITH_WSREP */
 }
 
 /**************************************************************************
