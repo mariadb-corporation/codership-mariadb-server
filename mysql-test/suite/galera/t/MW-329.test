@@ -81,6 +81,10 @@ while ($count)
 --enable_query_log
 
 #
+while (`SELECT COUNT(*) > 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE ID = $connection_id`)
+{
+SELECT SLEEP(1);
+}
 #
 #
 --connection node_1b
@@ -95,7 +99,3 @@ DROP TABLE t1;
 
 --disconnect node_1b
 
-# Due to MW-330, Multiple "conflict state 3 after post commit" warnings if table is dropped while SP is running
-CALL mtr.add_suppression("WSREP: .* conflict state after post commit ");
-
-set global innodb_status_output=Default;
