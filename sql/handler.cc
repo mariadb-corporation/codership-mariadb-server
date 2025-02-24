@@ -1999,15 +1999,6 @@ int ha_commit_trans(THD *thd, bool all)
   xid= thd->transaction->implicit_xid.quick_get_my_xid();
 
 #ifdef WITH_WSREP
-  if (run_wsrep_hooks && !error)
-  {
-    wsrep::seqno const s= wsrep_xid_seqno(thd->wsrep_xid);
-    if (!s.is_undefined())
-    {
-      // xid was rewritten by wsrep
-      xid= s.get();
-    }
-  }
   if (run_wsrep_hooks && (error = wsrep_before_commit(thd, all)))
     goto wsrep_err;
 #endif /* WITH_WSREP */
@@ -2692,7 +2683,26 @@ static void xarecover_do_commit_or_rollback(transaction_participant *hton,
     x= *member->full_xid;
 
   if (xarecover_decide_to_commit(member, ptr_commit_max))
+  {
+#ifdef WITH_WSREP
+    XID wsrep_commit_xid;
+    if (!member->wsrep_seqno.is_undefined())
+    {
+      wsrep::gtid wsrep_gtid{
+          member->wsrep_uuid,
+          member->wsrep_seqno};
+      wsrep_server_gtid_t server_gtid{member->wsrep_gtid_domain_id,
+                                      member->wsrep_gtid_server_id,
+                                      member->wsrep_gtid_seq_no};
+      wsrep_xid_init(&wsrep_commit_xid, wsrep_gtid, server_gtid);
+      wsrep_recovery_commit_xid= &wsrep_commit_xid;
+    }
+#endif /* WITH_WSREP */
     rc= hton->commit_by_xid(&x);
+#ifdef WITH_WSREP
+    wsrep_recovery_commit_xid = nullptr;
+#endif /* WITH_WSREP */
+  }
   else if (hton->recover_rollback_by_xid &&
            IF_WSREP(!(WSREP_ON || wsrep_recovery), true))
     rc= hton->recover_rollback_by_xid(&x);
