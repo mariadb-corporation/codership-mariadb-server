@@ -2623,12 +2623,13 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
                              const wsrep::key_array *fk_tables,
                              const HA_CREATE_INFO *create_info)
 {
+  DEBUG_SYNC(thd, "wsrep_kill_thd_before_enter_toi");
   mysql_mutex_lock(&thd->LOCK_thd_kill);
   const killed_state killed = thd->killed;
   mysql_mutex_unlock(&thd->LOCK_thd_kill);
   if (killed)
   {
-    DBUG_ASSERT(FALSE);
+    /* The thread may have been killed as a result of memory pressure. */
     return -1;
   }
 
@@ -2700,6 +2701,10 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
 
   if (thd->variables.wsrep_on && wsrep_thd_is_local(thd))
   {
+    mysql_mutex_lock(&thd->LOCK_thd_kill);
+    if (thd->killed) wsrep_backup_kill_for_commit(thd);
+    mysql_mutex_unlock(&thd->LOCK_thd_kill);
+
     switch (wsrep_OSU_method_get(thd)) {
     case WSREP_OSU_TOI:
       ret= wsrep_TOI_begin(thd, db_, table_, table_list, alter_info, fk_tables,
@@ -2730,9 +2735,12 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
     case 1:
         /* TOI replication skipped, treat as success */
         ret= 0;
-      break;
+      /* fall through */
     case -1:
       /* TOI replication failed, treat as error */
+      mysql_mutex_lock(&thd->LOCK_thd_kill);
+      wsrep_restore_kill_after_commit(thd);
+      mysql_mutex_unlock(&thd->LOCK_thd_kill);
       break;
     }
   }
@@ -2761,6 +2769,13 @@ void wsrep_to_isolation_end(THD *thd)
     DBUG_ASSERT(0);
   }
   if (wsrep_emulate_bin_log) wsrep_thd_binlog_trx_reset(thd);
+
+  mysql_mutex_lock(&thd->LOCK_thd_kill);
+  if (thd->wsrep_abort_by_kill != NOT_KILLED)
+  {
+    wsrep_restore_kill_after_commit(thd);
+  }
+  mysql_mutex_unlock(&thd->LOCK_thd_kill);
 }
 
 #define WSREP_MDL_LOG(severity, msg, schema, schema_len, req, gra)             \
