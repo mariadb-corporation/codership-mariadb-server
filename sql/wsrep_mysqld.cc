@@ -901,7 +901,11 @@ int wsrep_init()
   Wsrep_server_state::init_provider_services();
   if (Wsrep_server_state::instance().load_provider(
       wsrep_provider,
-      wsrep_provider_options,
+      [&]() {
+        std::string options(wsrep_provider_options);
+        Wsrep_server_state::init_options(options);
+        return options;
+      },
       Wsrep_server_state::instance().provider_services()))
   {
     WSREP_ERROR("Failed to load provider");
@@ -1008,11 +1012,6 @@ void wsrep_init_startup (bool sst_first)
 
   wsrep_create_rollbacker();
   wsrep_create_appliers(1);
-
-  if (Wsrep_server_state::init_options())
-  {
-    WSREP_WARN("Failed to initialize provider options");
-  }
 
   Wsrep_server_state& server_state= Wsrep_server_state::instance();
   /*

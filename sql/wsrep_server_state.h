@@ -19,7 +19,6 @@
 /* wsrep-lib */
 #include "wsrep/server_state.hpp"
 #include "wsrep/provider.hpp"
-#include "wsrep/provider_options.hpp"
 
 /* implementation */
 #include "wsrep_server_service.h"
@@ -37,7 +36,7 @@ public:
                         int max_protocol_version);
   static int init_provider(const std::string& provider,
                            const std::string& options);
-  static int init_options();
+  static int init_options(std::string& extra_options);
   static void deinit_provider();
   static void destroy();
 
@@ -58,7 +57,7 @@ public:
 
   static wsrep::provider_options* get_options()
   {
-    return m_options.get();
+    return instance().provider_options();
   }
 
   static bool has_capability(int capability)
@@ -87,7 +86,6 @@ private:
   Wsrep_server_service m_service;
   static wsrep::provider::services m_provider_services;
   static Wsrep_server_state* m_instance;
-  static std::unique_ptr<wsrep::provider_options> m_options;
   // Sysvars for provider plugin. We keep these here because
   // they are allocated dynamically and must be freed at some
   // point during shutdown (after the plugin is deinitialized).

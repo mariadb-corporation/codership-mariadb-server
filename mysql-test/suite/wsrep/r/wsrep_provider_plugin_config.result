@@ -1,0 +1,12 @@
+SHOW VARIABLES LIKE 'wsrep_provider_pc_npvo';
+Variable_name	Value
+wsrep_provider_pc_npvo	ON
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'pc.npvo = [^;]+') AS provider_option;
+provider_option
+pc.npvo = true
+SHOW VARIABLES LIKE 'wsrep_provider_repl_max_ws_size';
+Variable_name	Value
+wsrep_provider_repl_max_ws_size	1024
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'repl.max_ws_size = [^;]+') AS provider_option;
+provider_option
+repl.max_ws_size = 1024
