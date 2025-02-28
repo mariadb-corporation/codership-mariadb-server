@@ -1,0 +1,14 @@
+--source include/have_wsrep.inc
+--source include/have_innodb.inc
+
+SHOW VARIABLES LIKE 'wsrep_provider_pc_npvo';
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'pc.npvo = [^;]+') AS provider_option;
+
+SHOW VARIABLES LIKE 'wsrep_provider_repl_max_ws_size';
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'repl.max_ws_size = [^;]+') AS provider_option;
+
+SHOW VARIABLES LIKE 'wsrep_provider_evs_install_timeout';
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'evs.install_timeout = [^;]+') AS provider_option;
+
+SHOW VARIABLES LIKE 'wsrep_provider_gcache_size';
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'gcache.size = [^;]+') AS provider_option;

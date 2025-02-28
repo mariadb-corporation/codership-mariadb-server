@@ -1,0 +1,26 @@
+!include include/default_my.cnf
+
+[mysqld.1]
+wsrep-on=ON
+wsrep-cluster-address=gcomm://
+wsrep-provider=@ENV.WSREP_PROVIDER
+binlog-format=ROW
+plugin-wsrep-provider=ON
+wsrep-provider-base-port=@OPT.port
+
+# Test different type of options
+wsrep-provider-gcache-size=1024
+wsrep-provider-pc-npvo=ON
+wsrep-provider-evs-install-timeout=8.1
+
+# Repeat same variable again
+wsrep_provider_gcache_size=10M
+wsrep_provider_pc_npvo=OFF
+wsrep_provider_pc_npvo=ON
+
+# Option wsrep_provider_options can be used even if plugin-wsrep-provider
+# is enabled. However, settings in wsrep_provider_options have lower
+# precedence. For instance, the setting gcache.size below will
+# be ignored because it was already set through provider options
+# plugin above.
+wsrep_provider_options='gcache.size=20M;repl.max_ws_size=1024'

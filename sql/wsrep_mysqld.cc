@@ -45,6 +45,7 @@
 #include "wsrep_schema.h"
 #include "wsrep_xid.h"
 #include "wsrep_trans_observer.h"
+#include "wsrep_plugin.h" /* wsrep_load_provider_plugin_defaults() */
 #include "mysql/service_wsrep.h"
 #include <cstdio>
 #include <cstdlib>
@@ -897,9 +898,12 @@ int wsrep_init()
 
   Wsrep_server_state::init_provider_services();
   if (Wsrep_server_state::instance().load_provider(
-      wsrep_provider,
-      wsrep_provider_options,
-      Wsrep_server_state::instance().provider_services()))
+          wsrep_provider,
+          [](const wsrep::provider_options &opts, std::string& defaults) {
+            defaults.append(wsrep_provider_options);
+            return wsrep_load_provider_plugin_defaults(opts, defaults);
+          },
+          Wsrep_server_state::instance().provider_services()))
   {
     WSREP_ERROR("Failed to load provider");
     Wsrep_server_state::deinit_provider_services();

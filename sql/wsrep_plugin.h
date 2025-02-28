@@ -16,7 +16,8 @@
 #ifndef WSREP_PLUGIN_H
 #define WSREP_PLUGIN_H
 
-class option;
+#include "wsrep/provider_options.hpp"
+
 struct st_mysql_sys_var;
 
 /* Returns true if provider plugin was initialized and is active */
@@ -32,5 +33,10 @@ wsrep_make_sysvar_for_option(wsrep::provider_options::option *);
 
 /* Destroy a sysvar created by make_sysvar_for_option */
 void wsrep_destroy_sysvar(struct st_mysql_sys_var *);
+
+/* Parse defaults from config/command line, returns corresponding
+   provider options string */
+int wsrep_load_provider_plugin_defaults(const wsrep::provider_options &,
+                                        std::string &);
 
 #endif /* WSREP_PLUGIN_H */

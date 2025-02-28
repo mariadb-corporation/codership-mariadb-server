@@ -1,0 +1,24 @@
+SHOW VARIABLES LIKE 'wsrep_provider_pc_npvo';
+Variable_name	Value
+wsrep_provider_pc_npvo	ON
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'pc.npvo = [^;]+') AS provider_option;
+provider_option
+pc.npvo = true
+SHOW VARIABLES LIKE 'wsrep_provider_repl_max_ws_size';
+Variable_name	Value
+wsrep_provider_repl_max_ws_size	1024
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'repl.max_ws_size = [^;]+') AS provider_option;
+provider_option
+repl.max_ws_size = 1024
+SHOW VARIABLES LIKE 'wsrep_provider_evs_install_timeout';
+Variable_name	Value
+wsrep_provider_evs_install_timeout	8.100000
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'evs.install_timeout = [^;]+') AS provider_option;
+provider_option
+evs.install_timeout = PT8.1S
+SHOW VARIABLES LIKE 'wsrep_provider_gcache_size';
+Variable_name	Value
+wsrep_provider_gcache_size	10485760
+SELECT REGEXP_SUBSTR(@@wsrep_provider_options, 'gcache.size = [^;]+') AS provider_option;
+provider_option
+gcache.size = 10M
