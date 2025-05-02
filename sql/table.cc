@@ -303,6 +303,20 @@ TABLE_CATEGORY get_table_category(const Lex_ident_db &db,
   if (is_perfschema_db(&db))
     return TABLE_CATEGORY_PERFORMANCE;
 
+#ifdef WITH_WSREP
+  if (db.streq(WSREP_LEX_SCHEMA))
+  {
+    if(name.streq(WSREP_LEX_STREAMING))
+      return TABLE_CATEGORY_INFORMATION;
+    if (name.streq(WSREP_LEX_CLUSTER))
+      return TABLE_CATEGORY_INFORMATION;
+    if (name.streq(WSREP_LEX_MEMBERS))
+      return TABLE_CATEGORY_INFORMATION;
+    if (name.streq(WSREP_LEX_ALLOWLIST))
+      return TABLE_CATEGORY_INFORMATION;
+  }
+#endif /* WITH_WSREP */
+
   if (db.streq(MYSQL_SCHEMA_NAME))
   {
     if (is_system_table_name(name))
@@ -318,20 +332,6 @@ TABLE_CATEGORY get_table_category(const Lex_ident_db &db,
 
     return TABLE_CATEGORY_MYSQL;
   }
-
-#ifdef WITH_WSREP
-  if (db.streq(WSREP_LEX_SCHEMA))
-  {
-    if(name.streq(WSREP_LEX_STREAMING))
-      return TABLE_CATEGORY_INFORMATION;
-    if (name.streq(WSREP_LEX_CLUSTER))
-      return TABLE_CATEGORY_INFORMATION;
-    if (name.streq(WSREP_LEX_MEMBERS))
-      return TABLE_CATEGORY_INFORMATION;
-    if (name.streq(WSREP_LEX_ALLOWLIST))
-      return TABLE_CATEGORY_INFORMATION;
-  }
-#endif /* WITH_WSREP */
 
   return TABLE_CATEGORY_USER;
 }
