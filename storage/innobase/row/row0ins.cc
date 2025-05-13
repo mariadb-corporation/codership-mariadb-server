@@ -51,8 +51,9 @@ Created 4/20/1996 Heikki Tuuri
 #ifdef WITH_WSREP
 #include <wsrep.h>
 #include <mysql/service_wsrep.h>
-#include "ha_prototypes.h"
 #endif /* WITH_WSREP */
+#include <string>
+#include <sstream>
 
 /*************************************************************************
 IMPORTANT NOTE: Any operation that generates redo MUST check that there
@@ -750,12 +751,12 @@ row_ins_foreign_report_err(
 	const dtuple_t*	entry)		/*!< in: index entry in the parent
 					table */
 {
-	std::string fk_str;
-
 	if (srv_read_only_mode) {
 		return;
 	}
 
+	std::string fk_str;
+	std::string fk_table_str;
 	FILE*	ef	= dict_foreign_err_file;
 	trx_t*	trx	= thr_get_trx(thr);
 
@@ -764,7 +765,8 @@ row_ins_foreign_report_err(
 	row_ins_foreign_trx_print(trx);
 
 	fputs("Foreign key constraint fails for table ", ef);
-	ut_print_name(ef, trx, foreign->foreign_table_name);
+	fk_table_str= ut_get_name(trx, foreign->foreign_table_name);
+	fputs(fk_table_str.c_str(), ef);
 	fputs(":\n", ef);
 	fk_str = dict_print_info_on_foreign_key_in_create_format(trx, foreign,
 							TRUE);
@@ -778,7 +780,7 @@ row_ins_foreign_report_err(
 		dtuple_print(ef, entry);
 	}
 	fputs("\nBut in child table ", ef);
-	ut_print_name(ef, trx, foreign->foreign_table_name);
+	fputs(fk_table_str.c_str(), ef);
 	fprintf(ef, ", in index %s", foreign->foreign_index->name());
 	if (rec) {
 		fputs(", there is a record:\n", ef);
@@ -787,6 +789,23 @@ row_ins_foreign_report_err(
 		fputs(", the record is not available\n", ef);
 	}
 	putc('\n', ef);
+
+#ifdef WITH_WSREP
+	/* Warning message for applier FK failure */
+	if (trx->is_wsrep() &&
+	    wsrep_applier_log_warnings(trx->mysql_thd)) {
+		WSREP_WARN("Foreign key constraint fails for table %s:\n %s\n "
+			   "%s in parent table, in index %s\nBut in child table "
+			   "%s in index %s %s\n",
+			   fk_table_str.c_str(),
+			   fk_str.c_str(),
+			   errstr,
+			   foreign->referenced_index->name(),
+			   fk_table_str.c_str(),
+			   foreign->foreign_index->name(),
+			   (rec ? ", there is a record." : ", the record is not available"));
+	}
+#endif
 
 	mysql_mutex_unlock(&dict_foreign_err_mutex);
 }
@@ -807,12 +826,13 @@ row_ins_foreign_report_add_err(
 	const dtuple_t*	entry)		/*!< in: index entry to insert in the
 					child table */
 {
-	std::string fk_str;
-
 	if (srv_read_only_mode) {
 		return;
 	}
 
+	std::string fk_str;
+	std::string fk_table_str;
+	std::string fk_ref_table_str;
 	FILE*	ef	= dict_foreign_err_file;
 
 	row_ins_set_detailed(trx, foreign);
@@ -820,7 +840,8 @@ row_ins_foreign_report_add_err(
 	row_ins_foreign_trx_print(trx);
 
 	fputs("Foreign key constraint fails for table ", ef);
-	ut_print_name(ef, trx, foreign->foreign_table_name);
+	fk_table_str= ut_get_name(trx, foreign->foreign_table_name);
+	fputs(fk_table_str.c_str(), ef);
 	fputs(":\n", ef);
 	fk_str = dict_print_info_on_foreign_key_in_create_format(trx, foreign,
 							TRUE);
@@ -838,7 +859,8 @@ row_ins_foreign_report_add_err(
 		dtuple_print(ef, entry);
 	}
 	fputs("\nBut in parent table ", ef);
-	ut_print_name(ef, trx, foreign->referenced_table_name);
+	fk_ref_table_str= ut_get_name(trx, foreign->referenced_table_name);
+	fputs(fk_ref_table_str.c_str(), ef);
 	fprintf(ef, ", in index %s,\n"
 		"the closest match we can find is record:\n",
 		foreign->referenced_index->name());
@@ -853,6 +875,23 @@ row_ins_foreign_report_add_err(
 		rec_print(ef, rec, foreign->referenced_index);
 	}
 	putc('\n', ef);
+
+#ifdef WITH_WSREP
+	/* Warning message for applier FK failure */
+	if (trx->is_wsrep() &&
+	    wsrep_applier_log_warnings(trx->mysql_thd)) {
+		WSREP_WARN("Foreign key constraint fails for table %s:\%s"
+			   " in parent table, in index %s"
+			   "\nBut in parent table %s, in index %s,\n"
+			   "the closest match we can find is record: %s\n",
+			   fk_table_str.c_str(),
+			   fk_str.c_str(),
+			   fk_ref_table_str.c_str(),
+			   foreign->referenced_index->name(),
+			   (rec && page_rec_is_supremum(rec) ? " SUPREMUM"
+			    : (rec) ? " REC" : "NULL"));
+	}
+#endif
 
 	mysql_mutex_unlock(&dict_foreign_err_mutex);
 }
@@ -980,6 +1019,31 @@ dberr_t wsrep_append_foreign_key(trx_t *trx,
 			       upd_node_t*	upd_node,
 			       bool		pa_disable,
 			       Wsrep_service_key_type	key_type);
+
+/** Produce warning on foreign key action that failed on applier
+
+@param warn_msg  FK warning message
+@param table     Table with FK constraint
+@param index     FK constraint index
+@param err       error status
+*/
+void wsrep_fk_warn(const std::string warn_msg,
+                   const trx_t* trx,
+                   const dict_table_t *table,
+                   const dict_index_t *index,
+                   const dberr_t err)
+{
+  std::string fk_warn= "Foreign key check table: %s index: %s failed for ";
+  fk_warn+= warn_msg;
+  fk_warn+=" err: %s";
+
+  std::string fk_name= ut_get_name(trx, table->name.m_name);
+  WSREP_WARN(fk_warn.c_str(),
+             fk_name.c_str(),
+             index->name,
+             ut_strerr(err));
+
+}
 #endif /* WITH_WSREP */
 
 /*********************************************************************//**
@@ -1147,6 +1211,14 @@ row_ins_foreign_check_on_constraint(
 						 PAGE_CUR_LE, BTR_SEARCH_LEAF,
 						 cascade->pcur, mtr);
 		if (UNIV_UNLIKELY(err != DB_SUCCESS)) {
+#ifdef WITH_WSREP
+			/* Warning message for applier FK failure */
+			if (trx->is_wsrep() &&
+			    wsrep_applier_log_warnings(trx->mysql_thd)) {
+				wsrep_fk_warn("look clust rec", trx, table,
+					      clust_index, err);
+			}
+#endif
 			goto nonstandard_exit_func;
 		}
 
@@ -1191,6 +1263,14 @@ row_ins_foreign_check_on_constraint(
 	}
 
 	if (err != DB_SUCCESS) {
+#ifdef WITH_WSREP
+		/* Warning message for applier FK failure */
+		if (trx->is_wsrep() &&
+		    wsrep_applier_log_warnings(trx->mysql_thd)) {
+			wsrep_fk_warn("lock table", trx, table,
+				      clust_index, err);
+		}
+#endif
 
 		goto nonstandard_exit_func;
 	}
@@ -1257,6 +1337,15 @@ row_ins_foreign_check_on_constraint(
 				node, foreign);
 
 			if (err != DB_SUCCESS) {
+#ifdef WITH_WSREP
+				/* Warning message for applier FK failure */
+				if (trx->is_wsrep() &&
+				    wsrep_applier_log_warnings(trx->mysql_thd)) {
+					wsrep_fk_warn("set virtual NULL", trx,
+						      table, clust_index, err);
+				}
+#endif
+
 				goto nonstandard_exit_func;
 			}
 		}
@@ -1281,6 +1370,14 @@ row_ins_foreign_check_on_constraint(
 				node, foreign);
 
 			if (err != DB_SUCCESS) {
+#ifdef WITH_WSREP
+				/* Warning message for applier FK failure */
+				if (trx->is_wsrep() &&
+				    wsrep_applier_log_warnings(trx->mysql_thd)) {
+					wsrep_fk_warn("virtual cascade", trx,
+						      table, clust_index, err);
+				}
+#endif
 				goto nonstandard_exit_func;
 			}
 		}
@@ -1342,6 +1439,13 @@ row_ins_foreign_check_on_constraint(
 					       false, NULL, true,
 					       WSREP_SERVICE_KEY_EXCLUSIVE);
 		if (err != DB_SUCCESS) {
+			/* Warning message for applier FK failure */
+			if (trx->is_wsrep() &&
+			    wsrep_applier_log_warnings(trx->mysql_thd)) {
+				wsrep_fk_warn("wsrep append key", trx,
+					      table, clust_index, err);
+			}
+
 			goto nonstandard_exit_func;
 		}
 	}
@@ -1555,6 +1659,9 @@ row_ins_check_foreign_constraint(
 	dict_index_t *check_index;
 	dberr_t err = DB_SUCCESS;
 
+	check_index = check_ref
+		? foreign->referenced_index : foreign->foreign_index;
+
 	{
 		dict_table_t*& fktable = check_ref
 			? foreign->referenced_table : foreign->foreign_table;
@@ -1562,60 +1669,75 @@ row_ins_check_foreign_constraint(
 		if (check_table) {
 			err = lock_table(check_table, &fktable, LOCK_IS, thr);
 			if (err != DB_SUCCESS) {
+#ifdef WITH_WSREP
+				/* Warning message for applier FK failure */
+				if (trx->is_wsrep() &&
+				    wsrep_applier_log_warnings(trx->mysql_thd)) {
+					wsrep_fk_warn("lock check table", trx,
+						      check_table, check_index, err);
+				}
+#endif
 				goto do_possible_lock_wait;
 			}
 		}
 		check_table = fktable;
 	}
 
-	check_index = check_ref
-		? foreign->referenced_index : foreign->foreign_index;
-
 	if (!check_table || !check_table->is_readable() || !check_index) {
 		FILE*	ef = dict_foreign_err_file;
 		std::string fk_str;
+		std::ostringstream os;
+		std::string fk_table_str;
 
 		row_ins_set_detailed(trx, foreign);
 		row_ins_foreign_trx_print(trx);
 
-		fputs("Foreign key constraint fails for table ", ef);
-		ut_print_name(ef, trx, check_ref
-			      ? foreign->foreign_table_name
-			      : foreign->referenced_table_name);
-		fputs(":\n", ef);
+		os << "Foreign key constraint fails for table ";
+		fk_table_str= ut_get_name(trx, check_ref
+			        ? foreign->foreign_table_name
+			        : foreign->referenced_table_name);
+		os << fk_table_str << std::endl;
 		fk_str = dict_print_info_on_foreign_key_in_create_format(
 			trx, foreign, TRUE);
-		fputs(fk_str.c_str(), ef);
+		os << fk_str;
 		if (check_ref) {
 			if (foreign->foreign_index) {
-				fprintf(ef, "\nTrying to add to index %s"
-					" tuple:\n",
-					foreign->foreign_index->name());
+			  os << "\nTrying to add to index " <<
+			    foreign->foreign_index->name() << " tuple:\n";
 			} else {
-				fputs("\nTrying to add tuple:\n", ef);
+			  os << "\nTrying to add tuple:\n";
 			}
-			dtuple_print(ef, entry);
-			fputs("\nBut the parent table ", ef);
-			ut_print_name(ef, trx, foreign->referenced_table_name);
-			fputs("\nor its .ibd file or the required index does"
-			      " not currently exist!\n", ef);
+			dtuple_print(os, entry);
+			os << "\nBut the parent table ";
+			fk_table_str= ut_get_name(trx, foreign->referenced_table_name);
+			os << fk_table_str;
+			os << "\nor its .ibd file or the required index does"
+			      " not currently exist!\n";
 			err = DB_NO_REFERENCED_ROW;
 		} else {
 			if (foreign->referenced_index) {
-				fprintf(ef, "\nTrying to modify index %s"
-					" tuple:\n",
-					foreign->referenced_index->name());
+			  os << "\nTrying to modify index "
+			     << foreign->referenced_index->name()
+			     <<" tuple:\n";
 			} else {
-				fputs("\nTrying to modify tuple:\n", ef);
+			  os << "\nTrying to modify tuple:\n";
 			}
-			dtuple_print(ef, entry);
-			fputs("\nBut the referencing table ", ef);
-			ut_print_name(ef, trx, foreign->foreign_table_name);
-			fputs("\nor its .ibd file or the required index does"
-			      " not currently exist!\n", ef);
+			dtuple_print(os, entry);
+			os << "\nBut the referencing table ";
+			fk_table_str= ut_get_name(trx, foreign->foreign_table_name);
+			os << fk_table_str;
+			os << "\nor its .ibd file or the required index does"
+			      " not currently exist!\n";
 			err = DB_ROW_IS_REFERENCED;
 		}
-
+		fputs(os.str().c_str(), ef);
+#ifdef WITH_WSREP
+		/* Warning message for applier FK failure */
+		if (trx->is_wsrep() &&
+		    wsrep_applier_log_warnings(trx->mysql_thd)) {
+			WSREP_WARN("%s", os.str().c_str());
+		}
+#endif
 		mysql_mutex_unlock(&dict_foreign_err_mutex);
 		goto exit_func;
 	}
@@ -1663,7 +1785,18 @@ row_ins_check_foreign_constraint(
 			case DB_SUCCESS:
 				continue;
 			default:
+			{
+#ifdef WITH_WSREP
+				/* Warning message for applier FK failure */
+				if (trx->is_wsrep() &&
+				    wsrep_applier_log_warnings(trx->mysql_thd)) {
+					wsrep_fk_warn("set shared rec lock", trx,
+						      check_table, check_index, err);
+				}
+#endif
+
 				goto end_scan;
+			}
 			}
 		}
 
@@ -1688,7 +1821,18 @@ row_ins_check_foreign_constraint(
 				case DB_SUCCESS:
 					break;
 				default:
+				{
+#ifdef WITH_WSREP
+					/* Warning message for applier FK failure */
+					if (trx->is_wsrep() &&
+					    wsrep_applier_log_warnings(trx->mysql_thd)) {
+						wsrep_fk_warn("delete flag", trx,
+							      check_table, check_index, err);
+					}
+#endif
 					goto end_scan;
+
+				}
 				}
 			} else {
 				if (check_table->versioned()) {
@@ -1721,7 +1865,17 @@ row_ins_check_foreign_constraint(
 				case DB_SUCCESS:
 					break;
 				default:
+				{
+#ifdef WITH_WSREP
+					/* Warning message for applier FK failure */
+					if (trx->is_wsrep() &&
+					    wsrep_applier_log_warnings(trx->mysql_thd)) {
+						wsrep_fk_warn("lock row", trx,
+							      check_table, check_index, err);
+					}
+#endif
 					goto end_scan;
+				}
 				}
 
 				if (check_ref) {
@@ -1737,6 +1891,12 @@ row_ins_check_foreign_constraint(
 							upd_node,
 						        false,
 						        WSREP_SERVICE_KEY_REFERENCE);
+
+						if (err != DB_SUCCESS &&
+						    wsrep_applier_log_warnings(trx->mysql_thd)) {
+							wsrep_fk_warn("append key ref", trx,
+							      check_table, check_index, err);
+						}
 					}
 #endif /* WITH_WSREP */
 					goto end_scan;
@@ -1836,6 +1996,14 @@ do_possible_lock_wait:
 		if (err == DB_SUCCESS) {
 			err = DB_LOCK_WAIT;
 		}
+#ifdef WITH_WSREP
+		/* Warning message for applier FK failure */
+		if (err != DB_SUCCESS && trx->is_wsrep() &&
+		    wsrep_applier_log_warnings(trx->mysql_thd)) {
+			wsrep_fk_warn("after lock wait", trx,
+				      check_table, check_index, err);
+		}
+#endif
 	}
 
 exit_func:
