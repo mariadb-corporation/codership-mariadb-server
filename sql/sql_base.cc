@@ -4896,7 +4896,6 @@ bool DML_prelocking_strategy::handle_table(THD *thd,
   /* We rely on a caller to check that table is going to be changed. */
   DBUG_ASSERT(table_list->lock_type >= TL_FIRST_WRITE ||
               thd->lex->default_used);
-
   if (table_list->trg_event_map)
   {
     if (table->triggers)

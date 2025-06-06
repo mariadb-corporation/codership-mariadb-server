@@ -7755,8 +7755,32 @@ Write_rows_log_event::do_exec_row(rpl_group_info *rgi)
 #if defined(HAVE_REPLICATION)
 uint8 Write_rows_log_event::get_trg_event_map()
 {
-  return trg2bit(TRG_EVENT_INSERT) | trg2bit(TRG_EVENT_UPDATE) |
-         trg2bit(TRG_EVENT_DELETE);
+#ifdef WITH_WSREP
+  /*
+    For Galera applier nodes the Write_rows_log_event event is considered a pure
+    INSERT which will never cause foreign key constraint cascade operations on
+    foreign key referencing tables and therby avoid additional locks needed on
+    foreign key children tables.
+  */
+  if (WSREP(thd) && thd->wsrep_applier)
+  {
+    return trg2bit(TRG_EVENT_INSERT);
+  }
+#endif /* WITH_WSREP */
+  /*
+    In SLAVE_EXEC_MODE_IDEMPOTENT mode, Write_rows_log_event event is
+    implicitly a REPLACE, deleting all conflicting rows which can cause
+    foreign key constraint cascade operations on FK referencing table.
+
+    In SLAVE_EXEC_MODE_STRICT mode, the Write_rows_log_event is pure INSERT,
+    will never cause foreign key constraint cascade operations on foreign key
+    referencing tables.
+  */
+  if (slave_exec_mode_options == SLAVE_EXEC_MODE_IDEMPOTENT)
+    return trg2bit(TRG_EVENT_INSERT) | trg2bit(TRG_EVENT_UPDATE) |
+           trg2bit(TRG_EVENT_DELETE);
+  else
+    return trg2bit(TRG_EVENT_INSERT);
 }
 #endif
 
