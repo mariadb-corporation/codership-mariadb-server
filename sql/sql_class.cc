@@ -742,6 +742,7 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
    ,
    wsrep_applier(is_wsrep_applier),
    wsrep_applier_closing(false),
+   wsrep_applier_in_rollback(false),
    wsrep_client_thread(false),
    wsrep_retry_counter(0),
    wsrep_PA_safe(true),
