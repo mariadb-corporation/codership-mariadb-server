@@ -1,0 +1,41 @@
+--source include/have_wsrep.inc
+--source include/have_innodb.inc
+--source include/have_wsrep_provider.inc
+--source include/have_debug_sync.inc
+
+--echo #
+--echo # Set sync point and change cluster address, it will block
+--echo #
+--connect con1, localhost, root
+SET DEBUG_SYNC = "wsrep_cluster_address_update SIGNAL update_reached WAIT_FOR continue";
+--send SET GLOBAL wsrep_cluster_address='gcomm://';
+
+--echo #
+--echo # Wait until sync point is reached
+--echo #
+--connect con_ctrl, localhost, root
+SET DEBUG_SYNC = "now WAIT_FOR update_reached";
+
+--echo #
+--echo # set !wsrep_cluster_address[0], that failed earlier
+--echo #
+--connect con2, localhost, root
+--send SET GLOBAL wsrep_cluster_address='';
+
+--connection con_ctrl
+--echo #
+--echo # Signal cluster address update to continue
+--echo #
+--error 0,2013
+SET DEBUG_SYNC = "now SIGNAL continue";
+sleep 2;
+
+--disconnect con1
+--disconnect con2
+
+--connect con1, localhost, root
+--source include/restart_mysqld.inc
+
+--disconnect con_ctrl
+call mtr.add_suppression(".*mariadbd got signal.*");
+call mtr.add_suppression("Attempting backtrace. Include this in the bug report.");

@@ -1,4 +1,4 @@
-/* Copyright (C) 2013-2023 Codership Oy <info@codership.com>
+/* Copyright (C) 2013-2025 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -85,7 +85,7 @@ private:
 int wsrep_show_bf_aborts (THD *thd, SHOW_VAR *var, void *, system_status_var *,
                           enum enum_var_type scope);
 bool wsrep_create_appliers(long threads, bool mutex_protected=false);
-void wsrep_create_rollbacker();
+void wsrep_create_rollbacker(const char*);
 
 bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd);
 /*

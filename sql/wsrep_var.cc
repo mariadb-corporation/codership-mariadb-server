@@ -1,4 +1,4 @@
-/* Copyright 2008-2023 Codership Oy <http://www.codership.com>
+/* Copyright 2008-2025 Codership Oy <http://www.codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -657,15 +657,24 @@ bool wsrep_cluster_address_update (sys_var *self, THD* thd, enum_var_type type)
   char *tmp= my_strdup(PSI_INSTRUMENT_ME, wsrep_cluster_address, MYF(MY_WME));
   WSREP_DEBUG("wsrep_cluster_address_update: %s", wsrep_cluster_address);
   mysql_mutex_unlock(&LOCK_global_system_variables);
-
+  /* Here, wsrep_cluster_address can be changed */
+  DEBUG_SYNC(thd, "wsrep_cluster_address_update");
   mysql_mutex_lock(&LOCK_wsrep_cluster_config);
   wsrep_stop_replication(thd);
+  /*
+     Note that we can't lock LOCK_global_system_variables yet
+     because in below LOCK_wsrep_slave_threads is aquired
+     and correct mutexing order is LOCK_wsrep_slave_threads
+     and then LOCK_global_system_variables.
 
+     tmp passed below because wsrep_cluster_address could have
+     been changed meanwhile.
+  */
   if (*tmp && wsrep_start_replication(tmp))
   {
-    wsrep_create_rollbacker();
-    WSREP_DEBUG("Cluster address update creating %ld applier threads running %lu",
-                wsrep_slave_threads, wsrep_running_applier_threads);
+    wsrep_create_rollbacker(tmp);
+    WSREP_INFO("Cluster address update to %s creating %ld applier threads running %lu",
+                tmp, wsrep_slave_threads, wsrep_running_applier_threads);
     wsrep_create_appliers(wsrep_slave_threads);
   }
   mysql_mutex_unlock(&LOCK_wsrep_cluster_config);
