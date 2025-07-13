@@ -2113,30 +2113,7 @@ binlog_commit_flush_xid_caches(THD *thd, binlog_cache_mngr *cache_mngr,
   DBUG_ASSERT(xid); // replaced former treatment of ONE-PHASE XA
 
   Xid_log_event end_evt(thd, xid, TRUE);
-<<<<<<< HEAD
   return (binlog_flush_cache(thd, cache_mngr, &end_evt, all, TRUE, TRUE));
-=======
-#ifdef WITH_WSREP
-  if (WSREP(thd))
-  {
-    end_evt.wsrep_seqno= thd->wsrep_trx().ws_meta().gtid().seqno().get();
-    memcpy(end_evt.wsrep_uuid, thd->wsrep_trx().ws_meta().gtid().id().data(),
-           sizeof(end_evt.wsrep_uuid));
-  }
-#endif
-  if (!thd->rgi_slave && !thd->user_time.val)
-  {
-    /*
-      For transactions binlogged without explicit COMMIT queries, e.g.
-      autocommit InnoDB transactions, ensure that the end-time of the
-      transaction still exists in the binlog by setting the timestamp
-      of the Xid_log_event to be the time of commit.
-    */
-    my_hrtime_t hrtime= my_hrtime();
-    end_evt.when= hrtime_to_my_time(hrtime);
-  }
-  DBUG_RETURN(binlog_flush_cache(thd, cache_mngr, &end_evt, all, TRUE, TRUE));
->>>>>>> e7351d20746 (MDEV-36150 Retain original internal 2PC XID in Galera Cluster)
 }
 
 /**
@@ -11098,16 +11075,6 @@ public:
   bool last_gtid_no2pc; // true when the group does not end with Xid event
   uint last_gtid_engines;
   Binlog_offset last_gtid_coord; // <binlog id, binlog offset>
-#ifdef WITH_WSREP
-  /*
-    Wsrep gtid specific fields are initialized from SE checkpoint and
-    updated when Gtid_log_event with domain id matching last_wsrep_gtid_domain_id
-    is processed.
-  */
-  uint32 last_wsrep_gtid_domain_id;
-  uint32 last_wsrep_gtid_server_id;
-  uint64 last_wsrep_gtid_seq_no;
-#endif /* WITH_WSREP */
   /*
     When true, it's semisync slave recovery mode
     rolls back transactions in doubt and wipes them off from binlog.
@@ -11200,12 +11167,6 @@ public:
     unsafe gtid (group of events).
   */
   void process_gtid(int round, Gtid_log_event *gev, LOG_INFO *linfo);
-
-#ifdef WITH_WSREP
-  /* Process Xid_log_event to record wsrep meta data. Return zero on success,
-     non-zero on error. */
-  int process_wsrep(xid_recovery_member *member, const Xid_log_event *xid_ev, MEM_ROOT *);
-#endif /* WITH_WSREP */
 
   /*
     Compute next action at the end of processing of the current binlog file.
@@ -11350,13 +11311,6 @@ Recovery_context::Recovery_context() :
   binlog_unsafe_gtid= truncate_gtid= truncate_gtid_1st_round= rpl_gtid();
   if (do_truncate)
     gtid_maybe_to_truncate= new Dynamic_array<rpl_gtid>(16, 16);
-#ifdef WITH_WSREP
-  wsrep_server_gtid_t wsrep_server_gtid=
-      wsrep_get_SE_checkpoint<wsrep_server_gtid_t>();
-  last_wsrep_gtid_domain_id= wsrep_server_gtid.domain_id;
-  last_wsrep_gtid_server_id= wsrep_server_gtid.server_id;
-  last_wsrep_gtid_seq_no= wsrep_server_gtid.seqno;
-#endif /* WITH_WSREP */
 }
 
 bool Recovery_context::reset_truncate_coord(my_off_t pos)
@@ -11562,37 +11516,7 @@ void Recovery_context::process_gtid(int round, Gtid_log_event *gev,
     /* Update the binlog state with any 'valid' GTID logged after Gtid_list. */
     last_gtid_valid= true;    // may flip at Xid when falls to truncate
   }
-#ifdef WITH_WSREP
-  if (last_gtid.domain_id == last_wsrep_gtid_domain_id)
-  {
-    last_wsrep_gtid_server_id= last_gtid.server_id;
-    last_wsrep_gtid_seq_no= last_gtid.seq_no;
-  }
-#endif /* WITH_WSREP */
 }
-
-#ifdef WITH_WSREP
-int Recovery_context::process_wsrep(xid_recovery_member *member,
-                                     const Xid_log_event *xid_ev,
-                                     MEM_ROOT *mem_root)
-{
-  if (member && xid_ev->wsrep_seqno != Xid_log_event::wsrep_seqno_undefined)
-  {
-    member->wsrep_xid= (XID*) alloc_root(mem_root, sizeof(XID));
-    if (!member->wsrep_xid)
-    {
-      return 1;
-    }
-    wsrep_xid_init(member->wsrep_xid,
-                   {wsrep::id{xid_ev->wsrep_uuid, sizeof(xid_ev->wsrep_uuid)},
-                    wsrep::seqno{xid_ev->wsrep_seqno}},
-                   {last_wsrep_gtid_domain_id,
-                      last_wsrep_gtid_server_id,
-                      last_wsrep_gtid_seq_no});
-  }
-  return 0;
-}
-#endif /* WITH_WSREP */
 
 int Recovery_context::next_binlog_or_round(int& round,
                                            const char *last_log_name,
@@ -11735,10 +11659,9 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
       case XID_EVENT:
       if (do_xa)
       {
-        const Xid_log_event *xid_ev= static_cast<const Xid_log_event*>(ev);
         xid_recovery_member *member=
           (xid_recovery_member*)
-          my_hash_search(&xids, (uchar*) &xid_ev->xid,
+          my_hash_search(&xids, (uchar*) &static_cast<Xid_log_event*>(ev)->xid,
                          sizeof(my_xid));
 #ifndef HAVE_REPLICATION
         {
@@ -11748,10 +11671,6 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
 #else
         if (ctx.decide_or_assess(member, round, fdle, linfo, ev->log_pos))
           goto err2;
-#ifdef WITH_WSREP
-        if (ctx.process_wsrep(member, xid_ev, &mem_root))
-          goto err2;
-#endif /* WITH_WSREP */
 #endif
       }
       break;
