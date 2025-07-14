@@ -203,6 +203,19 @@ int wsrep_apply_events(THD*        thd,
       }
     }
 
+    /* Statement-based replication requires InnoDB repeatable read
+       transaction isolation level or higher. */
+    if (wsrep_forced_binlog_format == BINLOG_FORMAT_STMT)
+    {
+      thd->variables.tx_isolation= ISO_REPEATABLE_READ;
+      thd->tx_isolation          = ISO_REPEATABLE_READ;
+    }
+    else
+    {
+      thd->variables.tx_isolation= ISO_READ_COMMITTED;
+      thd->tx_isolation          = ISO_READ_COMMITTED;
+    }
+
     if (LOG_EVENT_IS_WRITE_ROW(typ) ||
         LOG_EVENT_IS_UPDATE_ROW(typ) ||
         LOG_EVENT_IS_DELETE_ROW(typ))
