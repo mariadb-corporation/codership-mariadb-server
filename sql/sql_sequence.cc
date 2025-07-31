@@ -123,6 +123,13 @@ bool sequence_definition::check_and_adjust(bool set_reserved_until)
                   llabs(real_increment) :
                   MAX_AUTO_INCREMENT_VALUE);
 
+  sql_print_information("Check sequence values check_and_adjust: "
+                        "max_value: %lld min_value: %lld start: %lld "
+                        "cache: %lld real_increment: %lld max_increment: %lld "
+                        "reserved_until: %lld next_free_value: %lld.",
+                        max_value, min_value, start, cache, real_increment,
+                        max_increment, reserved_until, next_free_value);
+
   if (max_value >= start &&
       max_value > min_value &&
       start >= min_value &&
@@ -154,6 +161,11 @@ void sequence_definition::read_fields(TABLE *table)
   round=          table->field[7]->val_int();
   dbug_tmp_restore_column_map(&table->read_set, old_map);
   used_fields= ~(uint) 0;
+  sql_print_information("Check sequence values read_fields: "
+                        "max_value: %lld min_value: %lld start: %lld "
+                        "increment: %lld cache: %lld reserved: %lld.",
+                        max_value, min_value,
+                        start, increment, cache, reserved_until);
   print_dbug();
 }
 
@@ -178,6 +190,11 @@ void sequence_definition::store_fields(TABLE *table)
   table->field[7]->store((longlong) round, 1);
 
   dbug_tmp_restore_column_map(&table->write_set, old_map);
+  sql_print_information("Check sequence values store_fields: "
+                        "max_value: %lld min_value: %lld start: %lld "
+                        "increment: %lld cache: %lld reserved: %lld.",
+                        max_value, min_value,
+                        start, increment, cache, reserved_until);
   print_dbug();
 }
 
@@ -363,6 +380,7 @@ bool sequence_insert(THD *thd, LEX *lex, TABLE_LIST *org_table_list)
     {
       lex->restore_backup_query_tables_list(&query_tables_list_backup);
       thd->restore_backup_open_tables_state(&open_tables_backup);
+      sql_print_information("Check sequence_insert error open");
       DBUG_RETURN(error);
     }
     table= table_list.table;
@@ -372,6 +390,11 @@ bool sequence_insert(THD *thd, LEX *lex, TABLE_LIST *org_table_list)
 
   seq->reserved_until= seq->start;
   error= seq->write_initial_sequence(table);
+  sql_print_information("Check sequence values write_initial_sequence: "
+                        "query: %s max_value: %lld min_value: %lld start: %lld "
+                        "cache: %lld error: %d.",
+                        thd->query(), seq->max_value, seq->min_value,
+                        seq->start, seq->cache, error);
   {
     uint save_unsafe_rollback_flags=
       thd->transaction->stmt.m_unsafe_rollback_flags;
@@ -629,6 +652,13 @@ void sequence_definition::adjust_values(longlong next_value)
       DBUG_ASSERT(llabs(next_free_value % real_increment) == offset);
     }
   }
+  sql_print_information("sequence_definition::adjust_values : "
+                        "max_value: %lld min_value: %lld start: %lld "
+                        "cache: %lld reserved_until: %lld real_increment: %lld "
+                        "global.auto_increment_increment: %lld ",
+                        max_value, min_value, start, cache,
+                        reserved_until, real_increment,
+                        global_system_variables.auto_increment_increment);
 }
 
 
@@ -754,6 +784,9 @@ longlong SEQUENCE::next_value(TABLE *table, bool second_round, int *error)
       (real_increment < 0 && res_value > reserved_until))
   {
     write_unlock(table);
+    sql_print_information("SEQUENCE::next_value error real_increment: %lld "
+                          "res_value: %lld reserved_until: %lld",
+                          real_increment, res_value, reserved_until);
     DBUG_RETURN(res_value);
   }
 
@@ -803,6 +836,7 @@ longlong SEQUENCE::next_value(TABLE *table, bool second_round, int *error)
       We have to do everything again to ensure that the given range was
       not empty, which could happen if increment == 0
     */
+    sql_print_information("SEQUENCE::next_value Fix next_free_value");
     DBUG_RETURN(next_value(table, 1, error));
   }
 
@@ -823,6 +857,7 @@ err:
            table->s->table_name.str);
   *error= ER_SEQUENCE_RUN_OUT;
   all_values_used= 1;
+  sql_print_information("SEQUENCE::next_value error all_values_used");
   DBUG_RETURN(0);
 }
 
@@ -1021,6 +1056,19 @@ bool Sql_cmd_alter_sequence::execute(THD *thd)
 
   seq->write_lock(table);
   new_seq->reserved_until= seq->reserved_until;
+
+  sql_print_information("Check sequence values execute: "
+                        "query: %s Old(max_value: %lld min_value: %lld start: %lld "
+                        "cache: %lld reserved_until: %lld) "
+                        "New(max_value: %lld min_value: %lld start: %lld "
+                        "cache: %lld reserved_until: %lld) "
+			"global.auto_increment_increment: %lld ",
+                        thd->query(),
+                        seq->max_value, seq->min_value,  seq->start, seq->cache,
+                        seq->reserved_until,
+                        new_seq->max_value, new_seq->min_value, new_seq->start,
+                        new_seq->cache,  new_seq->reserved_until,
+                        global_system_variables.auto_increment_increment);
 
   /* Copy from old sequence those fields that the user didn't specified */
   if (!(new_seq->used_fields & seq_field_used_increment))
