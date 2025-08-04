@@ -523,11 +523,9 @@ are allowed yet: the variable name is misleading. */
 extern bool		recv_no_ibuf_operations;
 /** TRUE when recv_init_crash_recovery() has been called. */
 extern bool		recv_needed_recovery;
-#ifdef UNIV_DEBUG
 /** TRUE if writing to the redo log (mtr_commit) is forbidden.
 Protected by log_sys.mutex. */
 extern bool		recv_no_log_write;
-#endif /* UNIV_DEBUG */
 
 /** Size of the parsing buffer; it must accommodate RECV_SCAN_SIZE many
 times! */
