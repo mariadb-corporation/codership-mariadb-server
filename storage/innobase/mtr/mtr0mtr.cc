@@ -134,7 +134,7 @@ void mtr_t::commit()
   ut_ad(!is_inside_ibuf());
 
   /* This is a dirty read, for debugging. */
-  ut_ad(!m_modifications || !recv_no_log_write);
+  ut_a(!m_modifications || !recv_no_log_write);
   ut_ad(!m_modifications || m_log_mode != MTR_LOG_NONE);
 
   if (m_modifications && (m_log_mode == MTR_LOG_NO_REDO || !m_log.empty()))
@@ -774,7 +774,7 @@ struct mtr_write_log
 
 std::pair<lsn_t,mtr_t::page_flush_ahead> mtr_t::do_write()
 {
-  ut_ad(!recv_no_log_write);
+  ut_a(!recv_no_log_write);
   ut_ad(is_logged());
 
   ulint	len= m_log.size();

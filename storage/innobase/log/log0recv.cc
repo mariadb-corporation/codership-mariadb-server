@@ -60,11 +60,9 @@ Created 9/20/1997 Heikki Tuuri
 recv_sys_t	recv_sys;
 /** TRUE when recv_init_crash_recovery() has been called. */
 bool	recv_needed_recovery;
-#ifdef UNIV_DEBUG
 /** TRUE if writing to the redo log (mtr_commit) is forbidden.
 Protected by log_sys.mutex. */
 bool	recv_no_log_write = false;
-#endif /* UNIV_DEBUG */
 
 /** If the following is TRUE, the buffer pool file pages must be invalidated
 after recovery and no ibuf operations are allowed; this becomes TRUE if
@@ -4757,7 +4755,7 @@ completed:
 	mysql_mutex_lock(&recv_sys.mutex);
 	recv_sys.apply_log_recs = true;
 	recv_no_ibuf_operations = false;
-	ut_d(recv_no_log_write = srv_operation == SRV_OPERATION_RESTORE
+	recv_no_log_write = (srv_operation == SRV_OPERATION_RESTORE
 	     || srv_operation == SRV_OPERATION_RESTORE_EXPORT);
 
 	if (srv_operation == SRV_OPERATION_NORMAL) {
