@@ -1,4 +1,4 @@
-/* Copyright 2008-2023 Codership Oy <http://www.codership.com>
+/* Copyright 2008-2025 Codership Oy <http://www.codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -232,7 +232,7 @@ static T parse_value(char** startptr, char** endptr)
     false                   Pass
 */
 static
-bool wsrep_start_position_verify (const char* start_str)
+bool wsrep_start_position_verify (THD* thd, const char* start_str)
 {
   size_t        start_len;
   wsrep_uuid_t  uuid;
@@ -241,19 +241,36 @@ bool wsrep_start_position_verify (const char* start_str)
   // Check whether it has minimum acceptable length.
   start_len= strlen (start_str);
   if (start_len < 34)
+  {
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                        ER_WRONG_VALUE_FOR_VAR,
+                        "wsrep_start_position incorrect '%s', too short",
+                        start_str);
     return true;
-
+  }
   /*
     Parse the input to check whether UUID length is acceptable
     and seqno has been provided.
   */
   uuid_len= wsrep_uuid_scan (start_str, start_len, &uuid);
   if (uuid_len < 0 || (start_len - uuid_len) < 2)
+  {
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                        ER_WRONG_VALUE_FOR_VAR,
+                        "wsrep_start_position incorrect '%s', wrong uuid",
+                        start_str);
     return true;
-
+  }
   // Separator must follow the UUID.
   if (start_str[uuid_len] != ':')
+  {
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                        ER_WRONG_VALUE_FOR_VAR,
+                        "wsrep_start_position incorrect '%s'"
+                        ", separator mising after UUID",
+                        start_str);
     return true;
+  }
 
   char* endptr;
   char* startptr= (char *)start_str + uuid_len + 1;
@@ -261,7 +278,14 @@ bool wsrep_start_position_verify (const char* start_str)
 
   // Do not allow seqno < -1
   if (seqno < -1)
+  {
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                        ER_WRONG_VALUE_FOR_VAR,
+                        "wsrep_start_position incorrect '%s'"
+                        ", seqno incorrect",
+                        startptr);
     return true;
+  }
 
   // Start parsing native GTID part
   if (*startptr == ',')
@@ -269,19 +293,61 @@ bool wsrep_start_position_verify (const char* start_str)
     startptr++;
     uint32_t domain  __attribute__((unused))
       (parse_value<uint32_t>(&startptr, &endptr));
-    if (*endptr != '-') return true;
+    if (*endptr != '-')
+    {
+      push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                          ER_WRONG_VALUE_FOR_VAR,
+                          "wsrep_start_position incorrect '%s'"
+                          ", domain incorrect",
+                          endptr);
+      return true;
+    }
     startptr++;
     uint32_t server  __attribute__((unused))
       (parse_value<uint32_t>(&startptr, &endptr));
-    if (*endptr != '-') return true;
+    if (*endptr != '-')
+    {
+      push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                          ER_WRONG_VALUE_FOR_VAR,
+                          "wsrep_start_position incorrect '%s'"
+                          ", server incorrect",
+                          endptr);
+      return true;
+    }
     startptr++;
     uint64_t seq  __attribute__((unused))
       (parse_value<uint64_t>(&startptr, &endptr));
   }
 
   // Remaining string was seqno.
-  if (*endptr == '\0') return false;
+  if (*endptr == '\0' || *endptr == '/') {
+    /* In migration MySQL 8.x start position can have additional info
+     i.e. local_seqno */
+    if (*endptr == '/')
+    {
+      endptr++;
+      startptr= endptr;
+      uint64_t local_seqno __attribute__((unused))
+        (parse_value<uint64_t>(&startptr, &endptr));
+      if (*endptr != '/')
+      {
+        push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                          ER_WRONG_VALUE_FOR_VAR,
+                          "wsrep_start_position incorrect '%s'"
+                          ", local_seqno incorrect",
+                          endptr);
+        return true;
+      }
+	
+    }
+    return false;
+  }
 
+  push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                      ER_WRONG_VALUE_FOR_VAR,
+                      "wsrep_start_position incorrect '%s'"
+                      ", incorrect format",
+                      endptr);
   return true;
 }
 
@@ -295,7 +361,7 @@ bool wsrep_set_local_position(THD* thd, const char* const value,
   wsrep_uuid_t uuid;
   size_t const uuid_len= wsrep_uuid_scan(value, length, &uuid);
   startptr= (char *)value + uuid_len + 1;
-  wsrep_seqno_t const seqno= parse_value<uint64_t>(&startptr, &endptr);
+  wsrep_seqno_t seqno= parse_value<uint64_t>(&startptr, &endptr);
 
   if (*startptr == ',')
   {
@@ -345,7 +411,7 @@ bool wsrep_start_position_check (sys_var *self, THD* thd, set_var* var)
               start_pos_buf, wsrep_start_position);
 
   // Verify the format.
-  if (wsrep_start_position_verify(start_pos_buf)) return true;
+  if (wsrep_start_position_verify(thd, start_pos_buf)) return true;
 
   // Give error if position is updated when wsrep is not enabled or
   // provider is not loaded.
@@ -384,9 +450,9 @@ bool wsrep_start_position_update (sys_var *self, THD* thd, enum_var_type type)
   return false;
 }
 
-bool wsrep_start_position_init (const char* val)
+bool wsrep_start_position_init (THD* thd, const char* val)
 {
-  if (NULL == val || wsrep_start_position_verify (val))
+  if (NULL == val || wsrep_start_position_verify(thd, val))
   {
     WSREP_ERROR("Bad initial value for wsrep_start_position: %s",
                 (val ? val : ""));

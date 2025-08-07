@@ -114,7 +114,7 @@ extern bool wsrep_forced_binlog_format_check CHECK_ARGS;
 
 #define wsrep_provider_init(X)
 #define wsrep_init_vars() (0)
-#define wsrep_start_position_init(X)
+#define wsrep_start_position_init(T,X)
 
 #endif /* WITH_WSREP */
 #endif /* WSREP_VAR_H */
