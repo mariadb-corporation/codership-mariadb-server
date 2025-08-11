@@ -292,11 +292,14 @@ int wsrep_apply_events(THD*                       thd,
 
     /* rollback to savepoint without telling Wsrep-lib */
     thd->variables.wsrep_on = false;
+    thd->wsrep_applier_in_rollback= true;
     if (FALSE != trans_rollback_to_savepoint(thd, savepoint)) {
       thd->variables.wsrep_on = true;
+      thd->wsrep_applier_in_rollback= false;
       break;
     }
     thd->variables.wsrep_on = true;
+    thd->wsrep_applier_in_rollback= false;
 
     /* reset THD object for retry */
     thd->clear_error();
