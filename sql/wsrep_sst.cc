@@ -1,5 +1,5 @@
-/* Copyright 2008-2022 Codership Oy <http://www.codership.com>
-   Copyright (c) 2008, 2022, MariaDB
+/* Copyright 2008-2025 Codership Oy <http://www.codership.com>
+   Copyright (c) 2008, 2025, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1610,7 +1610,7 @@ static int sst_donate_mysqldump (const char*         addr,
                      "%s"
                      WSREP_SST_OPT_GTID " '%s:%lld,%d-%d-%llu' "
                      WSREP_SST_OPT_GTID_DOMAIN_ID " '%d'"
-                     "%s",
+                     "%s %s",
                      addr, port, mysqld_port, mysqld_unix_port,
                      mysql_real_data_home,
                      wsrep_defaults_file,
@@ -1618,7 +1618,8 @@ static int sst_donate_mysqldump (const char*         addr,
                      wsrep_gtid_server.domain_id, wsrep_gtid_server.server_id,
                      wsrep_gtid_server.seqno(),
                      wsrep_gtid_server.domain_id,
-                     bypass ? " " WSREP_SST_OPT_BYPASS : "");
+                     bypass ? " " WSREP_SST_OPT_BYPASS : "",
+                     wsrep_sst_mysql_migrate ? " " WSREP_SST_OPT_MYSQL_MIGRATE : "");
 
   if (ret < 0 || size_t(ret) >= cmd_len)
   {

@@ -1,5 +1,5 @@
-# Copyright (C) 2017-2024 MariaDB
-# Copyright (C) 2012-2015 Codership Oy
+# Copyright (C) 2017-2025 MariaDB
+# Copyright (C) 2012-2025 Codership Oy
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -204,6 +204,7 @@ WSREP_SST_OPT_ADDR=""
 WSREP_SST_OPT_ADDR_PORT=""
 WSREP_SST_OPT_HOST=""
 WSREP_SST_OPT_HOST_UNESCAPED=""
+WSREP_SST_OPT_MYSQL_MIGRATE=0
 ARIA_LOG_DIR=""
 INNODB_DATA_HOME_DIR=$(trim_dir "${INNODB_DATA_HOME_DIR:-}")
 INNODB_LOG_GROUP_HOME=$(trim_dir "${INNODB_LOG_GROUP_HOME:-}")
@@ -424,6 +425,9 @@ case "$1" in
     '--gtid-domain-id')
         readonly WSREP_SST_OPT_GTID_DOMAIN_ID=$(trim_string "$2")
         shift
+        ;;
+    '--mysql-migrate')
+        readonly WSREP_SST_OPT_MYSQL_MIGRATE=1
         ;;
     '--mysqld-args')
         original_cmd=""

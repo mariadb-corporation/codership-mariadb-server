@@ -44,6 +44,7 @@ wsrep_commit_window	#
 wsrep_local_state	#
 wsrep_local_state_comment	#
 wsrep_cert_index_size	#
+wsrep_causal_reads	#
 wsrep_cert_interval	#
 wsrep_open_transactions	#
 wsrep_open_connections	#
@@ -136,10 +137,10 @@ WSREP_SST_AUTH
 WSREP_SST_DONOR
 WSREP_SST_DONOR_REJECTS_QUERIES
 WSREP_SST_METHOD
+WSREP_SST_MYSQL_MIGRATE
 WSREP_SST_RECEIVE_ADDRESS
 WSREP_START_POSITION
 WSREP_STATUS_FILE
-WSREP_STRICT_DDL
 WSREP_SYNC_WAIT
 WSREP_TRX_FRAGMENT_SIZE
 WSREP_TRX_FRAGMENT_UNIT
