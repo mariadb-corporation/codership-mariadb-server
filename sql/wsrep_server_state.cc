@@ -99,9 +99,9 @@ int Wsrep_server_state::init_provider(const std::string& provider,
 int Wsrep_server_state::init_options()
 {
   if (!m_instance) return 1;
-  m_options= std::unique_ptr<wsrep::provider_options>(
-     new wsrep::provider_options(m_instance->provider()));
-  int ret= m_options->initial_options();
+  m_options=
+      std::unique_ptr<wsrep::provider_options>(new wsrep::provider_options());
+  int ret= m_options->initial_options(m_instance->provider());
   if (ret)
   {
     WSREP_ERROR("Failed to initialize provider options");

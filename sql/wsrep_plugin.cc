@@ -20,6 +20,7 @@
   in favor of single options which are initialized from provider.
 */
 
+#include "wsrep_plugin.h"
 #include "sql_plugin.h"
 #include "sql_priv.h"
 #include "sql_class.h"
@@ -131,7 +132,8 @@ static void wsrep_provider_sysvar_update(THD *thd,
   T new_value= *((T *) save);
 
   auto options= Wsrep_server_state::get_options();
-  if (options->set(opt->name(), make_option_value(new_value)))
+  if (options->set(Wsrep_server_state::get_provider(), opt->name(),
+                   make_option_value(new_value)))
   {
     my_error(ER_WRONG_VALUE_FOR_VAR, MYF(0), opt->name(),
              make_option_value(new_value)->as_string());
@@ -273,6 +275,107 @@ void wsrep_destroy_sysvar(struct st_mysql_sys_var *var)
   char **var_value= ((decltype(mysql_sysvar_proto_string) *) var)->value;
   my_free(var_value);
   my_free(var);
+}
+
+struct st_mysql_sys_var
+{
+  MYSQL_PLUGIN_VAR_HEADER;
+};
+
+struct my_option_arg
+{
+  wsrep::provider_options::option *option;
+  struct st_mysql_sys_var *sysvar;
+  std::string *defaults;
+};
+
+static void my_option_init(struct my_option &my_opt,
+                           struct my_option_arg &my_arg)
+{
+  std::string option_name("wsrep-provider-");
+  option_name.append(my_arg.sysvar->name);
+  for (size_t i= 0; i < option_name.size(); ++i)
+    if (option_name[i] == '_')
+      option_name[i]= '-';
+  my_opt.name= my_strdup(PSI_INSTRUMENT_ME, option_name.c_str(), MYF(0));
+  my_opt.id= 0;
+  plugin_opt_set_limits(&my_opt, my_arg.sysvar);
+  my_opt.value= my_opt.u_max_value= *(uchar ***) (my_arg.sysvar + 1);
+  my_opt.block_size= 0;
+  my_opt.app_type= &my_arg;
+}
+
+static void my_option_deinit(struct my_option &my_opt)
+{
+  if (my_opt.name)
+    my_free((void*)my_opt.name);
+}
+
+static void make_my_options(std::vector<struct my_option_arg> &my_args,
+                            std::vector<struct my_option> &my_options)
+{
+  for (auto& arg : my_args)
+  {
+    struct my_option my_opt;
+    my_option_init(my_opt, arg);
+    my_options.push_back(my_opt);
+  }
+  struct my_option null_opt;
+  null_opt.name= NULL;
+  my_options.push_back(null_opt);
+}
+
+static void make_my_option_args(const wsrep::provider_options &options,
+                                std::string &defaults,
+                                std::vector<struct my_option_arg> &my_args)
+{
+  options.for_each([&](wsrep::provider_options::option *opt) {
+    my_args.push_back({opt, wsrep_make_sysvar_for_option(opt), &defaults});
+  });
+}
+
+static my_bool option_changed(const struct my_option *opt, const char *value,
+                              const char *filename)
+{
+  my_option_arg *my_arg= (struct my_option_arg *) opt->app_type;
+  if (my_arg->defaults->size())
+    my_arg->defaults->append(";");
+  my_arg->defaults->append(my_arg->option->real_name());
+  my_arg->defaults->append("=");
+  my_arg->defaults->append(value);
+  return 0;
+}
+
+int wsrep_load_provider_plugin_defaults(const wsrep::provider_options &options,
+                                        std::string &extra_options)
+{
+  int argc= orig_argc;
+  char **argv= orig_argv;
+
+  if (load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &argc, &argv))
+  {
+    return 1;
+  }
+  char **defaults_argv= argv;
+
+  std::vector<struct my_option> my_options;
+  std::vector<struct my_option_arg> my_option_args;
+  make_my_option_args(options, extra_options, my_option_args);
+  make_my_options(my_option_args, my_options);
+
+  my_bool skip_unknown_orig= my_getopt_skip_unknown;
+  my_getopt_skip_unknown= TRUE;
+  int error= handle_options(&argc, &argv, &my_options[0], option_changed);
+  my_getopt_skip_unknown= skip_unknown_orig;
+
+  for (struct my_option &opt : my_options)
+    my_option_deinit(opt);
+  for (struct my_option_arg &arg : my_option_args)
+    wsrep_destroy_sysvar(arg.sysvar);
+  if (argv)
+    free_defaults(defaults_argv);
+
+  return error;
 }
 
 static int wsrep_provider_plugin_init(void *p)
