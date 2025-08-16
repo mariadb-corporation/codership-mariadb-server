@@ -1613,7 +1613,38 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
                          FALSE, UINT_MAX, FALSE))
     goto error; /* purecov: inspected */
 
-  WSREP_TO_ISOLATION_BEGIN_WRTCHK(NULL, NULL, first_table);
+#ifdef WITH_WSREP
+  if (WSREP(thd) &&
+      (!thd->is_current_stmt_binlog_format_row() ||
+       !thd->find_temporary_table(first_table)))
+  {
+    /*
+      It makes sense to set auto_increment_* to defaults in TOI operations.
+      Must be done before wsrep_TOI_begin() since Query_log_event encapsulating
+      TOI statement and auto inc variables for wsrep replication is constructed
+      there. Variables are reset back in THD::reset_for_next_command() before
+      processing of next command.
+    */
+    if (wsrep_auto_increment_control)
+    {
+      thd->variables.auto_increment_offset = 1;
+      thd->variables.auto_increment_increment = 1;
+    }
+
+    wsrep::key_array keys;
+    if (wsrep_thd_is_local(thd) &&
+        !wsrep_append_fk_parent_table(thd, first_table, &keys))
+    {
+      WSREP_TO_ISOLATION_BEGIN_ALTER(first_table->db.str,
+                                     first_table->table_name.str,
+                                     first_table, NULL, &keys, NULL)
+      {
+        WSREP_WARN("OPTIMIZE TABLE isolation failure");
+        DBUG_RETURN(TRUE);
+      }
+    }
+  }
+#endif /* WITH_WSREP */
   res= (specialflag & SPECIAL_NO_NEW_FUNC) ?
     mysql_recreate_table(thd, first_table, &recreate_info, true) :
     mysql_admin_table(thd, first_table, &m_lex->check_opt,
@@ -1621,10 +1652,6 @@ bool Sql_cmd_optimize_table::execute(THD *thd)
                       &handler::ha_optimize, 0, true);
   m_lex->first_select_lex()->table_list.first= first_table;
   m_lex->query_tables= first_table;
-
-#ifdef WITH_WSREP
-wsrep_error_label:
-#endif /* WITH_WSREP */
 error:
   DBUG_RETURN(res);
 }

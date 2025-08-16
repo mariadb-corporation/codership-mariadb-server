@@ -2303,6 +2303,21 @@ MDL_context::acquire_lock(MDL_request *mdl_request, double lock_wait_timeout)
     */
     DBUG_PRINT("info", ("Got lock without waiting"));
     DBUG_PRINT("mdl", ("Seized:   %s", dbug_print_mdl(mdl_request->ticket)));
+#ifdef WITH_WSREP
+#ifdef ENABLED_DEBUG_SYNC
+  if (0 == strcmp(dbug_print_mdl(mdl_request->ticket),
+		  "test/log_history_daily (MDL_EXCLUSIVE)")) {
+	  DBUG_EXECUTE_IF("sync.mdev_28452",
+		 {
+                   const char act[]=
+                     "NOW SIGNAL mdev_28452_reached "
+                     "WAIT_FOR signal.mdev_28452";
+                   DBUG_ASSERT(!debug_sync_set_action(get_thd(),
+                                                      STRING_WITH_LEN(act)));
+                 };);
+  }
+#endif /* ENABLED_DEBUG_SYNC */
+#endif /* WITH_WSREP! */
     DBUG_RETURN(FALSE);
   }
 
