@@ -1,4 +1,4 @@
-/* Copyright (C) 2013-2023 Codership Oy <info@codership.com>
+/* Copyright (C) 2013-2025 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -278,9 +278,9 @@ static void wsrep_rollback_process(THD *rollbacker,
   DBUG_VOID_RETURN;
 }
 
-void wsrep_create_rollbacker()
+void wsrep_create_rollbacker(const char* cluster_address)
 {
-  DBUG_ASSERT(wsrep_cluster_address[0]);
+  DBUG_ASSERT(cluster_address[0]);
   Wsrep_thd_args* args(new Wsrep_thd_args(wsrep_rollback_process,
                                           WSREP_ROLLBACKER_THREAD,
                                           pthread_self()));

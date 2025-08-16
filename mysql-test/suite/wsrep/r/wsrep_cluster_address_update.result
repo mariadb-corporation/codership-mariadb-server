@@ -1,0 +1,28 @@
+#
+# Set sync point and change cluster address, it will block
+#
+connect con1, localhost, root;
+SET DEBUG_SYNC = "wsrep_cluster_address_update SIGNAL update_reached WAIT_FOR continue";
+SET GLOBAL wsrep_cluster_address='gcomm://';;
+#
+# Wait until sync point is reached
+#
+connect con_ctrl, localhost, root;
+SET DEBUG_SYNC = "now WAIT_FOR update_reached";
+#
+# set !wsrep_cluster_address[0], that failed earlier
+#
+connect con2, localhost, root;
+SET GLOBAL wsrep_cluster_address='';;
+connection con_ctrl;
+#
+# Signal cluster address update to continue
+#
+SET DEBUG_SYNC = "now SIGNAL continue";
+disconnect con1;
+disconnect con2;
+connect con1, localhost, root;
+# restart
+disconnect con_ctrl;
+call mtr.add_suppression(".*mariadbd got signal.*");
+call mtr.add_suppression("Attempting backtrace. Include this in the bug report.");
