@@ -1,18 +1,31 @@
 connection node_2;
 connection node_1;
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
-connection node_2;
-SET AUTOCOMMIT=OFF;
+INSERT INTO t1 values (1);
 LOCK TABLE t1 WRITE;
-connection node_1;
-INSERT INTO t1 VALUES (2);
-connection node_2;
+connect node_1_ctrl, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connection node_1_ctrl;
 SET SESSION wsrep_sync_wait = 0;
+SET DEBUG_SYNC= 'wsrep_before_mdl_wait SIGNAL before_mdl_wait WAIT_FOR mdl_wait_continue';
+INSERT INTO t1 VALUES (2);;
+connection node_1;
+# Wait until INSERT is blocked before MDL lock wait
+SET DEBUG_SYNC= 'now WAIT_FOR before_mdl_wait';
+SELECT COUNT(*) AS EXPECT_1 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE STATE LIKE 'debug sync point: wsrep_before_mdl_wait%';
+EXPECT_1
+1
+SET DEBUG_SYNC = 'now SIGNAL mdl_wait_continue';
+connection node_1;
 UNLOCK TABLES;
 COMMIT;
-SELECT COUNT(*) = 1 FROM t1;
-COUNT(*) = 1
-1
+connection node_1_ctrl;
+SELECT COUNT(*) AS EXPECT_2 FROM t1;
+EXPECT_2
+2
+connection node_2;
+SELECT COUNT(*) AS EXPECT_2 FROM t1;
+EXPECT_2
+2
 wsrep_local_aborts_increment
-1
+0
 DROP TABLE t1;
