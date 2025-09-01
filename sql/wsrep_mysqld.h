@@ -1,4 +1,4 @@
-/* Copyright 2008-2023 Codership Oy <http://www.codership.com>
+/* Copyright 2008-2025 Codership Oy <http://www.codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@ typedef struct st_mysql_show_var SHOW_VAR;
 #include "wsrep/streaming_context.hpp"
 #include "wsrep_api.h"
 #include <map>
+#include "wsrep_buffered_error_log.h"
 
 #define WSREP_UNDEFINED_TRX_ID ULONGLONG_MAX
 
@@ -160,7 +161,12 @@ extern const char* wsrep_provider_version;
 extern const char* wsrep_provider_vendor;
 extern char*       wsrep_provider_capabilities;
 extern char*       wsrep_cluster_capabilities;
-
+extern unsigned long long   wsrep_buffered_error_log_buffer_size;
+extern unsigned long long   wsrep_buffered_error_log_file_size;
+extern const char* wsrep_buffered_error_log_filename;
+extern Buffered_error_logger wsrep_buffered_error_log;
+extern uint        wsrep_buffered_error_log_rotations;
+ 
 int  wsrep_show_status(THD *thd, SHOW_VAR *var, void *buff,
                        system_status_var *status_var, enum_var_type scope);
 int  wsrep_show_ready(THD *thd, SHOW_VAR *var, void *buff,
@@ -596,6 +602,7 @@ wsrep::key wsrep_prepare_key_for_toi(const char* db, const char* table,
 void wsrep_wait_ready(THD *thd);
 void wsrep_ready_set(bool ready_value);
 
+void wsrep_disable_logging(void);
 /**
  * Returns true if the given list of tables contains at least one
  * non-temporary table.
