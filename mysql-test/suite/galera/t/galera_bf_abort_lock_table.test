@@ -8,6 +8,10 @@
 CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
 
 --connection node_2
+# Wait for Galera to replicate "CREATE TABLE t1" to node_2
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 't1';
+--source include/wait_condition_with_debug.inc
+
 SET AUTOCOMMIT=OFF;
 --let $wsrep_local_bf_aborts_before = `SELECT VARIABLE_VALUE FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_local_bf_aborts'`
 LOCK TABLE t1 WRITE;
