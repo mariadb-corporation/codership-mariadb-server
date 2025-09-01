@@ -131,6 +131,8 @@ uint wsrep_applier_retry_count= 0;
 
 std::atomic <bool> wsrep_thread_create_failed;
 
+ulong wsrep_debug_mode= 0;
+
 /*
  * End configuration options
  */
@@ -4177,4 +4179,15 @@ bool wsrep_foreign_key_append(THD *thd, FOREIGN_KEY_INFO *fk)
   }
 
   return false;
+}
+
+void wsrep_disable_logging(void)
+{
+  // Disable buffered error logging
+  wsrep_debug_mode &= ~WSREP_DEBUG_MODE_BUFFERED;
+  // Disable also wsrep_debug logging
+  wsrep_debug_mode &= WSREP_DEBUG_MODE_DEBUG;
+  // Set wsrep_debug to NONE
+  wsrep_debug=0;
+  WSREP_WARN("Buffered error logging and wsrep debug logging disabled.");
 }
