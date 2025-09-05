@@ -7115,6 +7115,7 @@ longlong Item_func_nextval::val_int()
   {
     /* Alter table checking if function works */
     null_value= 0;
+    sql_print_information("Item_func_nextval::val_int CHECK_FIELD_EXPRESSION");
     DBUG_RETURN(0);
   }
 
@@ -7133,13 +7134,22 @@ longlong Item_func_nextval::val_int()
   if (!(entry= ((SEQUENCE_LAST_VALUE*)
                 my_hash_search(&thd->sequences, (uchar*) key, length))))
   {
-    if (!(key= (char*) my_memdup(PSI_INSTRUMENT_ME, key, length, MYF(MY_WME))) ||
-        !(entry= new SEQUENCE_LAST_VALUE((uchar*) key, length)))
+    if (!(key= (char*) my_memdup(PSI_INSTRUMENT_ME, key, length, MYF(MY_WME))))
     {
       /* EOM, error given */
       my_free((char*) key);
       delete entry;
       null_value= 1;
+      sql_print_information("Item_func_nextval::val_int error key");
+      DBUG_RETURN(0);
+    }
+    if (!(entry= new SEQUENCE_LAST_VALUE((uchar*) key, length)))
+    {
+      /* EOM, error given */
+      my_free((char*) key);
+      delete entry;
+      null_value= 1;
+      sql_print_information("Item_func_nextval::val_int error last_value");
       DBUG_RETURN(0);
     }
     if (my_hash_insert(&thd->sequences, (uchar*) entry))
@@ -7147,6 +7157,7 @@ longlong Item_func_nextval::val_int()
       /* EOM, error given */
       delete entry;
       null_value= 1;
+      sql_print_information("Item_func_nextval::val_int error my_hash_insert");
       DBUG_RETURN(0);
     }
   }
