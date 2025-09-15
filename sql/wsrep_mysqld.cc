@@ -130,6 +130,8 @@ uint  wsrep_ignore_apply_errors= 0;
 
 std::atomic <bool> wsrep_thread_create_failed;
 
+bool wsrep_sst_mysql_migrate= false;            // is this MySQL --> MariaDB migration
+
 /*
  * End configuration options
  */

@@ -6527,6 +6527,10 @@ static Sys_var_charptr Sys_wsrep_allowlist(
        READ_ONLY GLOBAL_VAR(wsrep_allowlist), CMD_LINE(REQUIRED_ARG),
        DEFAULT(""));
 
+static Sys_var_mybool Sys_wsrep_sst_mysql_migrate(
+       "wsrep_sst_mysql_migrate", "Set --mysql-migrate option for mysqldump",
+       GLOBAL_VAR(wsrep_sst_mysql_migrate), CMD_LINE(OPT_ARG), DEFAULT(FALSE));
+
 #endif /* WITH_WSREP */
 
 static bool fix_host_cache_size(sys_var *, THD *, enum_var_type)
