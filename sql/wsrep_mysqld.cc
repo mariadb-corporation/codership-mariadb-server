@@ -130,6 +130,8 @@ uint  wsrep_ignore_apply_errors= 0;
 
 std::atomic <bool> wsrep_thread_create_failed;
 
+const char *wsrep_applier_priority;             // Priority of applier threads!
+
 /*
  * End configuration options
  */
@@ -867,6 +869,8 @@ int wsrep_init()
   wsrep_init_position();
   wsrep_sst_auth_init();
 
+  thread_priority_manager = new Thread_priority_manager();
+
   if (!*wsrep_provider ||
       !strcasecmp(wsrep_provider, WSREP_NONE))
   {
@@ -1062,6 +1066,8 @@ void wsrep_deinit(bool free_options)
   {
     wsrep_sst_auth_free();
   }
+
+  delete thread_priority_manager;
 }
 
 /* Destroy wsrep thread LOCKs and CONDs */
@@ -3830,6 +3836,10 @@ void* start_wsrep_THD(void *arg)
 
   thd->real_id=pthread_self(); // Keep purify happy
 
+  // Allow the system variable "wsrep_applier_priority" to control
+  // the priority of this thread.
+  thread_priority_manager->add(thd->real_id);
+
   my_net_init(&thd->net,(st_vio*) 0, thd, MYF(0));
 
   DBUG_PRINT("wsrep",(("creating thread %lld"), (long long)thd->thread_id));
@@ -3900,6 +3910,8 @@ void* start_wsrep_THD(void *arg)
   /* Wsrep may reset globals during thread context switches, store globals
      before cleanup. */
   wsrep_store_threadvars(thd);
+
+  thread_priority_manager->remove(thd->real_id);
 
   close_connection(thd, 0);
 
