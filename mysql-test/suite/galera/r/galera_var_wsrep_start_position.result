@@ -99,6 +99,71 @@ ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of 'junk'
 SELECT @@global.wsrep_start_position;
 @@global.wsrep_start_position
 00000000-0000-0000-0000-000000000000:-1
+SET @@global.wsrep_start_position='12345678';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect '12345678', too short
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678'
+SET @@global.wsrep_start_position='12345678-1234 1234-1234-123456789012!a';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234 1234-1234-123456789012!a'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect '12345678-1234 1234-1234-123456789012!a', wrong uuid
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234 1234-1234-123456789012!a'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012!a';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012!a'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect '12345678-1234-1234-1234-123456789012!a', separator mising after UUID
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012!a'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:-100';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:-100'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect '', seqno incorrect
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:-100'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:A';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:A'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect 'A', incorrect format
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:A'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100:';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100:'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect ':', incorrect format
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100:'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1B';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1B'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect 'B', domain incorrect
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1B'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1-1C';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1-1C'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect 'C', server incorrect
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1-1C'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1-1-20B';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1-1-20B'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect 'B', incorrect format
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1-1-20B'
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1-1-20/abcdefghijklmn';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1-1-20/abcdefghijklmn'
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1231	wsrep_start_position incorrect 'abcdefghijklmn', local_seqno incorrect
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '12345678-1234-1234-1234-123456789012:100,1-1-20/abcdefghijklmn'
+SET @@global.wsrep_start_position='64de8141-7bf8-11f0-a5e1-2f107ecf09fa:8410/8502/11/57df8fe9-7bf8-11f0-83b8-00e04ca2f8fe';
+ERROR 42000: Variable 'wsrep_start_position' can't be set to the value of '64de8141-7bf8-11f0-a5e1-2f107ecf09fa:8410/8502/11/57df8fe9-7bf8-11f0-83b8-00e04ca2f8fe'
+SHOW WARNINGS;
+Level	Code	Message
+Error	1231	Variable 'wsrep_start_position' can't be set to the value of '64de8141-7bf8-11f0-a5e1-2f107ecf09fa:8410/8502/11/57df8fe9-7bf8-11f0-83b8-00e04ca2f8fe'
 
 # restore the initial value
 SET @@global.wsrep_start_position = @wsrep_start_position_global_saved;
