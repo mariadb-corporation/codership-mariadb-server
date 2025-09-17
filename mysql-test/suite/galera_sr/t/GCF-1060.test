@@ -1,9 +1,11 @@
 --source include/galera_cluster.inc
+--source include/have_sequence.inc
+--source include/big_test.inc
 
---let $count = 100;
+--let $count = 50;
 --let $wsrep_trx_fragment_size = 1;
 --let $query_node_1 = TRUNCATE TABLE t1
---let $query_node_1a = INSERT INTO t1 VALUE (1,'x'),(2,'x'),(3,'x')
---let $query_node_2 = INSERT INTO t1 VALUE (4, 'z');
+--let $query_node_1a = INSERT INTO t1 SELECT seq, 'test' from seq_1_to_1000;
+--let $query_node_2 = INSERT INTO t1 SELECT seq, 'test2' from seq_2000_to_3000;
 
 --source suite/galera/include/galera_concurrent_test.inc
