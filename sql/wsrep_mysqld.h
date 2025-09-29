@@ -92,6 +92,7 @@ extern bool        wsrep_gtid_mode;
 extern uint32      wsrep_gtid_domain_id;
 extern std::atomic <bool > wsrep_thread_create_failed;
 extern ulonglong   wsrep_mode;
+extern const char *wsrep_applier_priority;
 
 enum enum_wsrep_reject_types {
   WSREP_REJECT_NONE,    /* nothing rejected */
