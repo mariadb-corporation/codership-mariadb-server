@@ -1335,6 +1335,7 @@ void Buffered_log::print()
   case WARNING_LEVEL:
     sql_print_warning("Buffered warning: %s", m_message.c_ptr_safe());
     break;
+  case DEBUG_LEVEL:
   case INFORMATION_LEVEL:
     /*
       Messages printed as "information" still end up in the mysqld *error* log,
@@ -2070,6 +2071,10 @@ static void clean_up(bool print_message)
   free_error_messages();
   /* Tell main we are ready */
   logger.cleanup_end();
+#ifdef WITH_WSREP
+  wsrep_buffered_error_log.write_to_disk();
+  wsrep_buffered_error_log.close();
+#endif /* WITH_WSREP */
   sys_var_end();
   free_charsets();
 
@@ -5039,7 +5044,12 @@ static int init_server_components()
   /* set up the hook before initializing plugins which may use it */
   error_handler_hook= my_message_sql;
   proc_info_hook= set_thd_stage_info;
-
+#ifdef WITH_WSREP
+  /* Init function will determine if we use buffered error log or not */
+  wsrep_buffered_error_log.init();
+  if (wsrep_debug)
+    wsrep_debug_mode |= WSREP_DEBUG_MODE_DEBUG;
+#endif
   /* Set up hook to handle disk full */
   my_sleep_for_space= mariadb_sleep_for_space;
 

@@ -26,6 +26,7 @@
 #include <source_revision.h>
 
 #ifdef WITH_WSREP
+#include "wsrep_mysqld.h"
 #include "wsrep_server_state.h"
 #endif /* WITH_WSREP */
 
@@ -164,6 +165,9 @@ extern "C" sig_handler handle_fatal_signal(int sig)
      We will try and print the query at the end of the signal handler, in case
      we're wrong.
   */
+#endif
+#ifdef WITH_WSREP
+  wsrep_buffered_error_log.write_to_disk();
 #endif
 
   if (segfaulted)
