@@ -392,3 +392,9 @@ int Wsrep_client_service::bf_rollback()
 
   DBUG_RETURN(ret);
 }
+
+void Wsrep_client_service::notify_state_change()
+{
+  DBUG_ENTER("Wsrep_client_service::notify_state_change");
+  DBUG_VOID_RETURN;
+}
