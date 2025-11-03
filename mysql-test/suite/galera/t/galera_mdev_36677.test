@@ -1,0 +1,38 @@
+#
+# This test is for reproducing the issue in:
+# https://jira.mariadb.org/browse/MDEV-36677
+#
+# wsrep_sst_rsync broken if innodb_log_group_home_dir is different than datadir
+#
+# This test creates a two-node cluster where the second node has
+# InnoDB log files in a directory other that InnoDB data directory.
+# An rsync-SST is performed where the second node is the joiner.  This
+# test checks that rsync-SST copies the InnoDB log files correctly to
+# a dedicated log file directory in the second node.
+
+--source include/big_test.inc
+--source include/galera_cluster.inc
+
+--let $node_1=node_1
+--let $node_2=node_2
+--connection node_2
+let $MYSQLD2_DATADIR= `SELECT @@datadir`;
+let $MYSQLD2_LOGDIR=  `SELECT @@innodb_log_group_home_dir`;
+--connection node_1
+
+--source include/auto_increment_offset_save.inc
+
+--source suite/galera/include/galera_st_shutdown_slave.inc
+--source suite/galera/include/galera_st_clean_slave.inc
+
+# check that InnoDB log file was not copied to a data directory
+--exec if [ -f $MYSQLD2_DATADIR/ib_logfile0 ]; then false; fi
+--exec if [ ! -f $MYSQLD2_LOGDIR/ib_logfile0 ]; then false; fi
+
+# --source suite/galera/include/galera_st_kill_slave.inc
+# --source suite/galera/include/galera_st_kill_slave_ddl.inc
+
+# # check that InnoDB log file was not copied to a data directory
+# --exec if [ -f $MYSQLD2_DATADIR/ib_logfile0 ]; then false; fi
+
+--source include/auto_increment_offset_restore.inc
