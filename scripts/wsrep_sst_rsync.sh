@@ -190,7 +190,6 @@ ar_log_dir="$DATA_DIR"
 ib_log_dir="$DATA_DIR"
 ib_home_dir="$DATA_DIR"
 ib_undo_dir="$DATA_DIR"
-#create_dirs
 
 encgroups='--mysqld|sst'
 
@@ -323,6 +322,8 @@ done
 RC=0
 
 if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
+
+    create_dirs
 
     if [ -n "$STUNNEL" ]; then
         cat << EOF > "$STUNNEL_CONF"
