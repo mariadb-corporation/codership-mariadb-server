@@ -180,12 +180,6 @@ fi
 
 BINLOG_TAR_FILE="$DATA_DIR/wsrep_sst_binlog.tar"
 
-wsrep_log_info "DEBUG: INNODB_DATA_HOME_DIR: $INNODB_DATA_HOME_DIR"
-wsrep_log_info "DEBUG: INNODB_LOG_GROUP_HOME: $INNODB_LOG_GROUP_HOME"
-wsrep_log_info "DEBUG: DATA_DIR: $DATA_DIR"
-#wsrep_log_info "DEBUG: ib_home_dir: $ib_home_dir"
-#wsrep_log_info "DEBUG: ib_log_dir: $ib_log_dir"
-
 ar_log_dir="$DATA_DIR"
 ib_log_dir="$DATA_DIR"
 ib_home_dir="$DATA_DIR"
