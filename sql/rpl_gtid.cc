@@ -30,6 +30,10 @@
 #include "slave.h"
 #include "log_event.h"
 
+#ifdef WITH_WSREP
+#include "wsrep_mysqld.h" /* wsrep_gtid_server*/
+#endif /* WITH_WSREP */
+
 const LEX_CSTRING rpl_gtid_slave_state_table_name=
   { STRING_WITH_LEN("gtid_slave_pos") };
 
@@ -2760,6 +2764,14 @@ gtid_waiting::wait_for_pos(THD *thd, String *gtid_str, longlong timeout_us)
   err= 0;
   for (i= 0; i < count; ++i)
   {
+#ifdef WITH_WSREP
+    /* With wsrep_gtid_mode=ON, wait for the wsrep_gtid_server if the domain_id
+     * matches_wsrep_gtid_domain_id */
+    if (wsrep_gtid_mode && wait_pos[i].domain_id == wsrep_gtid_domain_id)
+      err= wsrep_gtid_server.wait_gtid_upto(thd, wait_pos[i].seq_no,
+                                            wait_until_ptr) ? -1 : 0;
+    else
+#endif /* WITH_WSREP */
     if ((err= wait_for_gtid(thd, &wait_pos[i], wait_until_ptr)))
       break;
   }

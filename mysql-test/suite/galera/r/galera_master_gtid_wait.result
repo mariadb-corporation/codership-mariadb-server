@@ -1,0 +1,141 @@
+connection node_2;
+connection node_1;
+connection node_1;
+SET SESSION wsrep_sync_wait=0;
+connection node_2;
+SET SESSION wsrep_sync_wait=0;
+connection node_1;
+CREATE TABLE t1 (f1 INT PRIMARY KEY, f2 VARCHAR(100)) ENGINE=InnoDB;
+connection node_1;
+INSERT INTO t1 VALUES (1, 'node1_insert1');
+SELECT STRCMP(<domain_id>-<server_id>-<seq_no>, '') != 0 AS gtid1_exists;
+gtid1_exists
+1
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+INSERT INTO t1 VALUES (2, 'node1_insert2');
+connection node_2;
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+SELECT * FROM t1;
+f1	f2
+1	node1_insert1
+2	node1_insert2
+connection node_1;
+INSERT INTO t1 VALUES (3, 'node1_insert3');
+INSERT INTO t1 VALUES (4, 'node1_insert4');
+INSERT INTO t1 VALUES (5, 'node1_insert5');
+connection node_2;
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+SELECT * FROM t1;
+f1	f2
+1	node1_insert1
+2	node1_insert2
+3	node1_insert3
+4	node1_insert4
+5	node1_insert5
+connection node_2;
+INSERT INTO t1 VALUES (6, 'node2_insert1');
+connection node_1;
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+SELECT * FROM t1;
+f1	f2
+1	node1_insert1
+2	node1_insert2
+3	node1_insert3
+4	node1_insert4
+5	node1_insert5
+6	node2_insert1
+connection node_1;
+BEGIN;
+INSERT INTO t1 VALUES (7, 'node1_trx1');
+INSERT INTO t1 VALUES (8, 'node1_trx2');
+INSERT INTO t1 VALUES (9, 'node1_trx3');
+COMMIT;
+connection node_2;
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+SELECT * FROM t1;
+f1	f2
+1	node1_insert1
+2	node1_insert2
+3	node1_insert3
+4	node1_insert4
+5	node1_insert5
+6	node2_insert1
+7	node1_trx1
+8	node1_trx2
+9	node1_trx3
+connection node_2;
+UPDATE t1 SET f2 = 'updated_on_node2' WHERE f1 = 1;
+connection node_1;
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+SELECT * FROM t1;
+f1	f2
+1	updated_on_node2
+2	node1_insert2
+3	node1_insert3
+4	node1_insert4
+5	node1_insert5
+6	node2_insert1
+7	node1_trx1
+8	node1_trx2
+9	node1_trx3
+connection node_1;
+DELETE FROM t1 WHERE f1 = 9;
+connection node_2;
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+SELECT * FROM t1;
+f1	f2
+1	updated_on_node2
+2	node1_insert2
+3	node1_insert3
+4	node1_insert4
+5	node1_insert5
+6	node2_insert1
+7	node1_trx1
+8	node1_trx2
+connection node_1;
+DROP TABLE t1;
+SELECT STRCMP(<domain_id>-<server_id>-<seq_no>, '') != 0 AS gtid8_exists;
+gtid8_exists
+1
+connection node_2;
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 10) AS wait_result;
+wait_result
+0
+connection node_1;
+CREATE TABLE t1 (f1 INT PRIMARY KEY) ENGINE=InnoDB;
+connection node_2;
+SET GLOBAL debug_dbug = "+d,sync.wsrep_apply_cb";
+connection node_1;
+INSERT INTO t1 VALUES (1);
+connection node_2;
+SET SESSION debug_sync = "now WAIT_FOR sync.wsrep_apply_cb_reached";
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 2) AS wait_result;
+wait_result
+-1
+SELECT * FROM t1;
+f1
+SET SESSION debug_sync = "now SIGNAL signal.wsrep_apply_cb";
+SELECT MASTER_GTID_WAIT('<domain_id>-<server_id>-<seq_no>', 5) AS wait_result;
+wait_result
+0
+SELECT * FROM t1;
+f1
+1
+SET GLOBAL debug_dbug = '';
+SET SESSION debug_sync = 'RESET';
+connection node_1;
+DROP TABLE t1;
