@@ -69,6 +69,51 @@ SELECT @@global.wsrep_start_position;
 SET @@global.wsrep_start_position='junk';
 SELECT @@global.wsrep_start_position;
 
+# too short
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678';
+SHOW WARNINGS;
+# wrong uuid
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234 1234-1234-123456789012!a';
+SHOW WARNINGS;
+# wrong separator
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012!a';
+SHOW WARNINGS;
+# wrong seqno 1
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:-100';
+SHOW WARNINGS;
+# wrong seqno 2
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:A';
+SHOW WARNINGS;
+# wrong separator for gtid
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100:';
+SHOW WARNINGS;
+# domain wrong
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1B';
+SHOW WARNINGS;
+# server wrong
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1-1C';
+SHOW WARNINGS;
+# remaining string was not seqno
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1-1-20B';
+SHOW WARNINGS;
+# format ok but wrong value
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='12345678-1234-1234-1234-123456789012:100,1-1-20/abcdefghijklmn';
+SHOW WARNINGS;
+# correct format but wrong position
+--error ER_WRONG_VALUE_FOR_VAR
+SET @@global.wsrep_start_position='64de8141-7bf8-11f0-a5e1-2f107ecf09fa:8410/8502/11/57df8fe9-7bf8-11f0-83b8-00e04ca2f8fe';
+SHOW WARNINGS;
+
 --echo
 --echo # restore the initial value
 SET @@global.wsrep_start_position = @wsrep_start_position_global_saved;
