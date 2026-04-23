@@ -986,7 +986,7 @@ void wsrep_init_startup (bool sst_first)
   */
   if (!wsrep_start_replication(wsrep_cluster_address)) unireg_abort(1);
 
-  wsrep_create_rollbacker();
+  wsrep_create_rollbacker(wsrep_cluster_address);
   wsrep_create_appliers(1);
 
   Wsrep_server_state& server_state= Wsrep_server_state::instance();
