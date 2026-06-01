@@ -2,3 +2,5 @@
 
 [mysqld]
 wsrep_ignore_apply_errors=0
+looase-gcf-360=1
+
