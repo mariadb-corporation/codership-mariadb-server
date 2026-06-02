@@ -1,0 +1,11 @@
+!include ../galera_2nodes.cnf
+
+[mysqld.1]
+auto-increment-increment=2
+auto-increment-offset=1
+loose-mdev-37366=1
+
+[mysqld.2]
+auto-increment-increment=2
+auto-increment-offset=2
+loose-mdev-37366=1
