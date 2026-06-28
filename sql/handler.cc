@@ -2843,6 +2843,31 @@ static my_bool xarecover_handlerton(THD *unused, plugin_ref plugin,
                        x <= wsrep_limit) && info->dry_run,
                      info->dry_run))
         {
+#ifdef WITH_WSREP
+          /*
+            MDEV-40179: a wsrep transaction still in the prepared state at the
+            final recovery pass (the dry run, commit_list == 0) is past the
+            storage-engine checkpoint and will be re-delivered by the cluster
+            (IST/SST). After a physical SST (mariabackup) the joiner runs no
+            binlog XA recovery to commit or roll back such transactions, so
+            without this they would abort startup with
+            "Found N prepared transactions!". Roll them back here; the cluster
+            re-applies them from the donor. Non-wsrep (e.g. user XA) prepared
+            transactions are left untouched and still reported.
+
+            The guard is WSREP_PROVIDER_EXISTS ("a Galera provider is loaded"):
+            a node configured with a provider will rejoin and receive
+            these transactions; a standalone node (no provider) cannot, so there
+            we keep the conservative default and still report them.
+          */
+          if (WSREP_PROVIDER_EXISTS && wsrep_is_wsrep_xid(info->list + i))
+          {
+            if (hton->rollback_by_xid(hton, info->list + i) == 0)
+              sql_print_information("Rolled back orphan prepared wsrep "
+                                    "transaction %lld", (longlong) x);
+            continue;
+          }
+#endif /* WITH_WSREP */
           info->found_my_xids++;
           continue;
         }
