@@ -1448,18 +1448,28 @@ else # joiner
 
         if [ -n "$WSREP_SST_OPT_BINLOG" ]; then
             cd "$DATA"
+            #
+            # MDEV-38147: Do not ship the donor's binary log to the joiner.
+            #
+            # The backed-up binary log only carries a Gtid_list, and that
+            # position can be ahead of the engine snapshot (BACKUP STAGE
+            # BLOCK_COMMIT blocks the engine commit but not the binary log
+            # write). With gtid_strict_mode=ON that ahead position makes the
+            # joiner raise error 1950 when it re-binlogs transactions during
+            # IST.
+            #
+            # Instead the joiner starts a fresh binary log and seeds its GTID
+            # position from the storage-engine checkpoint during recovery (see
+            # wsrep_seed_binlog_gtid_state() in sql/log.cc) - the exact position
+            # from which IST resumes, which keeps the joiner's binary log in
+            # lockstep with the rest of the cluster. Leaving $binlogs empty skips
+            # the move below; the donor binary log files stay in "$DATA" and are
+            # removed together with it after the move stage.
+            #
             binlogs=""
-            if [ -f 'xtrabackup_binlog_info' ]; then
-                NL=$'\n'
-                while read bin_string || [ -n "$bin_string" ]; do
-                    bin_file=$(echo "$bin_string" | cut -f1)
-                    if [ -f "$bin_file" ]; then
-                        binlogs="$binlogs${binlogs:+$NL}$bin_file"
-                    fi
-                done < 'xtrabackup_binlog_info'
-            else
-                binlogs=$(ls -d -1 "$binlog_base".[0-9]* 2>/dev/null || :)
-            fi
+            wsrep_log_info "Not shipping the donor's binary log; the joiner" \
+                           "will start a fresh binary log seeded from the" \
+                           "storage-engine checkpoint (MDEV-38147)"
             cd "$DATA_DIR"
             if [ -n "$binlog_dir" -a "$binlog_dir" != '.' -a \
                  "$binlog_dir" != "$DATA_DIR" ]

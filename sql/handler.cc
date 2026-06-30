@@ -2556,9 +2556,9 @@ static my_xid wsrep_order_and_check_continuity(XID *list, int len)
     if (!wsrep_is_wsrep_xid(list + i) ||
         wsrep_xid_seqno(list + i) != cur_seqno + 1)
     {
-      WSREP_WARN("Discovered discontinuity in recovered wsrep "
-                 "transaction XIDs. Truncating the recovery list to "
-                 "%d entries", i);
+      WSREP_DEBUG("Discovered discontinuity in recovered wsrep "
+                  "transaction XIDs. Truncating the recovery list to "
+                  "%d entries", i);
       break;
     }
     ++cur_seqno;
