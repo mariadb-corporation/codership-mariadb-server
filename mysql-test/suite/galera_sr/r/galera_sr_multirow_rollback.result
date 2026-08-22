@@ -22,6 +22,7 @@ START TRANSACTION;
 INSERT INTO t1 (f2) VALUES ('a'), ('b');
 ERROR 23000: Duplicate entry '0' for key 'PRIMARY'
 COMMIT;
+ERROR HY000: Maximum writeset size exceeded
 SELECT COUNT(*) AS expect_0 FROM t1;
 expect_0
 0
