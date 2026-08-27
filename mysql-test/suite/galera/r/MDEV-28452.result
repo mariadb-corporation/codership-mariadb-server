@@ -1,0 +1,60 @@
+connection node_2;
+connection node_1;
+connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connection node_1;
+CREATE TABLE `user` (
+`id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+`environment_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+`username` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+`password` char(60) COLLATE utf8mb4_unicode_ci NOT NULL,
+`status` enum('sign_up','invited','active','archived')
+COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'invited',
+`last_login` datetime DEFAULT NULL,
+PRIMARY KEY (`id`),
+UNIQUE KEY `user_username_unique` (`username`),
+KEY `user_environment_id_index` (`environment_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `log_history_daily` (
+`type` enum('unknown','user','developer','api_key','api_env',
+'mail_token','device') COLLATE utf8mb4_unicode_ci NOT NULL,
+`status` enum('valid','invalid') COLLATE utf8mb4_unicode_ci NOT NULL,
+`origin` enum('unknown','browser','go','android','ios','third_party')
+COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'unknown',
+`ip` varchar(45) COLLATE utf8mb4_unicode_ci NOT NULL,
+`value` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+`user_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+`date` date NOT NULL,
+PRIMARY KEY (`type`,`status`,`origin`,`ip`,`value`,`date`),
+KEY `log_history_daily_user_id_foreign` (`user_id`),
+CONSTRAINT `log_history_daily_user_id_foreign` FOREIGN KEY (`user_id`)
+REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+SET SESSION autocommit = 0;
+INSERT INTO `user` VALUES ("id_1", "abc", "user 1", "secret", "active", NULL);
+INSERT INTO `log_history_daily` VALUES ("user", "valid", "unknown",
+"192.168.0.1", "Sample", "id_1", "2024-04-22");
+COMMIT;
+connection node_2;
+SET GLOBAL wsrep_slave_threads = 2;
+SELECT @@wsrep_slave_threads;
+@@wsrep_slave_threads
+2
+SET GLOBAL debug_dbug = "+d,sync.mdev_28452";
+connection node_1;
+OPTIMIZE TABLE `log_history_daily`;
+Table	Op	Msg_type	Msg_text
+test.log_history_daily	optimize	note	Table does not support optimize, doing recreate + analyze instead
+test.log_history_daily	optimize	status	OK
+COMMIT;
+UPDATE `user` SET `last_login` = '2024-04-23' WHERE `id`="id_1";
+COMMIT;
+connection node_2a;
+SET DEBUG_SYNC='NOW WAIT_FOR mdev_28452_reached';
+SET GLOBAL debug_dbug = 'RESET';
+SET DEBUG_SYNC = 'now SIGNAL signal.mdev_28452';
+SET DEBUG_SYNC = 'RESET';
+connection node_1;
+DROP TABLE `log_history_daily`;
+DROP TABLE `user`;
+connection node_2;
+SET GLOBAL wsrep_slave_threads = DEFAULT;
