@@ -1,0 +1,9 @@
+[binlogoff]
+wsrep_gtid_domain_id=100
+wsrep_gtid_mode=ON
+
+[binlogon]
+log-bin
+log-slave-updates
+wsrep_gtid_domain_id=100
+wsrep_gtid_mode=ON
