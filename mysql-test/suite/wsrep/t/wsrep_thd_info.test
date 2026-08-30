@@ -1,0 +1,10 @@
+--source include/have_innodb.inc
+--source include/have_wsrep.inc
+--source include/have_wsrep_provider.inc
+
+INSTALL PLUGIN WSREP_THD_INFO SONAME 'wsrep_thd_info.so';
+
+SELECT PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_STATUS, PLUGIN_TYPE FROM information_schema.plugins WHERE PLUGIN_NAME = 'WSREP_THD_INFO';
+SELECT COUNT(*) AS expect_3 FROM information_schema.wsrep_thd_info;
+
+UNINSTALL PLUGIN WSREP_THD_INFO;

@@ -17,4 +17,3 @@
 
 /* file reserved for the future use */
 SERVICE_VERSION wsrep_service= (void *) VERSION_wsrep;
-
