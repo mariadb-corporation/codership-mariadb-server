@@ -37,7 +37,7 @@ const LEX_CSTRING rpl_gtid_slave_state_table_name=
 
 void
 rpl_slave_state::update_state_hash(uint64 sub_id, rpl_gtid *gtid, void *hton,
-                                   rpl_group_info *rgi)
+                                   rpl_group_info *rgi, uint64 order_id)
 {
   int err;
   /*
@@ -47,7 +47,8 @@ rpl_slave_state::update_state_hash(uint64 sub_id, rpl_gtid *gtid, void *hton,
     there will not be an attempt to delete the corresponding table row before
     it is even committed.
   */
-  err= update(gtid->domain_id, gtid->server_id, sub_id, gtid->seq_no, hton, rgi);
+  err= update(gtid->domain_id, gtid->server_id, sub_id, gtid->seq_no, hton, rgi,
+              order_id);
   if (err)
   {
     sql_print_warning("Slave: Out of memory during slave state maintenance. "
@@ -291,11 +292,12 @@ rpl_slave_state::truncate_hash()
 
 int
 rpl_slave_state::update(uint32 domain_id, uint32 server_id, uint64 sub_id,
-                        uint64 seq_no, void *hton, rpl_group_info *rgi)
+                        uint64 seq_no, void *hton, rpl_group_info *rgi,
+                        uint64 order_id)
 {
   int res;
   mysql_mutex_lock(&LOCK_slave_state);
-  res= update_nolock(domain_id, server_id, sub_id, seq_no, hton, rgi);
+  res= update_nolock(domain_id, server_id, sub_id, seq_no, hton, rgi, order_id);
   mysql_mutex_unlock(&LOCK_slave_state);
   return res;
 }
@@ -303,7 +305,8 @@ rpl_slave_state::update(uint32 domain_id, uint32 server_id, uint64 sub_id,
 
 int
 rpl_slave_state::update_nolock(uint32 domain_id, uint32 server_id, uint64 sub_id,
-                               uint64 seq_no, void *hton, rpl_group_info *rgi)
+                               uint64 seq_no, void *hton, rpl_group_info *rgi,
+                               uint64 order_id)
 {
   element *elem= NULL;
   list_element *list_elem= NULL;
@@ -354,8 +357,22 @@ rpl_slave_state::update_nolock(uint32 domain_id, uint32 server_id, uint64 sub_id
   list_elem->domain_id= domain_id;
   list_elem->server_id= server_id;
   list_elem->sub_id= sub_id;
+  list_elem->order_id= order_id ? order_id : sub_id;
   list_elem->seq_no= seq_no;
   list_elem->hton= hton;
+
+#ifndef DBUG_OFF
+  /*
+    order_id decides which entry of a domain is reported as the position, so
+    two entries must never share one. Every order_id, whether it is a sub_id
+    from the SQL driver thread or one allocated by a Galera applier under
+    commit order, comes from next_sub_id(), a single ++counter under
+    LOCK_slave_state, so they cannot collide. Check it, because a domain fed
+    by both paths at once relies on it.
+  */
+  for (list_element *e= elem->list; e; e= e->next)
+    DBUG_ASSERT(e->order_id != list_elem->order_id);
+#endif
 
   elem->add(list_elem);
   if (last_sub_id < sub_id)
@@ -806,34 +823,38 @@ rpl_slave_state::gtid_grab_pending_delete_list()
     element *elem= (element *)my_hash_element(&hash, i);
     list_element *elist= elem->list;
     list_element *last_elem, **best_ptr_ptr, *cur, *next;
-    uint64 best_sub_id;
+    uint64 best_order_id;
 
     if (!elist)
       continue;                                 /* Nothing here */
 
-    /* Delete any old stuff, but keep around the most recent one. */
+    /*
+      Delete any old stuff, but keep around the most recent one. Recency is
+      order_id, the same value iterate() reports the position by, so that
+      the entry left behind is the one that backs @@gtid_slave_pos.
+    */
     cur= elist;
-    best_sub_id= cur->sub_id;
+    best_order_id= cur->order_id;
     best_ptr_ptr= &elist;
     last_elem= cur;
     while ((next= cur->next)) {
       last_elem= next;
-      if (next->sub_id > best_sub_id)
+      if (next->order_id > best_order_id)
       {
-        best_sub_id= next->sub_id;
+        best_order_id= next->order_id;
         best_ptr_ptr= &cur->next;
       }
       cur= next;
     }
     /*
       Append the new elements to the full list. Note the order is important;
-      we do it here so that we do not break the list if best_sub_id is the
-      last of the new elements.
+      we do it here so that we do not break the list if best_order_id is
+      the last of the new elements.
     */
     last_elem->next= full_list;
     /*
-      Delete the highest sub_id element from the old list, and put it back as
-      the single-element new list.
+      Delete the highest order_id element from the old list, and put it back
+      as the single-element new list.
     */
     cur= *best_ptr_ptr;
     *best_ptr_ptr= cur->next;
@@ -1152,7 +1173,7 @@ rpl_slave_state::iterate(int (*cb)(rpl_gtid *, void *), void *data,
 
   for (i= 0; i < hash.records; ++i)
   {
-    uint64 best_sub_id;
+    uint64 best_order_id;
     rpl_gtid best_gtid;
     element *e= (element *)my_hash_element(&hash, i);
     list_element *l= e->list;
@@ -1163,12 +1184,12 @@ rpl_slave_state::iterate(int (*cb)(rpl_gtid *, void *), void *data,
     best_gtid.domain_id= e->domain_id;
     best_gtid.server_id= l->server_id;
     best_gtid.seq_no= l->seq_no;
-    best_sub_id= l->sub_id;
+    best_order_id= l->order_id;
     while ((l= l->next))
     {
-      if (l->sub_id > best_sub_id)
+      if (l->order_id > best_order_id)
       {
-        best_sub_id= l->sub_id;
+        best_order_id= l->order_id;
         best_gtid.server_id= l->server_id;
         best_gtid.seq_no= l->seq_no;
       }
@@ -1273,7 +1294,7 @@ rpl_slave_state::domain_to_gtid(uint32 domain_id, rpl_gtid *out_gtid)
 {
   element *elem;
   list_element *list;
-  uint64 best_sub_id;
+  uint64 best_order_id;
 
   mysql_mutex_lock(&LOCK_slave_state);
   elem= (element *)my_hash_search(&hash, (const uchar *)&domain_id,
@@ -1287,13 +1308,13 @@ rpl_slave_state::domain_to_gtid(uint32 domain_id, rpl_gtid *out_gtid)
   out_gtid->domain_id= domain_id;
   out_gtid->server_id= list->server_id;
   out_gtid->seq_no= list->seq_no;
-  best_sub_id= list->sub_id;
+  best_order_id= list->order_id;
 
   while ((list= list->next))
   {
-    if (best_sub_id > list->sub_id)
+    if (best_order_id > list->order_id)
       continue;
-    best_sub_id= list->sub_id;
+    best_order_id= list->order_id;
     out_gtid->server_id= list->server_id;
     out_gtid->seq_no= list->seq_no;
   }

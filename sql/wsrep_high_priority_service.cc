@@ -382,6 +382,12 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
      assert(ws_meta == wsrep::ws_meta());
      assert(ws_handle == wsrep::ws_handle());
   }
+  /*
+    The mysql.gtid_slave_pos row written when the GTID event was parsed is
+    rolled back together with the write set, so the position stashed for it
+    must not be published.
+  */
+  wsrep_gtid_slave_pos_discard(m_thd);
   int ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
   DBUG_EXECUTE_IF("simulate_rollback_failure_in_applier", ret= 1;);
   if (ret)
