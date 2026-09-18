@@ -1660,7 +1660,33 @@ int Wsrep_schema::store_gtid_event(THD* thd,
                                                       in_transaction, false, &hton)))
     goto out;
 
-  rpl_global_gtid_slave_state->update_state_hash(sub_id, &current_gtid, hton, rgi);
+  /*
+    TOI write sets are applied inside the commit order critical section:
+    server_state::apply_toi() brackets the apply with commit_order_enter()
+    and commit_order_leave(). Publishing the position right here is
+    therefore already serialized against the other appliers.
+
+    Regular write sets are applied outside that section, in parallel by
+    several appliers. Publishing here would let the applier of a higher
+    seqno write set publish before the applier of the preceding lower
+    seqno one, and since rpl_slave_state::iterate() reports the entry with
+    the highest sub_id per domain, the lower seq_no would then become the
+    reported @@gtid_slave_pos. Stash the position on the rgi instead and
+    publish it under commit order, the way normal replication does in
+    Xid_apply_log_event::do_apply_event().
+  */
+  if (wsrep_thd_is_toi(thd))
+  {
+    rpl_global_gtid_slave_state->update_state_hash(sub_id, &current_gtid, hton,
+                                                   rgi);
+  }
+  else
+  {
+    rgi->gtid_sub_id= sub_id;
+    rgi->current_gtid= current_gtid;
+    rgi->wsrep_gtid_hton= hton;
+    rgi->gtid_pending= true;
+  }
 
   if (in_ddl)
   {
