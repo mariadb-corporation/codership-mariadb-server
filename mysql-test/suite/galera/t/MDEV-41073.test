@@ -1,0 +1,383 @@
+#
+# MDEV-41073: a write set key whose collation weight form does not fit the
+# 3500 byte key buffer.
+#
+# Three CHAR(255) utf8mb4_unicode_ci columns in a foreign key. U+FB04 is a
+# ligature, one character of it expands to several collation weights, so the
+# normalized form of the three columns is longer than the buffer.
+#
+# wsrep_store_key_val_for_row() cuts a row key that does not fit, but
+# wsrep_rec_get_foreign_key() returned DB_ERROR for the same condition. The
+# caller turned that into a fatal error and the server went down.
+#
+# Both paths now cut the key, and both tell the client that the key was cut.
+# The condition is raised as a warning, which a statement running under
+# strict mode turns into an error, so a statement whose key is cut reports
+# ER_TOO_LONG_KEY. IGNORE and a non strict sql_mode leave it a warning and
+# the row goes in.
+#
+# A cut key is not free: two rows whose key values are equal up to the cut
+# get the same key and conflict in certification although they are different
+# rows. The middle part of the test shows that.
+#
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+--source include/have_debug.inc
+--source include/have_debug_sync.inc
+--source include/galera_have_debug_sync.inc
+
+# The key is cut on whichever node builds it, so both error logs get the
+# warning and both need the suppression.
+--connection node_1
+call mtr.add_suppression("WSREP: Write set key for table .* was cut to");
+--connection node_2
+call mtr.add_suppression("WSREP: Write set key for table .* was cut to");
+
+--connection node_1
+CREATE TABLE p (a CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                b CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                c CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                d INT,
+                PRIMARY KEY (a,b,c)) ENGINE=InnoDB;
+
+CREATE TABLE ch (id INT AUTO_INCREMENT PRIMARY KEY,
+                 a CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                 b CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                 c CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                 KEY k (a,b,c),
+                 FOREIGN KEY (a,b,c) REFERENCES p (a,b,c)) ENGINE=InnoDB;
+
+# 255 ligature characters. Each one expands to several collation weights.
+SET @v = REPEAT(_utf8mb4 0xEFAC84, 255) COLLATE utf8mb4_unicode_ci;
+# The same value with the last character replaced. Columns a and b already
+# fill the buffer, so the difference is past the cut.
+SET @v2 = CONCAT(REPEAT(_utf8mb4 0xEFAC84, 254),
+                 _utf8mb4 0xEFAC80) COLLATE utf8mb4_unicode_ci;
+
+--echo #
+--echo # Under strict mode a cut key fails the statement
+--echo #
+--error ER_TOO_LONG_KEY
+INSERT INTO p (a,b,c,d) VALUES (@v, @v, @v, 1);
+
+--echo #
+--echo # INSERT IGNORE turns the error back into a warning and the row goes in
+--echo #
+INSERT IGNORE INTO p (a,b,c,d) VALUES (@v, @v, @v, 1);
+SHOW WARNINGS;
+
+--echo #
+--echo # The child row goes down the foreign key path and behaves the same.
+--echo # Before the fix this statement took the server down with
+--echo # "[FATAL] InnoDB: Unknown error Generic error".
+--echo #
+--error ER_TOO_LONG_KEY
+INSERT INTO ch (a,b,c) VALUES (@v, @v, @v);
+
+INSERT IGNORE INTO ch (a,b,c) VALUES (@v, @v, @v);
+SHOW WARNINGS;
+
+--echo #
+--echo # Without strict mode the client also only gets the warning
+--echo #
+SET SESSION sql_mode = '';
+
+SELECT COUNT(*) AS EXPECT_1 FROM p;
+SELECT COUNT(*) AS EXPECT_1 FROM ch;
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 1 FROM ch;
+--source include/wait_condition.inc
+SELECT COUNT(*) AS EXPECT_1 FROM p;
+SELECT COUNT(*) AS EXPECT_1 FROM ch;
+
+--echo #
+--echo # A second parent row that differs only past the cut
+--echo #
+--connection node_1
+INSERT INTO p (a,b,c,d) VALUES (@v, @v, @v2, 2);
+SELECT COUNT(*) AS EXPECT_2 FROM p;
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 2 FROM p;
+--source include/wait_condition.inc
+# User variables belong to one connection, set them here as well.
+SET @v = REPEAT(_utf8mb4 0xEFAC84, 255) COLLATE utf8mb4_unicode_ci;
+SET @v2 = CONCAT(REPEAT(_utf8mb4 0xEFAC84, 254),
+                 _utf8mb4 0xEFAC80) COLLATE utf8mb4_unicode_ci;
+
+--echo #
+--echo # An UPDATE under strict mode fails with the same error
+--echo #
+--connection node_1
+SET SESSION sql_mode = DEFAULT;
+--error ER_TOO_LONG_KEY
+UPDATE p SET d = 9 WHERE a = @v AND b = @v AND c = @v;
+
+--echo #
+--echo # UPDATE IGNORE turns it back into a warning as well
+--echo #
+UPDATE IGNORE p SET d = 9 WHERE a = @v AND b = @v AND c = @v;
+SHOW WARNINGS;
+
+--echo #
+--echo # Without strict mode the same statement gets the warning and runs.
+--echo # False positive. The two rows are different rows, but their keys are
+--echo # equal up to the cut, so the transaction on node_1 loses
+--echo # certification against the one on node_2.
+--echo #
+--connection node_1
+SET SESSION sql_mode = '';
+--connection node_2
+SET SESSION sql_mode = '';
+
+#
+# The write set of node_1 has to be replicated while the one from node_2 is
+# still inside the certification interval of node_1, otherwise node_1 has
+# already seen it and there is nothing left to certify against. Hold the
+# write set from node_2 in front of the local monitor on node_1 until the
+# commit on node_1 has been sent.
+#
+--connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1
+--connection node_1a
+SET SESSION wsrep_sync_wait = 0;
+--let $galera_sync_point = local_monitor_slave_enter_sync
+--source include/galera_set_sync_point.inc
+
+--connection node_1
+BEGIN;
+UPDATE p SET d = 10 WHERE a = @v AND b = @v AND c = @v;
+
+--connection node_2
+UPDATE p SET d = 20 WHERE a = @v AND b = @v AND c = @v2;
+
+--connection node_1a
+--source include/galera_wait_sync_point.inc
+--source include/galera_clear_sync_point.inc
+
+--connection node_1
+--send COMMIT
+
+--connection node_1a
+--let $galera_sync_point = local_monitor_slave_enter_sync
+--source include/galera_signal_sync_point.inc
+
+--connection node_1
+--error ER_LOCK_DEADLOCK
+--reap
+
+--echo # Only the update from node_2 is there
+--connection node_1
+--let $wait_condition = SELECT COUNT(*) = 1 FROM p WHERE d = 20;
+--source include/wait_condition.inc
+SELECT d FROM p ORDER BY d;
+
+--echo #
+--echo # Short values leave the key inside the buffer. The same pattern on
+--echo # two different rows then commits.
+--echo #
+--connection node_1
+CREATE TABLE p2 (a CHAR(8) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                 d INT,
+                 PRIMARY KEY (a)) ENGINE=InnoDB;
+INSERT INTO p2 (a,d) VALUES ('aaaaaaaa', 1), ('aaaaaaab', 2);
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 2 FROM p2;
+--source include/wait_condition.inc
+
+--connection node_1a
+--let $galera_sync_point = local_monitor_slave_enter_sync
+--source include/galera_set_sync_point.inc
+
+--connection node_1
+BEGIN;
+UPDATE p2 SET d = 10 WHERE a = 'aaaaaaaa';
+
+--connection node_2
+UPDATE p2 SET d = 20 WHERE a = 'aaaaaaab';
+
+--connection node_1a
+--source include/galera_wait_sync_point.inc
+--source include/galera_clear_sync_point.inc
+
+--connection node_1
+--send COMMIT
+
+--connection node_1a
+--let $galera_sync_point = local_monitor_slave_enter_sync
+--source include/galera_signal_sync_point.inc
+
+--connection node_1
+--reap
+--let $wait_condition = SELECT COUNT(*) = 1 FROM p2 WHERE d = 20;
+--source include/wait_condition.inc
+SELECT d FROM p2 ORDER BY d;
+
+--echo #
+--echo # Foreign keys on the other string types. InnoDB needs the whole
+--echo # column in a foreign key, so TEXT and BLOB cannot take part: they
+--echo # can only be indexed by a prefix. That leaves VARCHAR, VARBINARY and
+--echo # BINARY beside the CHAR columns above.
+--echo #
+--connection node_1
+SET SESSION sql_mode = DEFAULT;
+
+CREATE TABLE fp_v (a VARCHAR(255) CHARACTER SET utf8mb4
+                     COLLATE utf8mb4_unicode_ci,
+                   b VARCHAR(255) CHARACTER SET utf8mb4
+                     COLLATE utf8mb4_unicode_ci,
+                   c VARCHAR(255) CHARACTER SET utf8mb4
+                     COLLATE utf8mb4_unicode_ci,
+                   d INT,
+                   PRIMARY KEY (a,b,c)) ENGINE=InnoDB;
+CREATE TABLE fc_v (id INT AUTO_INCREMENT PRIMARY KEY,
+                   a VARCHAR(255) CHARACTER SET utf8mb4
+                     COLLATE utf8mb4_unicode_ci,
+                   b VARCHAR(255) CHARACTER SET utf8mb4
+                     COLLATE utf8mb4_unicode_ci,
+                   c VARCHAR(255) CHARACTER SET utf8mb4
+                     COLLATE utf8mb4_unicode_ci,
+                   KEY k (a,b,c),
+                   FOREIGN KEY (a,b,c) REFERENCES fp_v (a,b,c)) ENGINE=InnoDB;
+
+--echo # VARCHAR parent, row key path
+--error ER_TOO_LONG_KEY
+INSERT INTO fp_v (a,b,c,d) VALUES (@v, @v, @v, 1);
+INSERT IGNORE INTO fp_v (a,b,c,d) VALUES (@v, @v, @v, 1);
+SHOW WARNINGS;
+
+--echo # VARCHAR child, foreign key path
+--error ER_TOO_LONG_KEY
+INSERT INTO fc_v (a,b,c) VALUES (@v, @v, @v);
+INSERT IGNORE INTO fc_v (a,b,c) VALUES (@v, @v, @v);
+SHOW WARNINGS;
+
+--echo # BINARY and VARBINARY are not collated, so the key stays inside the
+--echo # buffer and both statements run
+CREATE TABLE fp_b (a BINARY(255),
+                   b VARBINARY(1000),
+                   c VARBINARY(1000),
+                   d INT,
+                   PRIMARY KEY (a,b,c)) ENGINE=InnoDB;
+CREATE TABLE fc_b (id INT AUTO_INCREMENT PRIMARY KEY,
+                   a BINARY(255),
+                   b VARBINARY(1000),
+                   c VARBINARY(1000),
+                   KEY k (a,b,c),
+                   FOREIGN KEY (a,b,c) REFERENCES fp_b (a,b,c)) ENGINE=InnoDB;
+
+SET @b255 = REPEAT('a', 255);
+SET @b1000 = REPEAT('a', 1000);
+INSERT INTO fp_b (a,b,c,d) VALUES (@b255, @b1000, @b1000, 1);
+INSERT INTO fc_b (a,b,c) VALUES (@b255, @b1000, @b1000);
+
+--echo # TEXT and BLOB can only be indexed by a prefix, and InnoDB refuses a
+--echo # foreign key on such a column
+--error ER_CANT_CREATE_TABLE
+CREATE TABLE fc_t (id INT AUTO_INCREMENT PRIMARY KEY,
+                   a TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                   KEY k (a(255)),
+                   FOREIGN KEY (a) REFERENCES fp_v (a)) ENGINE=InnoDB;
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 1 FROM fc_b;
+--source include/wait_condition.inc
+SELECT COUNT(*) AS EXPECT_1 FROM fp_v;
+SELECT COUNT(*) AS EXPECT_1 FROM fc_v;
+SELECT COUNT(*) AS EXPECT_1 FROM fp_b;
+SELECT COUNT(*) AS EXPECT_1 FROM fc_b;
+
+--echo #
+--echo # Other string types and prefix indexes outside a foreign key. The
+--echo # indexes are
+--echo # unique because wsrep_append_keys() only builds a key for a unique
+--echo # index, one referenced by a foreign key, or any index of a table
+--echo # without a primary key. The key is cut when the collation weights of
+--echo # the indexed bytes pass the buffer; the binary types are not
+--echo # collated, so they never are.
+--echo #
+--connection node_1
+SET SESSION sql_mode = DEFAULT;
+
+SET @c200 = REPEAT(_utf8mb4 0xEFAC84, 200) COLLATE utf8mb4_unicode_ci;
+SET @c768 = REPEAT(_utf8mb4 0xEFAC84, 768) COLLATE utf8mb4_unicode_ci;
+SET @bin255 = REPEAT('a', 255);
+SET @bin3000 = REPEAT('a', 3000);
+
+CREATE TABLE k1 (id INT AUTO_INCREMENT PRIMARY KEY,
+                 v VARCHAR(768) CHARACTER SET utf8mb4
+                   COLLATE utf8mb4_unicode_ci,
+                 UNIQUE KEY (v)) ENGINE=InnoDB;
+CREATE TABLE k2 (id INT AUTO_INCREMENT PRIMARY KEY,
+                 t TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                 UNIQUE KEY (t(768))) ENGINE=InnoDB;
+CREATE TABLE k3 (id INT AUTO_INCREMENT PRIMARY KEY,
+                 c CHAR(255) CHARACTER SET utf8mb4
+                   COLLATE utf8mb4_unicode_ci,
+                 UNIQUE KEY (c(200))) ENGINE=InnoDB;
+CREATE TABLE k4 (id INT AUTO_INCREMENT PRIMARY KEY,
+                 v VARCHAR(768) CHARACTER SET utf8mb4
+                   COLLATE utf8mb4_unicode_ci,
+                 UNIQUE KEY (v(700))) ENGINE=InnoDB;
+CREATE TABLE k5 (id INT AUTO_INCREMENT PRIMARY KEY,
+                 b BLOB,
+                 UNIQUE KEY (b(3000))) ENGINE=InnoDB;
+CREATE TABLE k6 (id INT AUTO_INCREMENT PRIMARY KEY,
+                 bn BINARY(255),
+                 vb VARBINARY(3000),
+                 UNIQUE KEY (bn),
+                 UNIQUE KEY (vb(3000))) ENGINE=InnoDB;
+
+--echo # VARCHAR, whole column
+--error ER_TOO_LONG_KEY
+INSERT INTO k1 (v) VALUES (@c768);
+
+--echo # TEXT, prefix
+--error ER_TOO_LONG_KEY
+INSERT INTO k2 (t) VALUES (@c768);
+
+--echo # CHAR, prefix short enough to stay inside the buffer
+INSERT INTO k3 (c) VALUES (@c200);
+
+--echo # VARCHAR, prefix
+--error ER_TOO_LONG_KEY
+INSERT INTO k4 (v) VALUES (@c768);
+
+--echo # BLOB, prefix. Bytes are not collated, so nothing is cut
+INSERT INTO k5 (b) VALUES (@bin3000);
+
+--echo # BINARY and VARBINARY, whole column and prefix
+INSERT INTO k6 (bn, vb) VALUES (@bin255, @bin3000);
+
+--echo # Without strict mode the cut ones go in with a warning
+SET SESSION sql_mode = '';
+INSERT INTO k1 (v) VALUES (@c768);
+SHOW WARNINGS;
+INSERT INTO k2 (t) VALUES (@c768);
+SHOW WARNINGS;
+INSERT INTO k4 (v) VALUES (@c768);
+SHOW WARNINGS;
+SET SESSION sql_mode = DEFAULT;
+
+--echo # The rows the server accepted reach node_2
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 1 FROM k6;
+--source include/wait_condition.inc
+SELECT COUNT(*) AS EXPECT_1 FROM k1;
+SELECT COUNT(*) AS EXPECT_1 FROM k2;
+SELECT COUNT(*) AS EXPECT_1 FROM k3;
+SELECT COUNT(*) AS EXPECT_1 FROM k4;
+SELECT COUNT(*) AS EXPECT_1 FROM k5;
+SELECT COUNT(*) AS EXPECT_1 FROM k6;
+
+--connection node_1
+DROP TABLE ch, p;
+DROP TABLE p2;
+DROP TABLE fc_v, fp_v;
+DROP TABLE fc_b, fp_b;
+DROP TABLE k1, k2, k3, k4, k5, k6;
+--disconnect node_1a
+
+--source include/galera_end.inc
+--echo # End of test
