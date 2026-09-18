@@ -2672,6 +2672,45 @@ rec_offs_make_nth_extern(
 # include "ha_prototypes.h"
 # include <mysql/service_wsrep.h>	/* wsrep_protocol_version */
 
+/** Room left in a write set key buffer for one column.
+
+A column that does not fit is cut, the same way wsrep_store_key_val_for_row()
+cuts the matching row key, so that the two keys still agree. Failing here
+instead fails the statement, and the caller turns the error into a fatal one.
+
+A nullable column spends one byte on the null flag, so the column needs two
+bytes before any of its value fits.
+
+@param buf_len   size of the key buffer
+@param key_len   bytes of the key written so far
+@param len       length of the column in the record, UNIV_SQL_NULL if it is
+                 SQL NULL
+@param col_ref   column of the referenced index
+@param[out] space  bytes left for the value of this column, the null flag
+                   already taken off
+@return false if not even one byte of the column fits, true otherwise */
+static
+bool
+wsrep_fk_key_space_left(
+	ulint			buf_len,
+	ulint			key_len,
+	ulint			len,
+	const dict_col_t*	col_ref,
+	ulint*			space)
+{
+	const ulint	flag_len = (len == UNIV_SQL_NULL
+				    || !(col_ref->prtype & DATA_NOT_NULL))
+				   ? 1 : 0;
+	const ulint	left = buf_len - key_len;
+
+	if (left < flag_len + 1) {
+		return false;
+	}
+
+	*space = left - flag_len;
+	return true;
+}
+
 int
 wsrep_rec_get_foreign_key(
 	byte 		*buf,     /* out: extracted key */
@@ -2679,7 +2718,8 @@ wsrep_rec_get_foreign_key(
 	const rec_t*	rec,	  /* in: physical record */
 	dict_index_t*	index_for,  /* in: index in foreign table */
 	dict_index_t*	index_ref,  /* in: index in referenced table */
-	ibool		new_protocol) /* in: protocol > 1 */
+	ibool		new_protocol, /* in: protocol > 1 */
+	bool*		truncated) /* out: key did not fit buf */
 {
 	const byte*	data;
 	ulint		len;
@@ -2716,13 +2756,26 @@ wsrep_rec_get_foreign_key(
 
 		ut_ad(!rec_offs_nth_default(offsets, i));
 		data = rec_get_nth_field(rec, offsets, i, &len);
-		if (key_len + ((len != UNIV_SQL_NULL) ? len + 1 : 1) > 
-		    *buf_len) {
-			fprintf(stderr,
-				"WSREP: FK key len exceeded "
-				ULINTPF " " ULINTPF " " ULINTPF "\n",
-				key_len, len, *buf_len);
-			goto err_out;
+
+		ulint space;
+
+		if (!wsrep_fk_key_space_left(*buf_len, key_len, len, col_r,
+					     &space)) {
+			/* Not even one byte of this column fits. */
+			if (truncated) {
+				*truncated = true;
+			}
+			break;
+		}
+
+		if (len != UNIV_SQL_NULL && len > space) {
+			/* Only the raw copy branches below need this: the
+			string branches are given the room they have and cut
+			the normalized value themselves. */
+			len = space;
+			if (truncated) {
+				*truncated = true;
+			}
 		}
 
 		if (len == UNIV_SQL_NULL) {
@@ -2738,7 +2791,7 @@ wsrep_rec_get_foreign_key(
 				(int)(col_f->prtype & DATA_MYSQL_TYPE_MASK),
 				dtype_get_charset_coll(col_f->prtype),
 				data, buf, static_cast<uint>(len),
-				static_cast<uint>(*buf_len));
+				static_cast<uint>(*buf_len), truncated);
 		} else { /* new protocol */
 			if (!(col_r->prtype & DATA_NOT_NULL)) {
 				*buf++ = 0;
@@ -2768,7 +2821,7 @@ wsrep_rec_get_foreign_key(
 					(int)(col_f->prtype & DATA_MYSQL_TYPE_MASK),
 					dtype_get_charset_coll(col_f->prtype),
 					0, data, len, buf,
-					*buf_len - key_len, false);
+					space, false, truncated);
 				break;
 			case DATA_CHAR:
 			case DATA_MYSQL:
@@ -2783,7 +2836,7 @@ wsrep_rec_get_foreign_key(
 					col_f->mbmaxlen
 					  ? col_f->len / col_f->mbmaxlen : 0,
 					data, len, buf,
-					*buf_len - key_len, false);
+					space, false, truncated);
 				break;
 			case DATA_FIXBINARY:
 				if (wsrep_protocol_version < 5
@@ -2804,7 +2857,8 @@ wsrep_rec_get_foreign_key(
 						      & DATA_MYSQL_TYPE_MASK),
 						dtype_get_charset_coll(
 							col_f->prtype),
-						data, buf, len, *buf_len);
+						data, buf, len, space,
+						truncated);
 					break;
 				}
 				/* fall through */
@@ -2843,11 +2897,5 @@ wsrep_rec_get_foreign_key(
 
 	*buf_len = key_len;
 	return DB_SUCCESS;
-
- err_out:
-	if (UNIV_LIKELY_NULL(heap)) {
-		mem_heap_free(heap);
-	}
-	return DB_ERROR;
 }
 #endif // WITH_WSREP

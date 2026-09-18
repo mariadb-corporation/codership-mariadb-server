@@ -1,0 +1,348 @@
+connection node_2;
+connection node_1;
+connection node_1;
+call mtr.add_suppression("WSREP: Write set key for table .* was cut to");
+connection node_2;
+call mtr.add_suppression("WSREP: Write set key for table .* was cut to");
+connection node_1;
+CREATE TABLE p (a CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+b CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+c CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+d INT,
+PRIMARY KEY (a,b,c)) ENGINE=InnoDB;
+CREATE TABLE ch (id INT AUTO_INCREMENT PRIMARY KEY,
+a CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+b CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+c CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+KEY k (a,b,c),
+FOREIGN KEY (a,b,c) REFERENCES p (a,b,c)) ENGINE=InnoDB;
+SET @v = REPEAT(_utf8mb4 0xEFAC84, 255) COLLATE utf8mb4_unicode_ci;
+SET @v2 = CONCAT(REPEAT(_utf8mb4 0xEFAC84, 254),
+_utf8mb4 0xEFAC80) COLLATE utf8mb4_unicode_ci;
+#
+# Under strict mode a cut key fails the statement
+#
+INSERT INTO p (a,b,c,d) VALUES (@v, @v, @v, 1);
+ERROR 42000: WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+#
+# INSERT IGNORE turns the error back into a warning and the row goes in
+#
+INSERT IGNORE INTO p (a,b,c,d) VALUES (@v, @v, @v, 1);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+#
+# The child row goes down the foreign key path and behaves the same.
+# Before the fix this statement took the server down with
+# "[FATAL] InnoDB: Unknown error Generic error".
+#
+INSERT INTO ch (a,b,c) VALUES (@v, @v, @v);
+ERROR 42000: WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+INSERT IGNORE INTO ch (a,b,c) VALUES (@v, @v, @v);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+#
+# Without strict mode the client also only gets the warning
+#
+SET SESSION sql_mode = '';
+SELECT COUNT(*) AS EXPECT_1 FROM p;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM ch;
+EXPECT_1
+1
+connection node_2;
+SELECT COUNT(*) AS EXPECT_1 FROM p;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM ch;
+EXPECT_1
+1
+#
+# A second parent row that differs only past the cut
+#
+connection node_1;
+INSERT INTO p (a,b,c,d) VALUES (@v, @v, @v2, 2);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SELECT COUNT(*) AS EXPECT_2 FROM p;
+EXPECT_2
+2
+connection node_2;
+SET @v = REPEAT(_utf8mb4 0xEFAC84, 255) COLLATE utf8mb4_unicode_ci;
+SET @v2 = CONCAT(REPEAT(_utf8mb4 0xEFAC84, 254),
+_utf8mb4 0xEFAC80) COLLATE utf8mb4_unicode_ci;
+#
+# An UPDATE under strict mode fails with the same error
+#
+connection node_1;
+SET SESSION sql_mode = DEFAULT;
+UPDATE p SET d = 9 WHERE a = @v AND b = @v AND c = @v;
+ERROR 42000: WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+#
+# UPDATE IGNORE turns it back into a warning as well
+#
+UPDATE IGNORE p SET d = 9 WHERE a = @v AND b = @v AND c = @v;
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+#
+# Without strict mode the same statement gets the warning and runs.
+# False positive. The two rows are different rows, but their keys are
+# equal up to the cut, so the transaction on node_1 loses
+# certification against the one on node_2.
+#
+connection node_1;
+SET SESSION sql_mode = '';
+connection node_2;
+SET SESSION sql_mode = '';
+connect node_1a, 127.0.0.1, root, , test, $NODE_MYPORT_1;
+connection node_1a;
+SET SESSION wsrep_sync_wait = 0;
+SET GLOBAL wsrep_provider_options = 'dbug=d,local_monitor_slave_enter_sync';
+connection node_1;
+BEGIN;
+UPDATE p SET d = 10 WHERE a = @v AND b = @v AND c = @v;
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+connection node_2;
+UPDATE p SET d = 20 WHERE a = @v AND b = @v AND c = @v2;
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.p' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+connection node_1a;
+SET SESSION wsrep_on = 0;
+SET SESSION wsrep_on = 1;
+SET GLOBAL wsrep_provider_options = 'dbug=';
+connection node_1;
+COMMIT;
+connection node_1a;
+SET GLOBAL wsrep_provider_options = 'signal=local_monitor_slave_enter_sync';
+connection node_1;
+ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
+# Only the update from node_2 is there
+connection node_1;
+SELECT d FROM p ORDER BY d;
+d
+9
+20
+#
+# Short values leave the key inside the buffer. The same pattern on
+# two different rows then commits.
+#
+connection node_1;
+CREATE TABLE p2 (a CHAR(8) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+d INT,
+PRIMARY KEY (a)) ENGINE=InnoDB;
+INSERT INTO p2 (a,d) VALUES ('aaaaaaaa', 1), ('aaaaaaab', 2);
+connection node_2;
+connection node_1a;
+SET GLOBAL wsrep_provider_options = 'dbug=d,local_monitor_slave_enter_sync';
+connection node_1;
+BEGIN;
+UPDATE p2 SET d = 10 WHERE a = 'aaaaaaaa';
+connection node_2;
+UPDATE p2 SET d = 20 WHERE a = 'aaaaaaab';
+connection node_1a;
+SET SESSION wsrep_on = 0;
+SET SESSION wsrep_on = 1;
+SET GLOBAL wsrep_provider_options = 'dbug=';
+connection node_1;
+COMMIT;
+connection node_1a;
+SET GLOBAL wsrep_provider_options = 'signal=local_monitor_slave_enter_sync';
+connection node_1;
+SELECT d FROM p2 ORDER BY d;
+d
+10
+20
+#
+# Foreign keys on the other string types. InnoDB needs the whole
+# column in a foreign key, so TEXT and BLOB cannot take part: they
+# can only be indexed by a prefix. That leaves VARCHAR, VARBINARY and
+# BINARY beside the CHAR columns above.
+#
+connection node_1;
+SET SESSION sql_mode = DEFAULT;
+CREATE TABLE fp_v (a VARCHAR(255) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+b VARCHAR(255) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+c VARCHAR(255) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+d INT,
+PRIMARY KEY (a,b,c)) ENGINE=InnoDB;
+CREATE TABLE fc_v (id INT AUTO_INCREMENT PRIMARY KEY,
+a VARCHAR(255) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+b VARCHAR(255) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+c VARCHAR(255) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+KEY k (a,b,c),
+FOREIGN KEY (a,b,c) REFERENCES fp_v (a,b,c)) ENGINE=InnoDB;
+# VARCHAR parent, row key path
+INSERT INTO fp_v (a,b,c,d) VALUES (@v, @v, @v, 1);
+ERROR 42000: WSREP: Write set key for table 'test.fp_v' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+INSERT IGNORE INTO fp_v (a,b,c,d) VALUES (@v, @v, @v, 1);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.fp_v' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.fp_v' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+# VARCHAR child, foreign key path
+INSERT INTO fc_v (a,b,c) VALUES (@v, @v, @v);
+ERROR 42000: WSREP: Write set key for table 'test.fp_v' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+INSERT IGNORE INTO fc_v (a,b,c) VALUES (@v, @v, @v);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.fp_v' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.fp_v' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+# BINARY and VARBINARY are not collated, so the key stays inside the
+# buffer and both statements run
+CREATE TABLE fp_b (a BINARY(255),
+b VARBINARY(1000),
+c VARBINARY(1000),
+d INT,
+PRIMARY KEY (a,b,c)) ENGINE=InnoDB;
+CREATE TABLE fc_b (id INT AUTO_INCREMENT PRIMARY KEY,
+a BINARY(255),
+b VARBINARY(1000),
+c VARBINARY(1000),
+KEY k (a,b,c),
+FOREIGN KEY (a,b,c) REFERENCES fp_b (a,b,c)) ENGINE=InnoDB;
+SET @b255 = REPEAT('a', 255);
+SET @b1000 = REPEAT('a', 1000);
+INSERT INTO fp_b (a,b,c,d) VALUES (@b255, @b1000, @b1000, 1);
+INSERT INTO fc_b (a,b,c) VALUES (@b255, @b1000, @b1000);
+# TEXT and BLOB can only be indexed by a prefix, and InnoDB refuses a
+# foreign key on such a column
+CREATE TABLE fc_t (id INT AUTO_INCREMENT PRIMARY KEY,
+a TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+KEY k (a(255)),
+FOREIGN KEY (a) REFERENCES fp_v (a)) ENGINE=InnoDB;
+ERROR HY000: Can't create table `test`.`fc_t` (errno: 150 "Foreign key constraint is incorrectly formed")
+connection node_2;
+SELECT COUNT(*) AS EXPECT_1 FROM fp_v;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM fc_v;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM fp_b;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM fc_b;
+EXPECT_1
+1
+#
+# Other string types and prefix indexes outside a foreign key. The
+# indexes are
+# unique because wsrep_append_keys() only builds a key for a unique
+# index, one referenced by a foreign key, or any index of a table
+# without a primary key. The key is cut when the collation weights of
+# the indexed bytes pass the buffer; the binary types are not
+# collated, so they never are.
+#
+connection node_1;
+SET SESSION sql_mode = DEFAULT;
+SET @c200 = REPEAT(_utf8mb4 0xEFAC84, 200) COLLATE utf8mb4_unicode_ci;
+SET @c768 = REPEAT(_utf8mb4 0xEFAC84, 768) COLLATE utf8mb4_unicode_ci;
+SET @bin255 = REPEAT('a', 255);
+SET @bin3000 = REPEAT('a', 3000);
+CREATE TABLE k1 (id INT AUTO_INCREMENT PRIMARY KEY,
+v VARCHAR(768) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+UNIQUE KEY (v)) ENGINE=InnoDB;
+CREATE TABLE k2 (id INT AUTO_INCREMENT PRIMARY KEY,
+t TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+UNIQUE KEY (t(768))) ENGINE=InnoDB;
+CREATE TABLE k3 (id INT AUTO_INCREMENT PRIMARY KEY,
+c CHAR(255) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+UNIQUE KEY (c(200))) ENGINE=InnoDB;
+CREATE TABLE k4 (id INT AUTO_INCREMENT PRIMARY KEY,
+v VARCHAR(768) CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci,
+UNIQUE KEY (v(700))) ENGINE=InnoDB;
+CREATE TABLE k5 (id INT AUTO_INCREMENT PRIMARY KEY,
+b BLOB,
+UNIQUE KEY (b(3000))) ENGINE=InnoDB;
+CREATE TABLE k6 (id INT AUTO_INCREMENT PRIMARY KEY,
+bn BINARY(255),
+vb VARBINARY(3000),
+UNIQUE KEY (bn),
+UNIQUE KEY (vb(3000))) ENGINE=InnoDB;
+# VARCHAR, whole column
+INSERT INTO k1 (v) VALUES (@c768);
+ERROR 42000: WSREP: Write set key for table 'test.k1' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+# TEXT, prefix
+INSERT INTO k2 (t) VALUES (@c768);
+ERROR 42000: WSREP: Write set key for table 'test.k2' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+# CHAR, prefix short enough to stay inside the buffer
+INSERT INTO k3 (c) VALUES (@c200);
+# VARCHAR, prefix
+INSERT INTO k4 (v) VALUES (@c768);
+ERROR 42000: WSREP: Write set key for table 'test.k4' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+# BLOB, prefix. Bytes are not collated, so nothing is cut
+INSERT INTO k5 (b) VALUES (@bin3000);
+# BINARY and VARBINARY, whole column and prefix
+INSERT INTO k6 (bn, vb) VALUES (@bin255, @bin3000);
+# Without strict mode the cut ones go in with a warning
+SET SESSION sql_mode = '';
+INSERT INTO k1 (v) VALUES (@c768);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.k1' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.k1' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+INSERT INTO k2 (t) VALUES (@c768);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.k2' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.k2' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+INSERT INTO k4 (v) VALUES (@c768);
+Warnings:
+Warning	1071	WSREP: Write set key for table 'test.k4' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SHOW WARNINGS;
+Level	Code	Message
+Warning	1071	WSREP: Write set key for table 'test.k4' was cut to 3500 bytes. Rows whose key values are equal up to that length produce the same key and conflict in certification.
+SET SESSION sql_mode = DEFAULT;
+# The rows the server accepted reach node_2
+connection node_2;
+SELECT COUNT(*) AS EXPECT_1 FROM k1;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM k2;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM k3;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM k4;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM k5;
+EXPECT_1
+1
+SELECT COUNT(*) AS EXPECT_1 FROM k6;
+EXPECT_1
+1
+connection node_1;
+DROP TABLE ch, p;
+DROP TABLE p2;
+DROP TABLE fc_v, fp_v;
+DROP TABLE fc_b, fp_b;
+DROP TABLE k1, k2, k3, k4, k5, k6;
+disconnect node_1a;
+disconnect node_2;
+disconnect node_1;
+# End of test
