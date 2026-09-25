@@ -1,10 +1,19 @@
 !include ../galera_2nodes_as_replica_2primary.cnf
 
+#
+# No server-id is set here on purpose. "server_id=15" used to be, but
+# My::ConfigFactory::fix_server_id() only looks at the hyphenated
+# "server-id", so the setting never reached the servers: MTR appended its
+# own unique server-id and that is what the nodes ran with. Giving both
+# nodes the same "server-id" instead is not possible either, MTR rejects a
+# server-id that is not unique across the servers. The Galera nodes agree
+# on the server id used for the wsrep GTID domain anyway, it is part of the
+# cluster state and is carried over by state transfer.
+#
 [mysqld]
 wsrep-debug=1
 
 [mysqld.1]
-server_id=15
 wsrep_gtid_mode=1
 wsrep_gtid_domain_id=16
 gtid_domain_id=11
@@ -14,7 +23,6 @@ slave-parallel-threads=2
 
 [mysqld.2]
 skip-slave-start=OFF
-server_id=15
 wsrep_gtid_mode=1
 wsrep_gtid_domain_id=16
 gtid_domain_id=11

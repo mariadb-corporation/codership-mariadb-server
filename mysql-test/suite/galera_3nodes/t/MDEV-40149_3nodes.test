@@ -1,0 +1,425 @@
+#
+# MDEV-40149: three node cluster feeding, and fed by, async replication in
+# several GTID domains at once.
+#
+#      master_a (#4, domain 4)                master_b (#5, domain 5)
+#            |                                        |
+#            | async                            async |
+#            v                                        v
+#          node_1 <---------- galera ----------> node_3
+#                \                              /
+#                 +--------- node_2 -----------+
+#                              |
+#                              | async
+#                              v
+#                        async_slave (#6)
+#
+# Every server except the async slave takes writes. Each node therefore has
+# to keep a position for domains it never applied asynchronously, recorded by
+# the Galera appliers out of Wsrep_schema::store_gtid_event(), while node_1
+# and node_3 additionally maintain a domain of their own through normal
+# parallel replication. Galera apply and async apply both run with four
+# threads, so the write sets of one domain are applied concurrently.
+#
+# The test asserts that
+#   1) all servers converge on the same contents
+#   2) every replication link is GTID based, and GTIDs are on everywhere
+#   3) the GTID positions of all servers are shown
+#
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+--source include/have_log_bin.inc
+
+--connect master_a, 127.0.0.1, root, , test, $NODE_MYPORT_4
+--connect master_b, 127.0.0.1, root, , test, $NODE_MYPORT_5
+--connect async_slave, 127.0.0.1, root, , test, $NODE_MYPORT_6
+
+#
+# mysql.gtid_slave_pos is Aria after an MTR bootstrap, but InnoDB in a real
+# installation where InnoDB is available. Both engines have to work: with
+# InnoDB the position row is written inside the applying transaction and is
+# only visible to others as a dirty read until that transaction commits,
+# with Aria it is written non-transactionally and visible at once. On the
+# Galera nodes the ALTER is a TOI so it reaches the whole cluster.
+#
+# The async masters are deliberately left alone: they never record a
+# slave position, and the DDL would sit in their binlog and be replayed
+# into the cluster, making an applier alter mysql.gtid_slave_pos while
+# store_gtid_event() is writing to it.
+#
+if ($MTR_COMBINATION_INNODB)
+{
+  --disable_query_log
+  --disable_result_log
+  --connection node_1
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  --connection node_2
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  --connection node_3
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  #
+  # These are not Galera nodes. Keep the DDL out of their binlog: on an
+  # async master it would be replayed into the cluster, making an applier
+  # alter mysql.gtid_slave_pos while store_gtid_event() writes to it, and
+  # on the leaf slave it would add a domain the aria combination lacks.
+  #
+  --connection master_a
+  SET SESSION sql_log_bin = 0;
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  SET SESSION sql_log_bin = 1;
+  --connection master_b
+  SET SESSION sql_log_bin = 0;
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  SET SESSION sql_log_bin = 1;
+  --connection async_slave
+  SET SESSION sql_log_bin = 0;
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  SET SESSION sql_log_bin = 1;
+
+  #
+  # Do not go on until every server really has the new engine.
+  # wait_condition.inc finishes with --enable_query_log, so the query
+  # log has to be turned off again after each one, otherwise the
+  # --connection lines below would reach the result and the aria
+  # combination, which skips this block, would no longer match.
+  #
+  --let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos' AND ENGINE = 'InnoDB';
+  --connection node_1
+  --source include/wait_condition.inc
+  --disable_query_log
+  --connection node_2
+  --source include/wait_condition.inc
+  --disable_query_log
+  --connection node_3
+  --source include/wait_condition.inc
+  --disable_query_log
+  --connection master_a
+  --source include/wait_condition.inc
+  --disable_query_log
+  --connection master_b
+  --source include/wait_condition.inc
+  --disable_query_log
+  --connection async_slave
+  --source include/wait_condition.inc
+  --disable_query_log
+  --enable_result_log
+  --enable_query_log
+}
+
+--echo # mysql.gtid_slave_pos engine is the one this combination asks for
+--let $expected_engine= Aria
+if ($MTR_COMBINATION_INNODB)
+{
+  --let $expected_engine= InnoDB
+}
+--connection node_1
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+--connection node_2
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+--connection node_3
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+--connection master_a
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+--connection master_b
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+--connection async_slave
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+
+--echo #
+--echo # (2) GTIDs are enabled everywhere, and Galera and async apply are
+--echo # both multi threaded on the cluster nodes
+--echo #
+--let $i= 1
+while ($i <= 3)
+{
+  --connection node_$i
+  SELECT @@gtid_strict_mode AS EXPECT_1, @@wsrep_gtid_mode AS EXPECT_1,
+         @@wsrep_slave_threads > 1 AS EXPECT_1,
+         @@slave_parallel_threads > 1 AS EXPECT_1;
+  --inc $i
+}
+--connection async_slave
+SELECT @@gtid_strict_mode AS EXPECT_1, @@slave_parallel_threads > 1 AS EXPECT_1;
+
+--echo #
+--echo # Wire up the async links, all of them GTID based
+--echo #
+--connection node_1
+--disable_query_log
+--eval CHANGE MASTER TO master_host='127.0.0.1', master_user='root', master_port=$NODE_MYPORT_4, master_use_gtid=slave_pos;
+--enable_query_log
+START SLAVE;
+
+--connection node_3
+--disable_query_log
+--eval CHANGE MASTER TO master_host='127.0.0.1', master_user='root', master_port=$NODE_MYPORT_5, master_use_gtid=slave_pos;
+--enable_query_log
+START SLAVE;
+
+--connection async_slave
+--disable_query_log
+--eval CHANGE MASTER TO master_host='127.0.0.1', master_user='root', master_port=$NODE_MYPORT_2, master_use_gtid=slave_pos;
+--enable_query_log
+START SLAVE;
+
+--echo # Every async link reports Using_Gtid=Slave_Pos
+--connection node_1
+--let $using_gtid= query_get_value(SHOW SLAVE STATUS, Using_Gtid, 1)
+--echo node_1 Using_Gtid: $using_gtid
+--connection node_3
+--let $using_gtid= query_get_value(SHOW SLAVE STATUS, Using_Gtid, 1)
+--echo node_3 Using_Gtid: $using_gtid
+--connection async_slave
+--let $using_gtid= query_get_value(SHOW SLAVE STATUS, Using_Gtid, 1)
+--echo async_slave Using_Gtid: $using_gtid
+
+--echo #
+--echo # Tables. t1 is owned by master_a, t2 by master_b, t3/t4/t5 by the
+--echo # cluster nodes themselves.
+--echo #
+--connection master_a
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+--connection master_b
+CREATE TABLE t2 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+--connection node_1
+CREATE TABLE t3 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+--connection node_2
+CREATE TABLE t4 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+--connection node_3
+CREATE TABLE t5 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 5 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME IN ('t1','t2','t3','t4','t5');
+--source include/wait_condition.inc
+
+--echo #
+--echo # Write load on every server but the async slave
+--echo #
+--let $rows= 100
+
+--connection master_a
+--disable_query_log
+--let $i= 0
+while ($i < $rows)
+{
+  --eval INSERT INTO t1 VALUES ($i, $i)
+  --inc $i
+}
+--enable_query_log
+
+--connection master_b
+--disable_query_log
+--let $i= 0
+while ($i < $rows)
+{
+  --eval INSERT INTO t2 VALUES ($i, $i)
+  --inc $i
+}
+--enable_query_log
+
+--connection node_1
+--disable_query_log
+--let $i= 0
+while ($i < $rows)
+{
+  --eval INSERT INTO t3 VALUES ($i, $i)
+  --inc $i
+}
+--enable_query_log
+
+--connection node_2
+--disable_query_log
+--let $i= 0
+while ($i < $rows)
+{
+  --eval INSERT INTO t4 VALUES ($i, $i)
+  --inc $i
+}
+--enable_query_log
+
+--connection node_3
+--disable_query_log
+--let $i= 0
+while ($i < $rows)
+{
+  --eval INSERT INTO t5 VALUES ($i, $i)
+  --inc $i
+}
+--enable_query_log
+
+--echo #
+--echo # (1) Everything converges
+--echo #
+--let $i= 1
+while ($i <= 3)
+{
+  --connection node_$i
+  --let $wait_condition = SELECT COUNT(*) = $rows FROM t1;
+  --source include/wait_condition.inc
+  --let $wait_condition = SELECT COUNT(*) = $rows FROM t2;
+  --source include/wait_condition.inc
+  --let $wait_condition = SELECT COUNT(*) = $rows FROM t3;
+  --source include/wait_condition.inc
+  --let $wait_condition = SELECT COUNT(*) = $rows FROM t4;
+  --source include/wait_condition.inc
+  --let $wait_condition = SELECT COUNT(*) = $rows FROM t5;
+  --source include/wait_condition.inc
+  --inc $i
+}
+
+--connection async_slave
+--let $wait_condition = SELECT COUNT(*) = 5 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME IN ('t1','t2','t3','t4','t5');
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) = $rows FROM t1;
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) = $rows FROM t2;
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) = $rows FROM t3;
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) = $rows FROM t4;
+--source include/wait_condition.inc
+--let $wait_condition = SELECT COUNT(*) = $rows FROM t5;
+--source include/wait_condition.inc
+
+--echo # The three cluster nodes and the async slave hold identical data
+--let $diff_tables= node_1:test.t1, node_2:test.t1, node_3:test.t1, async_slave:test.t1
+--source include/diff_tables.inc
+--let $diff_tables= node_1:test.t2, node_2:test.t2, node_3:test.t2, async_slave:test.t2
+--source include/diff_tables.inc
+--let $diff_tables= node_1:test.t3, node_2:test.t3, node_3:test.t3, async_slave:test.t3
+--source include/diff_tables.inc
+--let $diff_tables= node_1:test.t4, node_2:test.t4, node_3:test.t4, async_slave:test.t4
+--source include/diff_tables.inc
+--let $diff_tables= node_1:test.t5, node_2:test.t5, node_3:test.t5, async_slave:test.t5
+--source include/diff_tables.inc
+
+--echo # Each async master matches the cluster for the table it owns. The
+--echo # masters hold only their own table, they receive nothing back.
+--let $diff_tables= master_a:test.t1, node_1:test.t1
+--source include/diff_tables.inc
+--let $diff_tables= master_b:test.t2, node_3:test.t2
+--source include/diff_tables.inc
+
+--echo #
+--echo # (3) GTID positions of all servers
+--echo #
+#
+# The seq_no of the cluster's own domain 16 is handed out by
+# wsrep_gtid_server, whose counter is not reset by RESET MASTER, so it keeps
+# climbing across --repeat iterations. Mask it: domains 4 and 5 are shown
+# exactly, and the check below still compares domain 16 across the nodes
+# without masking.
+#
+--let $mask_wsrep_seqno= /16-1-[0-9]+/16-1-<seq_no>/
+--let $i= 1
+while ($i <= 3)
+{
+  --connection node_$i
+  --echo # node_$i
+  --replace_regex $mask_wsrep_seqno
+  SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+  --inc $i
+}
+--connection master_a
+--echo # master_a
+--replace_regex $mask_wsrep_seqno
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+--connection master_b
+--echo # master_b
+--replace_regex $mask_wsrep_seqno
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+--connection async_slave
+--echo # async_slave
+--replace_regex $mask_wsrep_seqno
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+
+--echo # All three cluster nodes report the same binlog position
+# Take the reference from node_1 explicitly: the current connection here is
+# async_slave, whose position also carries its own domain 6.
+--connection node_1
+--let $pos_1= `SELECT @@gtid_binlog_pos`
+--connection node_2
+--disable_query_log
+--eval SELECT @@gtid_binlog_pos = '$pos_1' AS EXPECT_1
+--enable_query_log
+--connection node_3
+--disable_query_log
+--eval SELECT @@gtid_binlog_pos = '$pos_1' AS EXPECT_1
+--enable_query_log
+
+#
+# Cleanup
+#
+--connection master_a
+DROP TABLE t1;
+--connection master_b
+DROP TABLE t2;
+--connection node_1
+DROP TABLE t3;
+--connection node_2
+DROP TABLE t4;
+--connection node_3
+DROP TABLE t5;
+
+--connection async_slave
+--let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME IN ('t1','t2','t3','t4','t5');
+--source include/wait_condition.inc
+STOP SLAVE;
+RESET SLAVE ALL;
+# RESET MASTER first: clearing gtid_slave_pos while the binlog still holds a
+# domain the new value does not mention fails with
+# ER_MASTER_GTID_POS_MISSING_DOMAIN.
+RESET MASTER;
+SET GLOBAL gtid_slave_pos = "";
+
+--let $i= 1
+while ($i <= 3)
+{
+  --connection node_$i
+  --let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME IN ('t1','t2','t3','t4','t5');
+  --source include/wait_condition.inc
+  --inc $i
+}
+
+--connection node_1
+STOP SLAVE;
+RESET SLAVE ALL;
+--connection node_3
+STOP SLAVE;
+RESET SLAVE ALL;
+
+--let $i= 1
+while ($i <= 3)
+{
+  --connection node_$i
+  SET GLOBAL wsrep_on = OFF;
+  RESET MASTER;
+  SET GLOBAL wsrep_on = ON;
+  SET GLOBAL gtid_slave_pos = "";
+  --inc $i
+}
+
+--connection master_a
+RESET MASTER;
+--connection master_b
+RESET MASTER;
+
+--connection node_1
+--disconnect master_a
+--disconnect master_b
+--disconnect async_slave
+
+--source include/galera_end.inc
+--echo # End of test

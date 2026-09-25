@@ -1,0 +1,107 @@
+connection node_2;
+connection node_1;
+connect primary, 127.0.0.1, root, , test, $NODE_MYPORT_3;
+# mysql.gtid_slave_pos engine is the one this combination asks for
+connection node_1;
+EXPECT_1
+1
+connection node_2;
+EXPECT_1
+1
+connection primary;
+EXPECT_1
+1
+# Both nodes apply asynchronously and via Galera with several threads,
+# so both parallelisms are active whichever node holds the async stream
+connection node_1;
+SELECT @@wsrep_slave_threads > 1 AS EXPECT_1, @@slave_parallel_threads > 1 AS EXPECT_1;
+EXPECT_1	EXPECT_1
+1	1
+connection node_2;
+SELECT @@wsrep_slave_threads > 1 AS EXPECT_1, @@slave_parallel_threads > 1 AS EXPECT_1;
+EXPECT_1	EXPECT_1
+1	1
+#
+# Phase 1: node_1 is the async replica, node_2 only applies write sets
+#
+connection node_1;
+START SLAVE;
+connection primary;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY AUTO_INCREMENT, f2 INTEGER) ENGINE=InnoDB;
+connection node_1;
+connection node_2;
+# Both nodes agree with the primary after phase 1
+connection node_1;
+EXPECT_1
+1
+connection node_2;
+EXPECT_1
+1
+#
+# Phase 2: fail the async stream over to node_2. Its domain 3 position
+# comes from write sets applied in phase 1, so START SLAVE resumes from
+# there. node_1 now receives domain 3 as write sets instead.
+#
+connection node_1;
+STOP SLAVE;
+RESET SLAVE ALL;
+connection node_2;
+START SLAVE;
+connection primary;
+connection node_2;
+connection node_1;
+# No event was applied twice and none was skipped
+connection primary;
+SELECT COUNT(*) AS EXPECT_400 FROM t1;
+EXPECT_400
+400
+connection node_1;
+SELECT COUNT(*) AS EXPECT_400 FROM t1;
+EXPECT_400
+400
+connection node_2;
+SELECT COUNT(*) AS EXPECT_400 FROM t1;
+EXPECT_400
+400
+# Both nodes agree with the primary after the failover, each having
+# recorded domain 3 through both paths
+connection node_2;
+EXPECT_1
+1
+connection node_1;
+EXPECT_1
+1
+# mysql.gtid_slave_pos is still being pruned on both nodes. Rows are
+# deleted by sub_id, so this would grow without bound if order_id had
+# been used as the row key instead of only as the recency value.
+connection node_1;
+SELECT COUNT(*) > 0 AND COUNT(*) < 400 AS EXPECT_1 FROM mysql.gtid_slave_pos;
+EXPECT_1
+1
+connection node_2;
+SELECT COUNT(*) > 0 AND COUNT(*) < 400 AS EXPECT_1 FROM mysql.gtid_slave_pos;
+EXPECT_1
+1
+connection primary;
+DROP TABLE t1;
+connection node_1;
+connection node_2;
+connection node_2;
+STOP SLAVE;
+RESET SLAVE ALL;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+connection node_1;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+connection primary;
+RESET MASTER;
+connection node_1;
+disconnect primary;
+disconnect node_2;
+disconnect node_1;
+# End of test
