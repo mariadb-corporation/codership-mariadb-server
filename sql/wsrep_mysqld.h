@@ -500,6 +500,8 @@ extern Wsrep_gtid_server wsrep_gtid_server;
 void wsrep_init_gtid();
 bool wsrep_check_gtid_seqno(const uint32&, const uint32&, uint64&);
 bool wsrep_get_binlog_gtid_seqno(wsrep_server_gtid_t&);
+void wsrep_gtid_slave_pos_publish(THD *thd);
+void wsrep_gtid_slave_pos_discard(THD *thd);
 
 int wsrep_append_table_keys(THD* thd,
                             TABLE_LIST* first_table,

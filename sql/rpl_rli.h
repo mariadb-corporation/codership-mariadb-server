@@ -747,6 +747,16 @@ struct rpl_group_info
   */
   uint64 gtid_sub_id;
   rpl_gtid current_gtid;
+#ifdef WITH_WSREP
+  /*
+    Galera applier only. Handlerton of the mysql.gtid_slave_pos table the
+    row for current_gtid was written to. The row is written when the GTID
+    event of the write set is parsed, but the position is only published
+    into the in-memory slave state under commit order, so the handlerton
+    has to be carried over from one point to the other.
+  */
+  void *wsrep_gtid_hton;
+#endif /* WITH_WSREP */
   /* Currently applied event or NULL */
   Log_event *current_event;
   uint64 commit_id;

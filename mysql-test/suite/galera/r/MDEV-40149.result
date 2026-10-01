@@ -1,0 +1,114 @@
+connection node_2;
+connection node_1;
+connect primary, 127.0.0.1, root, , test, $NODE_MYPORT_3;
+# mysql.gtid_slave_pos engine is the one this combination asks for
+connection node_1;
+EXPECT_1
+1
+connection node_2;
+EXPECT_1
+1
+connection primary;
+EXPECT_1
+1
+connection node_1;
+# Both kinds of apply run multi threaded on the replica
+SELECT @@wsrep_slave_threads > 1 AS EXPECT_1, @@slave_parallel_threads > 1 AS EXPECT_1;
+EXPECT_1	EXPECT_1
+1	1
+connection node_2;
+# And the Galera appliers are multi threaded on node_2, which is what
+# lets two write sets of one domain be applied at the same time
+SELECT @@wsrep_slave_threads > 1 AS EXPECT_1;
+EXPECT_1
+1
+connection node_1;
+# Galera node_1 becomes an async replica of the primary
+START SLAVE;
+connection primary;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
+connection node_2;
+connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2;
+connection node_2a;
+SET SESSION wsrep_sync_wait = 0;
+# Park the next applier on node_2 before it parses its GTID event
+SET GLOBAL debug_dbug = '+d,sync.wsrep_apply_cb';
+connection primary;
+# Write set A, GTID 3-3-2
+INSERT INTO t1 VALUES (1);
+connection node_2a;
+SET SESSION DEBUG_SYNC = 'now WAIT_FOR sync.wsrep_apply_cb_reached';
+# Applier A is parked. Let every later applier run through.
+SET GLOBAL debug_dbug = '';
+connection primary;
+# Write set B, GTID 3-3-3. Independent row, so Galera lets it be
+# applied in parallel with the parked A.
+INSERT INTO t1 VALUES (2);
+connection node_2a;
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+# No position may be published while applier A is parked: B is
+# applied already, but has to wait for commit order behind A.
+# Only the CREATE TABLE, a TOI applied inside the commit order
+# section, is visible here.
+SELECT @@gtid_slave_pos AS EXPECT_3_3_1;
+EXPECT_3_3_1
+3-3-1
+# Release applier A. It now takes a sub_id higher than B's for the
+# lower seq_no 2, and that entry becomes the reported position.
+SET DEBUG_SYNC = 'now SIGNAL signal.wsrep_apply_cb';
+# Both write sets are committed and both rows are present
+SELECT COUNT(*) AS EXPECT_2 FROM t1;
+EXPECT_2
+2
+# The lower seq_no carries the higher sub_id:
+SELECT COUNT(*) AS EXPECT_1
+FROM mysql.gtid_slave_pos a, mysql.gtid_slave_pos b
+WHERE a.domain_id = 3 AND a.seq_no = 2
+AND b.domain_id = 3 AND b.seq_no = 3
+AND a.sub_id > b.sub_id;
+EXPECT_1
+1
+#
+# Without the fix @@gtid_slave_pos and @@gtid_current_pos report
+# 3-3-2 here while @@gtid_binlog_pos correctly reports 3-3-3.
+#
+SELECT @@gtid_slave_pos AS EXPECT_3_3_3;
+EXPECT_3_3_3
+3-3-3
+SELECT @@gtid_binlog_pos LIKE '%3-3-3%' AS EXPECT_1;
+EXPECT_1
+1
+SELECT @@gtid_current_pos LIKE '%3-3-3%' AS EXPECT_1;
+EXPECT_1
+1
+# The async replica itself is not affected: it allocates sub_id in
+# relay log order in the SQL driver thread.
+connection node_1;
+SELECT @@gtid_slave_pos AS EXPECT_3_3_3;
+EXPECT_3_3_3
+3-3-3
+connection primary;
+DROP TABLE t1;
+connection node_1;
+connection node_2;
+connection node_1;
+STOP SLAVE;
+RESET SLAVE ALL;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+connection node_2;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+connection primary;
+RESET MASTER;
+connection node_1;
+disconnect primary;
+disconnect node_2a;
+disconnect node_2;
+disconnect node_1;
+# End of test
