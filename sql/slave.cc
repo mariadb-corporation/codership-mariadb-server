@@ -4150,22 +4150,48 @@ apply_event_and_update_pos_apply(Log_event* ev, THD* thd, rpl_group_info *rgi,
 	exec_res = 0;
         break;
       default:
+        {
           WSREP_DEBUG("SQL apply failed, res %d conflict state: %s",
                       exec_res, wsrep_thd_transaction_state_str(thd));
           /*
-            async replication thread should be stopped, if failure was
-            not due to optimistic parallel applying or if node
-            has dropped from cluster
+            async replication thread should be stopped, if the node has
+            dropped from the cluster, or if applying failed because of a
+            wsrep error, or if failure was not due to optimistic parallel
+            applying.
+
+            Note that wsrep_ready may still be ON even though the node has
+            already lost the cluster: writeset replication fails as soon as
+            group communication is gone, while the server state is only
+            changed to non-Primary once the new view has been delivered.
+            Looking at wsrep_ready alone therefore left the SQL thread
+            stopped without any error in SHOW SLAVE STATUS, because
+            rli->abort_slave makes sql_slave_killed() true and
+            slave_output_error_info() is then skipped in handle_slave_sql().
+
+            Failures which did not originate from wsrep are left to the
+            normal slave error handling and retry logic, and so are wsrep
+            failures which optimistic or aggressive parallel applying is
+            able to retry.
            */
+          const bool node_dropped= !wsrep_ready_get();
+          const bool wsrep_failed=
+            thd->wsrep_cs().current_error() != wsrep::e_success;
+          const bool conservative_parallel=
+            rli->mi->using_parallel() &&
+            rli->mi->parallel_mode <= SLAVE_PARALLEL_CONSERVATIVE;
+          const bool optimistic_parallel=
+            rli->mi->using_parallel() &&
+            rli->mi->parallel_mode > SLAVE_PARALLEL_CONSERVATIVE;
+
           if (thd->system_thread == SYSTEM_THREAD_SLAVE_SQL &&
-              ((rli->mi->using_parallel() &&
-                rli->mi->parallel_mode <= SLAVE_PARALLEL_CONSERVATIVE) ||
-                !wsrep_ready_get())) {
+              (conservative_parallel || node_dropped ||
+               (wsrep_failed && !optimistic_parallel))) {
             rli->abort_slave= 1;
             rli->report(ERROR_LEVEL, ER_UNKNOWN_COM_ERROR, rgi->gtid_info(),
                         "Node has dropped from cluster");
           }
           break;
+        }
       }
       mysql_mutex_unlock(&thd->LOCK_thd_data);
     }
