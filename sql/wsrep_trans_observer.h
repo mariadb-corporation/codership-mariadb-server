@@ -338,7 +338,7 @@ static inline int wsrep_before_commit(THD* thd, bool all)
         }
         thd->variables.wsrep_gtid_seq_no= 0;
         thd->wsrep_current_gtid_seqno= seqno;
-        if (mysql_bin_log.is_open() && wsrep_gtid_mode)
+        if (wsrep_gtid_mode)
         {
           thd->variables.gtid_seq_no= seqno;
           thd->variables.gtid_domain_id= wsrep_gtid_server.domain_id;

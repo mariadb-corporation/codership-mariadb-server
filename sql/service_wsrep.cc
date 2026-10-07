@@ -362,6 +362,13 @@ extern "C" void wsrep_commit_ordered(THD *thd)
     {
       DEBUG_SYNC(thd, "before_wsrep_ordered_commit");
       thd->wsrep_cs().ordered_commit();
+      /* Update last_gtid here as this thread does not write to binlog
+       * where it is normally updated */
+      rpl_gtid gtid;
+      gtid.domain_id= thd->variables.gtid_domain_id;
+      gtid.server_id= thd->variables.server_id;
+      gtid.seq_no= thd->variables.gtid_seq_no;
+      thd->set_last_commit_gtid(gtid);
     }
   }
 }
