@@ -985,6 +985,77 @@ parse_cnf()
 }
 
 #
+# ignore-db-dirs is repeatable: each occurrence adds a directory, and an
+# empty value resets the list accumulated so far (mysqld.cc,
+# OPT_IGNORE_DB_DIRECTORY). parse_cnf() keeps only the last occurrence,
+# so it cannot be used here; read every occurrence, in order, and replay
+# the same accumulate/reset rule.
+#
+# The server does not restrict the characters a directory name may
+# contain (sql_show.cc, push_ignored_db_dir() only checks its length),
+# but the callers of this function splice each name into an eval'd
+# rsync filter or a find -regex, so a name is kept only if it is made
+# up solely of letters, digits, '.', '_', '+' and '-'; anything else is
+# rejected with a warning instead of being allowed to break out of
+# that context.
+#
+# 1st parameter: group (config file section) or my_print_defaults
+#                argument, same syntax as parse_cnf()
+#
+# Returns the resulting directory names as a comma-separated list.
+#
+get_ignore_db_dirs()
+{
+    local groups="$1"
+    local ignore_db_dirs=""
+    local group
+    local line
+    local dir
+
+    while [ -n "$groups" ]; do
+        group="${groups%%\|*}"
+        if [ "$group" != "$groups" ]; then
+            groups="${groups#*\|}"
+        else
+            groups=""
+        fi
+        while IFS= read -r line; do
+            line="${line#--loose-}"
+            line="${line#--}"
+            case "$line" in
+            ignore[-_]db[-_]dirs=*)
+                dir="${line#*=}"
+                if [ -z "$dir" ]; then
+                    ignore_db_dirs=""
+                else
+                    case "$dir" in
+                    *[!A-Za-z0-9._+-]*)
+                        wsrep_log_error \
+                            "ignore_db_dirs: '$dir' is not a safe" \
+                            "directory name (only letters, digits," \
+                            "'.', '_', '+' and '-' are allowed); SST" \
+                            "will not exclude it"
+                        ;;
+                    *)
+                        ignore_db_dirs="$ignore_db_dirs${ignore_db_dirs:+,}$dir"
+                        ;;
+                    esac
+                fi
+                ;;
+            esac
+        done <<EOF
+$("$MY_PRINT_DEFAULTS" \
+      ${WSREP_SST_OPT_DEFAULT:+"$WSREP_SST_OPT_DEFAULT"} \
+      ${WSREP_SST_OPT_EXTRA_DEFAULT:+"$WSREP_SST_OPT_EXTRA_DEFAULT"} \
+      ${WSREP_SST_OPT_SUFFIX_DEFAULT:+"$WSREP_SST_OPT_SUFFIX_DEFAULT"} \
+      "$group")
+EOF
+    done
+
+    echo "$ignore_db_dirs"
+}
+
+#
 # This function simply checks for the presence of the parameter
 # in the config file, but does not return its value. It returns "1"
 # (true) even if the parameter is present in the configuration file

@@ -1,0 +1,8 @@
+connection node_2;
+connection node_1;
+connection node_1;
+connection node_2;
+call mtr.add_suppression("WSREP_SST: \\[ERROR\\] ignore_db_dirs:");
+connection node_1;
+The side that uses ignore_db_dirs must reject the unsafe directory name
+FOUND 1 matches in mysqld.2.err
