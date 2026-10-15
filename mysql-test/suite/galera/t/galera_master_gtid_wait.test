@@ -1,0 +1,164 @@
+#
+# Test MASTER_GTID_WAIT function with Galera cluster
+#
+# This test verifies that MASTER_GTID_WAIT works correctly in a
+# Galera cluster environment, ensuring that transactions are properly
+# replicated and waited for across cluster nodes.
+#
+
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+# Disable wsrep_sync_wait for both connections and use MASTER_GTID_WAIT()
+# instead.
+--connection node_1
+SET SESSION wsrep_sync_wait=0;
+--connection node_2
+SET SESSION wsrep_sync_wait=0;
+
+--connection node_1
+CREATE TABLE t1 (f1 INT PRIMARY KEY, f2 VARCHAR(100)) ENGINE=InnoDB;
+
+#
+# Test 1: Basic MASTER_GTID_WAIT on same node
+#
+--connection node_1
+INSERT INTO t1 VALUES (1, 'node1_insert1');
+--let $gtid1 = `SELECT @@last_gtid`
+# Verify that returned last_gtid is not empty
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT STRCMP($gtid1, '') != 0 AS gtid1_exists
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid1', 10) AS wait_result
+
+#
+# Test 2: MASTER_GTID_WAIT on node_2 for INSERT from node_1
+#
+INSERT INTO t1 VALUES (2, 'node1_insert2');
+--let $gtid2 = `SELECT @@last_gtid`
+
+--connection node_2
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid2', 10) AS wait_result
+SELECT * FROM t1;
+
+#
+# Test 3: Multiple INSERTs and MASTER_GTID_WAIT
+#
+--connection node_1
+INSERT INTO t1 VALUES (3, 'node1_insert3');
+INSERT INTO t1 VALUES (4, 'node1_insert4');
+INSERT INTO t1 VALUES (5, 'node1_insert5');
+--let $gtid3 = `SELECT @@last_gtid`
+
+--connection node_2
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid3', 10) AS wait_result
+SELECT * FROM t1;
+
+#
+# Test 4: INSERT on node_2, wait on node_1
+#
+--connection node_2
+INSERT INTO t1 VALUES (6, 'node2_insert1');
+--let $gtid4 = `SELECT @@last_gtid`
+
+--connection node_1
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid4', 10) AS wait_result
+SELECT * FROM t1;
+
+#
+# Test 5: MASTER_GTID_WAIT with multi-statement transaction
+#
+--connection node_1
+BEGIN;
+INSERT INTO t1 VALUES (7, 'node1_trx1');
+INSERT INTO t1 VALUES (8, 'node1_trx2');
+INSERT INTO t1 VALUES (9, 'node1_trx3');
+COMMIT;
+--let $gtid5 = `SELECT @@last_gtid`
+
+--connection node_2
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid5', 10) AS wait_result
+SELECT * FROM t1;
+
+#
+# Test 6: MASTER_GTID_WAIT with UPDATE operations
+#
+--connection node_2
+UPDATE t1 SET f2 = 'updated_on_node2' WHERE f1 = 1;
+--let $gtid6 = `SELECT @@last_gtid`
+
+--connection node_1
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid6', 10) AS wait_result
+SELECT * FROM t1;
+
+#
+# Test 7: MASTER_GTID_WAIT with DELETE operations
+#
+--connection node_1
+DELETE FROM t1 WHERE f1 = 9;
+--let $gtid7 = `SELECT @@last_gtid`
+
+--connection node_2
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid7', 10) AS wait_result
+SELECT * FROM t1;
+
+#
+# Cleanup
+#
+--connection node_1
+DROP TABLE t1;
+--let $gtid8 = `SELECT @@last_gtid`
+# Verify that returned last_gtid is not empty
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT STRCMP($gtid8, '') != 0 AS gtid8_exists
+
+# Finally check that MASTER_GTID_WAIT also works with DDL
+--connection node_2
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid8', 10) AS wait_result
+
+#
+# Test 9: MASTER_GTID_WAIT timeout when applying is blocked
+#
+--connection node_1
+CREATE TABLE t1 (f1 INT PRIMARY KEY) ENGINE=InnoDB;
+
+# Block applying on node_2 using wsrep apply callback debug sync
+--connection node_2
+--let $orig_debug=`SELECT @@debug_dbug`
+SET GLOBAL debug_dbug = "+d,sync.wsrep_apply_cb";
+
+# Insert data on node_1 while node_2 is blocked
+--connection node_1
+INSERT INTO t1 VALUES (1);
+--let $gtid9 = `SELECT @@last_gtid`
+
+# Try to wait for the GTID on blocked node_2 - should timeout
+--connection node_2
+SET SESSION debug_sync = "now WAIT_FOR sync.wsrep_apply_cb_reached";
+
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid9', 2) AS wait_result
+# Verify that the table is empty
+SELECT * FROM t1;
+
+SET SESSION debug_sync = "now SIGNAL signal.wsrep_apply_cb";
+# Now the wait should succeed
+--replace_regex /\d+-\d+-\d+/<domain_id>-<server_id>-<seq_no>/
+--eval SELECT MASTER_GTID_WAIT('$gtid9', 5) AS wait_result
+SELECT * FROM t1;
+
+--eval SET GLOBAL debug_dbug = '$orig_debug'
+SET SESSION debug_sync = 'RESET';
+
+#
+# Cleanup
+#
+--connection node_1
+DROP TABLE t1;
