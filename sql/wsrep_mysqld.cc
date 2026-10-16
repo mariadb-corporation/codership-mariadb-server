@@ -4220,6 +4220,55 @@ bool THD::wsrep_parallel_slave_wait_for_prior_commit()
   return false;
 }
 
+/*
+  Publish the GTID position stashed by Wsrep_schema::store_gtid_event() into
+  the in-memory slave state.
+
+  Called from the commit order critical section, after the write set has been
+  committed and before commit order is released, so that appliers publish
+  their positions in seqno order.
+*/
+void wsrep_gtid_slave_pos_publish(THD *thd)
+{
+  rpl_group_info *rgi= thd->wsrep_rgi;
+
+  if (!rgi || !rgi->gtid_pending)
+    return;
+
+  rgi->gtid_pending= false;
+
+  /*
+    The sub_id was allocated when the GTID event was parsed, which for
+    regular write sets happens outside commit order and in parallel, so it
+    does not tell which of two write sets of the same domain was applied
+    last. Allocate the recency value here instead: this runs under commit
+    order, so order_id is monotonic in the order the write sets commit.
+
+    sub_id still identifies the mysql.gtid_slave_pos row written at parse
+    time, so gtid_delete_pending() keeps finding it.
+  */
+  const uint64 order_id=
+    rpl_global_gtid_slave_state->next_sub_id(rgi->current_gtid.domain_id);
+
+  rpl_global_gtid_slave_state->update_state_hash(rgi->gtid_sub_id,
+                                                 &rgi->current_gtid,
+                                                 rgi->wsrep_gtid_hton, rgi,
+                                                 order_id);
+}
+
+/*
+  Drop a stashed but unpublished GTID position. Used when the write set is
+  rolled back instead of committed, in which case the mysql.gtid_slave_pos
+  row was rolled back with it and must not be published.
+*/
+void wsrep_gtid_slave_pos_discard(THD *thd)
+{
+  rpl_group_info *rgi= thd->wsrep_rgi;
+
+  if (rgi)
+    rgi->gtid_pending= false;
+}
+
 /***** callbacks for wsrep service ************/
 
 my_bool get_wsrep_recovery()

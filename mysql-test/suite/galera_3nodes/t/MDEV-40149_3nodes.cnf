@@ -1,0 +1,80 @@
+!include ../galera_3nodes.cnf
+
+#
+#      master_a (#4, domain 4)                master_b (#5, domain 5)
+#            |                                        |
+#            | async                            async |
+#            v                                        v
+#          node_1 <---------- galera ----------> node_3
+#                \                              /
+#                 +--------- node_2 -----------+
+#                              |
+#                              | async
+#                              v
+#                        async_slave (#6)
+#
+
+[mysqld]
+log-bin=mysqld-bin
+log-slave-updates
+gtid_strict_mode=1
+wsrep-debug=1
+
+[mysqld.1]
+wsrep_gtid_mode=1
+wsrep_gtid_domain_id=16
+gtid_domain_id=11
+wsrep-slave-threads=4
+slave-parallel-threads=4
+slave-parallel-mode=aggressive
+
+[mysqld.2]
+wsrep_gtid_mode=1
+wsrep_gtid_domain_id=16
+gtid_domain_id=11
+wsrep-slave-threads=4
+slave-parallel-threads=4
+slave-parallel-mode=aggressive
+
+[mysqld.3]
+wsrep_gtid_mode=1
+wsrep_gtid_domain_id=16
+gtid_domain_id=11
+wsrep-slave-threads=4
+slave-parallel-threads=4
+slave-parallel-mode=aggressive
+
+# master_a
+[mysqld.4]
+wsrep-on=OFF
+wsrep-provider=none
+server-id=4
+gtid_domain_id=4
+
+# master_b
+[mysqld.5]
+wsrep-on=OFF
+wsrep-provider=none
+server-id=5
+gtid_domain_id=5
+
+# async_slave of node_2
+[mysqld.6]
+wsrep-on=OFF
+wsrep-provider=none
+server-id=6
+gtid_domain_id=6
+slave-parallel-threads=4
+slave-parallel-mode=aggressive
+
+[ENV]
+galera_cluster_size=3
+
+NODE_MYPORT_4= @mysqld.4.port
+NODE_MYSOCK_4= @mysqld.4.socket
+
+NODE_MYPORT_5= @mysqld.5.port
+NODE_MYSOCK_5= @mysqld.5.socket
+
+NODE_MYPORT_6= @mysqld.6.port
+NODE_MYSOCK_6= @mysqld.6.socket
