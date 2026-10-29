@@ -381,6 +381,12 @@ static inline int wsrep_ordered_commit(THD* thd, bool all)
   WSREP_DEBUG("wsrep_ordered_commit: %d %lld", wsrep_is_real(thd, all),
               (long long) wsrep_thd_trx_seqno(thd));
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
+  /*
+    Still inside the commit order critical section and past the storage
+    engine commit: publish the GTID position of an applied write set here so
+    that appliers publish in seqno order.
+  */
+  wsrep_gtid_slave_pos_publish(thd);
   DBUG_RETURN(thd->wsrep_cs().ordered_commit());
 }
 
