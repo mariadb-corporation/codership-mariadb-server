@@ -1,0 +1,199 @@
+connection node_3;
+connection node_2;
+connection node_1;
+connect master_a, 127.0.0.1, root, , test, $NODE_MYPORT_4;
+connect master_b, 127.0.0.1, root, , test, $NODE_MYPORT_5;
+connect async_slave, 127.0.0.1, root, , test, $NODE_MYPORT_6;
+# mysql.gtid_slave_pos engine is the one this combination asks for
+connection node_1;
+EXPECT_1
+1
+connection node_2;
+EXPECT_1
+1
+connection node_3;
+EXPECT_1
+1
+connection master_a;
+EXPECT_1
+1
+connection master_b;
+EXPECT_1
+1
+connection async_slave;
+EXPECT_1
+1
+#
+# (2) GTIDs are enabled everywhere, and Galera and async apply are
+# both multi threaded on the cluster nodes
+#
+connection node_1;
+SELECT @@gtid_strict_mode AS EXPECT_1, @@wsrep_gtid_mode AS EXPECT_1,
+@@wsrep_slave_threads > 1 AS EXPECT_1,
+@@slave_parallel_threads > 1 AS EXPECT_1;
+EXPECT_1	EXPECT_1	EXPECT_1	EXPECT_1
+1	1	1	1
+connection node_2;
+SELECT @@gtid_strict_mode AS EXPECT_1, @@wsrep_gtid_mode AS EXPECT_1,
+@@wsrep_slave_threads > 1 AS EXPECT_1,
+@@slave_parallel_threads > 1 AS EXPECT_1;
+EXPECT_1	EXPECT_1	EXPECT_1	EXPECT_1
+1	1	1	1
+connection node_3;
+SELECT @@gtid_strict_mode AS EXPECT_1, @@wsrep_gtid_mode AS EXPECT_1,
+@@wsrep_slave_threads > 1 AS EXPECT_1,
+@@slave_parallel_threads > 1 AS EXPECT_1;
+EXPECT_1	EXPECT_1	EXPECT_1	EXPECT_1
+1	1	1	1
+connection async_slave;
+SELECT @@gtid_strict_mode AS EXPECT_1, @@slave_parallel_threads > 1 AS EXPECT_1;
+EXPECT_1	EXPECT_1
+1	1
+#
+# Wire up the async links, all of them GTID based
+#
+connection node_1;
+START SLAVE;
+connection node_3;
+START SLAVE;
+connection async_slave;
+START SLAVE;
+# Every async link reports Using_Gtid=Slave_Pos
+connection node_1;
+node_1 Using_Gtid: Slave_Pos
+connection node_3;
+node_3 Using_Gtid: Slave_Pos
+connection async_slave;
+async_slave Using_Gtid: Slave_Pos
+#
+# Tables. t1 is owned by master_a, t2 by master_b, t3/t4/t5 by the
+# cluster nodes themselves.
+#
+connection master_a;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+connection master_b;
+CREATE TABLE t2 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+connection node_1;
+CREATE TABLE t3 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+connection node_2;
+CREATE TABLE t4 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+connection node_3;
+CREATE TABLE t5 (f1 INTEGER PRIMARY KEY, f2 INTEGER) ENGINE=InnoDB;
+connection node_2;
+#
+# Write load on every server but the async slave
+#
+connection master_a;
+connection master_b;
+connection node_1;
+connection node_2;
+connection node_3;
+#
+# (1) Everything converges
+#
+connection node_1;
+connection node_2;
+connection node_3;
+connection async_slave;
+# The three cluster nodes and the async slave hold identical data
+include/diff_tables.inc [node_1:test.t1, node_2:test.t1, node_3:test.t1, async_slave:test.t1]
+include/diff_tables.inc [node_1:test.t2, node_2:test.t2, node_3:test.t2, async_slave:test.t2]
+include/diff_tables.inc [node_1:test.t3, node_2:test.t3, node_3:test.t3, async_slave:test.t3]
+include/diff_tables.inc [node_1:test.t4, node_2:test.t4, node_3:test.t4, async_slave:test.t4]
+include/diff_tables.inc [node_1:test.t5, node_2:test.t5, node_3:test.t5, async_slave:test.t5]
+# Each async master matches the cluster for the table it owns. The
+# masters hold only their own table, they receive nothing back.
+include/diff_tables.inc [master_a:test.t1, node_1:test.t1]
+include/diff_tables.inc [master_b:test.t2, node_3:test.t2]
+#
+# (3) GTID positions of all servers
+#
+connection node_1;
+# node_1
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+@@gtid_binlog_pos	@@gtid_slave_pos	@@gtid_current_pos
+4-4-101,5-5-101,16-1-<seq_no>	4-4-101,5-5-101	4-4-101,5-5-101,16-1-<seq_no>
+connection node_2;
+# node_2
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+@@gtid_binlog_pos	@@gtid_slave_pos	@@gtid_current_pos
+4-4-101,5-5-101,16-1-<seq_no>	4-4-101,5-5-101	4-4-101,5-5-101
+connection node_3;
+# node_3
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+@@gtid_binlog_pos	@@gtid_slave_pos	@@gtid_current_pos
+4-4-101,5-5-101,16-1-<seq_no>	4-4-101,5-5-101	4-4-101,5-5-101
+connection master_a;
+# master_a
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+@@gtid_binlog_pos	@@gtid_slave_pos	@@gtid_current_pos
+4-4-101		4-4-101
+connection master_b;
+# master_b
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+@@gtid_binlog_pos	@@gtid_slave_pos	@@gtid_current_pos
+5-5-101		5-5-101
+connection async_slave;
+# async_slave
+SELECT @@gtid_binlog_pos, @@gtid_slave_pos, @@gtid_current_pos;
+@@gtid_binlog_pos	@@gtid_slave_pos	@@gtid_current_pos
+4-4-101,5-5-101,16-1-<seq_no>	4-4-101,5-5-101,16-1-<seq_no>	4-4-101,5-5-101,16-1-<seq_no>
+# All three cluster nodes report the same binlog position
+connection node_1;
+connection node_2;
+EXPECT_1
+1
+connection node_3;
+EXPECT_1
+1
+connection master_a;
+DROP TABLE t1;
+connection master_b;
+DROP TABLE t2;
+connection node_1;
+DROP TABLE t3;
+connection node_2;
+DROP TABLE t4;
+connection node_3;
+DROP TABLE t5;
+connection async_slave;
+STOP SLAVE;
+RESET SLAVE ALL;
+RESET MASTER;
+SET GLOBAL gtid_slave_pos = "";
+connection node_1;
+connection node_2;
+connection node_3;
+connection node_1;
+STOP SLAVE;
+RESET SLAVE ALL;
+connection node_3;
+STOP SLAVE;
+RESET SLAVE ALL;
+connection node_1;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+connection node_2;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+connection node_3;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+connection master_a;
+RESET MASTER;
+connection master_b;
+RESET MASTER;
+connection node_1;
+disconnect master_a;
+disconnect master_b;
+disconnect async_slave;
+disconnect node_3;
+disconnect node_2;
+disconnect node_1;
+# End of test

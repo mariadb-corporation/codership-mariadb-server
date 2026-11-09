@@ -1,0 +1,263 @@
+#
+# MDEV-40149: @@gtid_slave_pos can go backwards on a Galera node that applies
+# write sets carrying a foreign domain GTID.
+#
+#      primary (async)
+#        #3  domain 3
+#         |
+#         |  async replication
+#         v
+#      replica  <---- galera replication ---->  applier
+#        #1                                       #2
+#
+# When an applier applies a write set, wsrep_apply_events() sees the leading
+# GTID event and calls Wsrep_schema::store_gtid_event() right there. That
+# allocates a sub_id (rpl_slave_state::next_sub_id(), a bare ++counter with no
+# relation to the GTID seq_no), writes the mysql.gtid_slave_pos row and
+# publishes the position into the in-memory hash backing @@gtid_slave_pos.
+#
+# All of that happens at GTID event parse time: before the write set's own row
+# events are applied, and outside the commit order critical section that
+# wsrep-lib enters via commit_order_enter() in transaction::before_commit().
+# Only the real commit is ordered. Regular (non-TOI) write sets are therefore
+# free to reach store_gtid_event() in any order when more than one applier
+# thread is active.
+#
+# rpl_slave_state::iterate() reports, per domain, the entry with the highest
+# sub_id - not the highest seq_no. So if the applier of a higher seqno write
+# set publishes before the applier of the preceding lower seqno one, the lower
+# seq_no ends up carrying the higher sub_id and becomes the reported position.
+#
+# This test drives exactly that interleaving with the sync.wsrep_apply_cb
+# debug sync point, so the regression is deterministic rather than a race.
+#
+--source include/have_innodb.inc
+--source include/have_log_bin.inc
+--source include/have_debug.inc
+--source include/have_debug_sync.inc
+--source include/galera_cluster.inc
+
+# Node #3 is not a Galera node, galera_cluster.inc does not connect to it
+--connect primary, 127.0.0.1, root, , test, $NODE_MYPORT_3
+
+#
+# mysql.gtid_slave_pos is Aria after an MTR bootstrap, but InnoDB in a real
+# installation where InnoDB is available. Both engines have to work: with
+# InnoDB the position row is written inside the applying transaction and is
+# only visible to others as a dirty read until that transaction commits,
+# with Aria it is written non-transactionally and visible at once. On the
+# Galera nodes the ALTER is a TOI so it reaches the whole cluster.
+#
+# The async masters are deliberately left alone: they never record a
+# slave position, and the DDL would sit in their binlog and be replayed
+# into the cluster, making an applier alter mysql.gtid_slave_pos while
+# store_gtid_event() is writing to it.
+#
+if ($MTR_COMBINATION_INNODB)
+{
+  --disable_query_log
+  --disable_result_log
+  --connection node_1
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  --connection node_2
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  #
+  # These are not Galera nodes. Keep the DDL out of their binlog: on an
+  # async master it would be replayed into the cluster, making an applier
+  # alter mysql.gtid_slave_pos while store_gtid_event() writes to it, and
+  # on the leaf slave it would add a domain the aria combination lacks.
+  #
+  --connection primary
+  SET SESSION sql_log_bin = 0;
+  ALTER TABLE mysql.gtid_slave_pos ENGINE=InnoDB;
+  SET SESSION sql_log_bin = 1;
+
+  #
+  # Do not go on until every server really has the new engine.
+  # wait_condition.inc finishes with --enable_query_log, so the query
+  # log has to be turned off again after each one, otherwise the
+  # --connection lines below would reach the result and the aria
+  # combination, which skips this block, would no longer match.
+  #
+  --let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos' AND ENGINE = 'InnoDB';
+  --connection node_1
+  --source include/wait_condition.inc
+  --disable_query_log
+  --connection node_2
+  --source include/wait_condition.inc
+  --disable_query_log
+  --connection primary
+  --source include/wait_condition.inc
+  --disable_query_log
+  --enable_result_log
+  --enable_query_log
+}
+
+--echo # mysql.gtid_slave_pos engine is the one this combination asks for
+--let $expected_engine= Aria
+if ($MTR_COMBINATION_INNODB)
+{
+  --let $expected_engine= InnoDB
+}
+--connection node_1
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+--connection node_2
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+--connection primary
+--disable_query_log
+--eval SELECT ENGINE = '$expected_engine' AS EXPECT_1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'mysql' AND TABLE_NAME = 'gtid_slave_pos'
+--enable_query_log
+
+--connection node_1
+--echo # Both kinds of apply run multi threaded on the replica
+SELECT @@wsrep_slave_threads > 1 AS EXPECT_1, @@slave_parallel_threads > 1 AS EXPECT_1;
+--connection node_2
+--echo # And the Galera appliers are multi threaded on node_2, which is what
+--echo # lets two write sets of one domain be applied at the same time
+SELECT @@wsrep_slave_threads > 1 AS EXPECT_1;
+
+--connection node_1
+--echo # Galera node_1 becomes an async replica of the primary
+--disable_query_log
+--eval CHANGE MASTER TO master_host='127.0.0.1', master_user='root', master_port=$NODE_MYPORT_3, master_use_gtid=slave_pos;
+--enable_query_log
+START SLAVE;
+
+--connection primary
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY) ENGINE=InnoDB;
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME = 't1';
+--source include/wait_condition.inc
+
+#
+# node_2a drives the applier. wsrep_sync_wait must be off on it: once an
+# applier is parked, any sync-wait read on node_2 would block behind it.
+#
+--connect node_2a, 127.0.0.1, root, , test, $NODE_MYPORT_2
+--connection node_2a
+SET SESSION wsrep_sync_wait = 0;
+
+--echo # Park the next applier on node_2 before it parses its GTID event
+SET GLOBAL debug_dbug = '+d,sync.wsrep_apply_cb';
+
+--connection primary
+--echo # Write set A, GTID 3-3-2
+INSERT INTO t1 VALUES (1);
+
+--connection node_2a
+SET SESSION DEBUG_SYNC = 'now WAIT_FOR sync.wsrep_apply_cb_reached';
+--echo # Applier A is parked. Let every later applier run through.
+SET GLOBAL debug_dbug = '';
+
+--connection primary
+--echo # Write set B, GTID 3-3-3. Independent row, so Galera lets it be
+--echo # applied in parallel with the parked A.
+INSERT INTO t1 VALUES (2);
+
+--connection node_2a
+#
+# Wait until applier B has parsed its GTID event and written its
+# mysql.gtid_slave_pos row. That row is still uncommitted, so it is only
+# visible under READ UNCOMMITTED, but reaching it is exactly the point
+# where B has allocated its sub_id - while A, parked before its own GTID
+# event is parsed, has not allocated one yet. Releasing A after this makes
+# A's sub_id the higher of the two even though its seq_no is the lower.
+#
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+--let $wait_condition = SELECT COUNT(*) = 1 FROM mysql.gtid_slave_pos WHERE domain_id = 3 AND seq_no = 3;
+--source include/wait_condition.inc
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+--echo # No position may be published while applier A is parked: B is
+--echo # applied already, but has to wait for commit order behind A.
+--echo # Only the CREATE TABLE, a TOI applied inside the commit order
+--echo # section, is visible here.
+SELECT @@gtid_slave_pos AS EXPECT_3_3_1;
+
+--echo # Release applier A. It now takes a sub_id higher than B's for the
+--echo # lower seq_no 2, and that entry becomes the reported position.
+SET DEBUG_SYNC = 'now SIGNAL signal.wsrep_apply_cb';
+
+--let $wait_condition = SELECT COUNT(*) = 2 FROM t1;
+--source include/wait_condition.inc
+
+--echo # Both write sets are committed and both rows are present
+SELECT COUNT(*) AS EXPECT_2 FROM t1;
+
+#
+# Prove the interleaving actually happened: applier A, parked before its
+# GTID event was parsed, allocated its sub_id after applier B, so the row
+# for the lower seq_no carries the higher sub_id. Selecting the reported
+# position by sub_id would therefore pick seq_no 2. It is order_id,
+# allocated under commit order, that keeps the position correct.
+#
+--echo # The lower seq_no carries the higher sub_id:
+SELECT COUNT(*) AS EXPECT_1
+  FROM mysql.gtid_slave_pos a, mysql.gtid_slave_pos b
+ WHERE a.domain_id = 3 AND a.seq_no = 2
+   AND b.domain_id = 3 AND b.seq_no = 3
+   AND a.sub_id > b.sub_id;
+
+--echo #
+--echo # Without the fix @@gtid_slave_pos and @@gtid_current_pos report
+--echo # 3-3-2 here while @@gtid_binlog_pos correctly reports 3-3-3.
+--echo #
+SELECT @@gtid_slave_pos AS EXPECT_3_3_3;
+SELECT @@gtid_binlog_pos LIKE '%3-3-3%' AS EXPECT_1;
+SELECT @@gtid_current_pos LIKE '%3-3-3%' AS EXPECT_1;
+
+--echo # The async replica itself is not affected: it allocates sub_id in
+--echo # relay log order in the SQL driver thread.
+--connection node_1
+--let $wait_condition = SELECT COUNT(*) = 2 FROM t1;
+--source include/wait_condition.inc
+SELECT @@gtid_slave_pos AS EXPECT_3_3_3;
+
+#
+# Cleanup
+#
+--connection primary
+DROP TABLE t1;
+
+--connection node_1
+--let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME = 't1';
+--source include/wait_condition.inc
+
+--connection node_2
+--let $wait_condition = SELECT COUNT(*) = 0 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'test' AND TABLE_NAME = 't1';
+--source include/wait_condition.inc
+
+#
+# Both Galera nodes keep domain 3 in their slave state, node_1 from async
+# replication and node_2 from applying the write sets. Clear it, otherwise a
+# --repeat run starts with a position ahead of the seq_no the primary hands
+# out after its RESET MASTER, and gtid_strict_mode refuses the events.
+#
+--connection node_1
+STOP SLAVE;
+RESET SLAVE ALL;
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+
+--connection node_2
+SET GLOBAL wsrep_on = OFF;
+RESET MASTER;
+SET GLOBAL wsrep_on = ON;
+SET GLOBAL gtid_slave_pos = "";
+
+--connection primary
+RESET MASTER;
+
+--connection node_1
+--disconnect primary
+--disconnect node_2a
+
+--source include/galera_end.inc
+--echo # End of test

@@ -361,6 +361,8 @@ extern "C" void wsrep_commit_ordered(THD *thd)
         !wsrep_commit_will_write_binlog(thd))
     {
       DEBUG_SYNC(thd, "before_wsrep_ordered_commit");
+      /* See the same call in wsrep_ordered_commit(). */
+      wsrep_gtid_slave_pos_publish(thd);
       thd->wsrep_cs().ordered_commit();
     }
   }

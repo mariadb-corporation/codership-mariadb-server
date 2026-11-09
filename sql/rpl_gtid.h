@@ -138,6 +138,19 @@ struct rpl_slave_state
     uint32 server_id;
     uint64 seq_no;
     /*
+      Value deciding which entry of a domain is the most recently applied
+      one, and thus the reported position. It is normally the same as
+      sub_id, which the SQL driver thread allocates in relay log order.
+
+      A Galera applier cannot allocate its sub_id in order: it does so when
+      it parses the GTID event of its write set, and write sets are applied
+      by several appliers in parallel. It therefore allocates order_id
+      separately, under commit order, so that recency stays consistent with
+      the order the write sets actually commit in. sub_id keeps identifying
+      the mysql.gtid_slave_pos row for gtid_delete_pending().
+    */
+    uint64 order_id;
+    /*
       hton of mysql.gtid_slave_pos* table used to record this GTID.
       Can be NULL if the gtid table failed to load (eg. missing
       mysql.gtid_slave_pos table following an upgrade).
@@ -244,10 +257,17 @@ struct rpl_slave_state
 
   void truncate_hash();
   ulong count() const { return hash.records; }
+  /*
+    order_id is the recency value stored in the list element, see
+    list_element::order_id. Passing 0 means "use sub_id", which is what
+    every caller outside the Galera applier wants.
+  */
   int update(uint32 domain_id, uint32 server_id, uint64 sub_id,
-             uint64 seq_no, void *hton, rpl_group_info *rgi);
+             uint64 seq_no, void *hton, rpl_group_info *rgi,
+             uint64 order_id= 0);
   int update_nolock(uint32 domain_id, uint32 server_id, uint64 sub_id,
-                    uint64 seq_no, void *hton, rpl_group_info *rgi);
+                    uint64 seq_no, void *hton, rpl_group_info *rgi,
+                    uint64 order_id= 0);
   int truncate_state_table(THD *thd);
   void select_gtid_pos_table(THD *thd, LEX_CSTRING *out_tablename);
   int record_gtid(THD *thd, const rpl_gtid *gtid, uint64 sub_id,
@@ -269,7 +289,7 @@ struct rpl_slave_state
   int put_back_list(list_element *list);
 
   void update_state_hash(uint64 sub_id, rpl_gtid *gtid, void *hton,
-                         rpl_group_info *rgi);
+                         rpl_group_info *rgi, uint64 order_id= 0);
   int record_and_update_gtid(THD *thd, struct rpl_group_info *rgi);
   int check_duplicate_gtid(rpl_gtid *gtid, rpl_group_info *rgi);
   void release_domain_owner(rpl_group_info *rgi);
