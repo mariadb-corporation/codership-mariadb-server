@@ -1,0 +1,197 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+--echo #
+--echo # MDEV-42327: Galera applies a GRANT on a table that the node running
+--echo # it refuses
+--echo #
+--echo # u1 holds SELECT and UPDATE on column a of db1.t1, with the grant
+--echo # option. Node 1 must refuse GRANT SELECT, UPDATE ON db1.t1 TO u1 in
+--echo # mysql_table_grant(), and node 2 must not apply it.
+--echo #
+
+--connection node_1
+CREATE DATABASE db1;
+CREATE TABLE db1.t1 (a INT, b INT) ENGINE=InnoDB;
+CREATE USER u1;
+CREATE USER u1_full;
+GRANT SELECT (a), UPDATE (a) ON db1.t1 TO u1 WITH GRANT OPTION;
+GRANT SELECT, UPDATE ON db1.t1 TO u1_full WITH GRANT OPTION;
+
+--connect(c1,127.0.0.1,u1,,,$NODE_MYPORT_1)
+--error ER_TABLEACCESS_DENIED_ERROR
+GRANT SELECT, UPDATE ON db1.t1 TO u1;
+--disconnect c1
+
+--connection node_2
+--let $priv = query_get_value(SELECT COUNT(*) AS c FROM mysql.tables_priv WHERE User = 'u1' AND Table_priv LIKE '%Select%', c, 1)
+if ($priv)
+{
+  --die Node 2 applied the GRANT that node 1 refused: u1 holds SELECT on the whole of db1.t1 there
+}
+
+--echo # u1 holds SELECT and UPDATE on column a only, on both nodes.
+--connection node_1
+SELECT User, Db, Table_name, Column_name, Column_priv FROM mysql.columns_priv WHERE User = 'u1';
+--connection node_2
+SELECT User, Db, Table_name, Column_name, Column_priv FROM mysql.columns_priv WHERE User = 'u1';
+
+--echo #
+--echo # Positive case: u1_full holds the real table-level privilege and
+--echo # grant option, so the same kind of statement must succeed and
+--echo # replicate, granted to a fresh user so u1's own privileges are
+--echo # left untouched for the next scenario.
+--echo #
+--connection node_1
+CREATE USER u1b;
+--connect(c1f,127.0.0.1,u1_full,,,$NODE_MYPORT_1)
+GRANT SELECT, UPDATE ON db1.t1 TO u1b;
+--disconnect c1f
+
+--connection node_2
+--let $priv = query_get_value(SELECT COUNT(*) AS c FROM mysql.tables_priv WHERE User = 'u1b' AND Table_priv LIKE '%Select%' AND Table_priv LIKE '%Update%', c, 1)
+if (!$priv)
+{
+  --die Node 2 did not apply the GRANT that node 1 accepted: u1b should hold SELECT, UPDATE on the whole of db1.t1 there
+}
+
+--echo #
+--echo # Same statement with a column list: GRANT SELECT (b) is refused by
+--echo # find_field_in_table_ref(), which also now runs before TOI.
+--echo #
+--connection node_1
+--connect(c1b,127.0.0.1,u1,,,$NODE_MYPORT_1)
+--error ER_COLUMNACCESS_DENIED_ERROR
+GRANT SELECT (b) ON db1.t1 TO u1;
+--disconnect c1b
+
+--connection node_2
+--let $priv_b = query_get_value(SELECT COUNT(*) AS c FROM mysql.columns_priv WHERE User = 'u1' AND Column_name = 'b', c, 1)
+if ($priv_b)
+{
+  --die Node 2 applied the column-list GRANT that node 1 refused: u1 holds a privilege on column b there
+}
+
+--echo #
+--echo # Positive case: GRANT SELECT (a) is within u1's own column-level
+--echo # grant option, so it must succeed and replicate.
+--echo #
+--connection node_1
+--connect(c1ba,127.0.0.1,u1,,,$NODE_MYPORT_1)
+GRANT SELECT (a) ON db1.t1 TO u1b;
+--disconnect c1ba
+
+--connection node_2
+--let $priv_a = query_get_value(SELECT COUNT(*) AS c FROM mysql.columns_priv WHERE User = 'u1b' AND Column_name = 'a' AND Column_priv LIKE '%Select%', c, 1)
+if (!$priv_a)
+{
+  --die Node 2 did not apply the column-list GRANT that node 1 accepted: u1b should hold SELECT on column a there
+}
+
+--connection node_1
+DROP DATABASE db1;
+DROP USER u1;
+DROP USER u1_full;
+DROP USER u1b;
+
+--echo #
+--echo # check_alter_user(): an account with a table-level grant option, but
+--echo # without UPDATE on mysql.*, must not be able to change another,
+--echo # existing account's password. mysql_table_grant() ran this check
+--echo # after TOI too; node 1 must refuse locally, before replication.
+--echo #
+--connection node_1
+CREATE DATABASE db2;
+CREATE TABLE db2.t2 (a INT, b INT) ENGINE=InnoDB;
+CREATE USER u2;
+CREATE USER victim;
+CREATE USER victim2;
+GRANT SELECT, UPDATE ON db2.t2 TO u2 WITH GRANT OPTION;
+
+--connect(c2,127.0.0.1,u2,,,$NODE_MYPORT_1)
+--error ER_DBACCESS_DENIED_ERROR
+GRANT SELECT, UPDATE ON db2.t2 TO victim IDENTIFIED BY 'newpass';
+--disconnect c2
+
+--connection node_2
+--let $priv = query_get_value(SELECT COUNT(*) AS c FROM mysql.tables_priv WHERE User = 'victim' AND Table_priv LIKE '%Select%', c, 1)
+if ($priv)
+{
+  --die Node 2 applied the GRANT that node 1 refused (check_alter_user): victim holds SELECT on the whole of db2.t2 there
+}
+# If node 2 had applied the refused password change, this connects without error.
+--disable_query_log
+--error ER_ACCESS_DENIED_ERROR
+--connect(c2v,127.0.0.1,victim,newpass,,$NODE_MYPORT_2)
+--enable_query_log
+
+--echo #
+--echo # Positive case: UPDATE ON mysql.* lets the same kind of account
+--echo # change another account's password; the GRANT must succeed and
+--echo # replicate, including the new password.
+--echo #
+--connection node_1
+GRANT UPDATE ON mysql.* TO u2;
+--connect(c2u,127.0.0.1,u2,,,$NODE_MYPORT_1)
+GRANT SELECT, UPDATE ON db2.t2 TO victim2 IDENTIFIED BY 'newpass2';
+--disconnect c2u
+
+--connection node_2
+--let $priv = query_get_value(SELECT COUNT(*) AS c FROM mysql.tables_priv WHERE User = 'victim2' AND Table_priv LIKE '%Select%' AND Table_priv LIKE '%Update%', c, 1)
+if (!$priv)
+{
+  --die Node 2 did not apply the GRANT that node 1 accepted: victim2 should hold SELECT, UPDATE on the whole of db2.t2 there
+}
+--connect(c2v2,127.0.0.1,victim2,newpass2,,$NODE_MYPORT_2)
+SELECT CURRENT_USER();
+--disconnect c2v2
+
+--connection node_1
+REVOKE UPDATE ON mysql.* FROM u2;
+
+--echo #
+--echo # test_if_create_new_users(): the same account must not be able to
+--echo # create a brand new account via GRANT. mysql_table_grant() computed
+--echo # and used this check after TOI too; node 1 must refuse locally,
+--echo # before replication.
+--echo #
+--connection node_1
+--connect(c3,127.0.0.1,u2,,,$NODE_MYPORT_1)
+--error ER_CANT_CREATE_USER_WITH_GRANT
+GRANT SELECT, UPDATE ON db2.t2 TO brand_new_user IDENTIFIED BY 'x';
+--disconnect c3
+
+--connection node_2
+--let $exists = query_get_value(SELECT COUNT(*) AS c FROM mysql.user WHERE User = 'brand_new_user', c, 1)
+if ($exists)
+{
+  --die Node 2 applied the GRANT that node 1 refused (test_if_create_new_users): brand_new_user was created there
+}
+
+--echo #
+--echo # Positive case: CREATE USER lets the same kind of account create a
+--echo # brand new account via GRANT; it must succeed and replicate.
+--echo #
+--connection node_1
+GRANT CREATE USER ON *.* TO u2;
+--connect(c3b,127.0.0.1,u2,,,$NODE_MYPORT_1)
+GRANT SELECT, UPDATE ON db2.t2 TO brand_new_user2 IDENTIFIED BY 'y';
+--disconnect c3b
+
+--connection node_2
+--let $exists = query_get_value(SELECT COUNT(*) AS c FROM mysql.user WHERE User = 'brand_new_user2', c, 1)
+if (!$exists)
+{
+  --die Node 2 did not apply the GRANT that node 1 accepted: brand_new_user2 should exist there
+}
+
+--connection node_1
+REVOKE CREATE USER ON *.* FROM u2;
+DROP DATABASE db2;
+DROP USER u2;
+DROP USER victim;
+DROP USER victim2;
+DROP USER brand_new_user2;
+
+--source include/galera_end.inc
+--echo # End of test
