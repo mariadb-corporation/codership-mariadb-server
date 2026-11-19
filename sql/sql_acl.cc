@@ -8332,6 +8332,25 @@ bool mysql_grant(THD *thd, const char *db, List <LEX_USER> &list,
     proxied_user= str_list++;
   }
 
+  if (!revoke_grant)
+    create_new_users= test_if_create_new_users(thd);
+
+#ifdef WITH_WSREP
+  bool wsrep_pre_checked;
+  if (wsrep_pre_check_grant_users(thd, list, is_proxy/*skip_first*/,
+                                  revoke_grant, create_new_users,
+                                  &wsrep_pre_checked))
+    DBUG_RETURN(TRUE);
+
+  /*
+    The other nodes apply the statement with all privileges, so send it to
+    them only after the checks above have passed.
+  */
+  if (WSREP_ON && WSREP(thd) &&
+      wsrep_to_isolation_begin(thd, WSREP_MYSQL_DB, NULL, NULL))
+    DBUG_RETURN(TRUE);
+#endif /* WITH_WSREP */
+
   const uint tables_to_open= Table_user | (is_proxy ? Table_proxies_priv : Table_db);
   Grant_tables tables;
   if ((result= tables.open_and_lock(thd, tables_to_open, TL_WRITE)))
@@ -8339,8 +8358,17 @@ bool mysql_grant(THD *thd, const char *db, List <LEX_USER> &list,
 
   DBUG_ASSERT(!thd->is_current_stmt_binlog_format_row());
 
-  if (!revoke_grant)
-    create_new_users= test_if_create_new_users(thd);
+#ifdef WITH_WSREP
+  /*
+    The per-user privilege was already checked, and is final, before TOI
+    above: an ACL change racing with this statement between that check and
+    here must not refuse the statement on this node only, once the other
+    nodes have committed to applying it.
+  */
+  bool check_auth_privilege= !wsrep_pre_checked;
+#else
+  bool check_auth_privilege= true;
+#endif /* WITH_WSREP */
 
   /* go through users in user_list */
   mysql_rwlock_wrlock(&LOCK_grant);
@@ -8362,7 +8390,7 @@ bool mysql_grant(THD *thd, const char *db, List <LEX_USER> &list,
       continue;
     }
 
-    if (copy_and_check_auth(Str, tmp_Str, thd) ||
+    if (copy_and_check_auth(Str, tmp_Str, thd, check_auth_privilege) ||
         replace_user_table(thd, tables.user_table(), Str,
                            (!db ? rights : NO_ACL),
                            revoke_grant, create_new_users,
@@ -12744,18 +12772,13 @@ bool Sql_cmd_grant_proxy::execute(THD *thd)
       check_access_proxy(thd, lex->users_list))
     return true;
 
-  WSREP_TO_ISOLATION_BEGIN(WSREP_MYSQL_DB, NULL, NULL);
-  /* Conditionally writes to binlog */
+  /* Conditionally writes to binlog. Starts the TOI replication itself,
+     after its own privilege checks have passed. */
   if (mysql_grant(thd, NULL/*db*/, lex->users_list, m_grant_option,
                   is_revoke(), true/*proxy*/))
     return true;
 
   return !is_revoke() && user_list_reset_mqh(thd, lex->users_list);
-
-#ifdef WITH_WSREP
-wsrep_error_label:
-  return true;
-#endif // WITH_WSREP
 }
 
 
@@ -12837,18 +12860,13 @@ bool Sql_cmd_grant_table::execute_table_mask(THD *thd)
     return true;
   }
 
-  WSREP_TO_ISOLATION_BEGIN(WSREP_MYSQL_DB, NULL, NULL);
-  /* Conditionally writes to binlog */
+  /* Conditionally writes to binlog. Starts the TOI replication itself,
+     after its own privilege checks have passed. */
   if (mysql_grant(thd, m_db.str, lex->users_list, m_object_privilege,
                   is_revoke(), false/*not proxy*/))
     return true;
 
   return !is_revoke() && user_list_reset_mqh(thd, lex->users_list);
-
-#ifdef WITH_WSREP
-wsrep_error_label:
-  return true;
-#endif // WITH_WSREP
 }
 
 

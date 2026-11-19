@@ -1,0 +1,105 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+--echo #
+--echo # MDEV-42327: the same bug shape as the GRANT ... ON <table> fix,
+--echo # in mysql_grant() (GRANT ... ON <db>.* / *.*): TOI used to start
+--echo # in the caller, before mysql_grant() opened the grant tables, so
+--echo # check_alter_user() and test_if_create_new_users() both ran
+--echo # after TOI too.
+--echo #
+
+--connection node_1
+CREATE DATABASE db4;
+CREATE USER u4;
+CREATE USER victim4;
+GRANT SELECT ON db4.* TO u4 WITH GRANT OPTION;
+
+--echo #
+--echo # check_alter_user(): u4 has a grant option on the database, but not
+--echo # UPDATE on mysql.*, so it must not be able to change another,
+--echo # existing account's password.
+--echo #
+--connect(d1,127.0.0.1,u4,,,$NODE_MYPORT_1)
+--error ER_DBACCESS_DENIED_ERROR
+GRANT SELECT ON db4.* TO victim4 IDENTIFIED BY 'newpass';
+--disconnect d1
+
+--connection node_2
+--let $priv = query_get_value(SELECT COUNT(*) AS c FROM mysql.db WHERE User = 'victim4', c, 1)
+if ($priv)
+{
+  --die Node 2 applied the GRANT that node 1 refused (check_alter_user): victim4 holds a db-level grant there
+}
+--disable_query_log
+--error ER_ACCESS_DENIED_ERROR
+--connect(d1v,127.0.0.1,victim4,newpass,,$NODE_MYPORT_2)
+--enable_query_log
+
+--echo #
+--echo # Positive case: UPDATE ON mysql.* lets the same kind of account
+--echo # change another account's password via a db-level GRANT; it must
+--echo # succeed and replicate, including the new password.
+--echo #
+--connection node_1
+GRANT UPDATE ON mysql.* TO u4;
+--connect(d2,127.0.0.1,u4,,,$NODE_MYPORT_1)
+GRANT SELECT ON db4.* TO victim4 IDENTIFIED BY 'newpass';
+--disconnect d2
+
+--connection node_2
+--let $priv = query_get_value(SELECT COUNT(*) AS c FROM mysql.db WHERE User = 'victim4', c, 1)
+if (!$priv)
+{
+  --die Node 2 did not apply the GRANT that node 1 accepted: victim4 should hold a db-level grant there
+}
+--connect(d2v,127.0.0.1,victim4,newpass,,$NODE_MYPORT_2)
+SELECT CURRENT_USER();
+--disconnect d2v
+
+--connection node_1
+REVOKE UPDATE ON mysql.* FROM u4;
+
+--echo #
+--echo # test_if_create_new_users(): the same account must not be able to
+--echo # create a brand new account via a db-level GRANT.
+--echo #
+--connect(d3,127.0.0.1,u4,,,$NODE_MYPORT_1)
+--error ER_CANT_CREATE_USER_WITH_GRANT
+GRANT SELECT ON db4.* TO brand_new_user5 IDENTIFIED BY 'x';
+--disconnect d3
+
+--connection node_2
+--let $exists = query_get_value(SELECT COUNT(*) AS c FROM mysql.user WHERE User = 'brand_new_user5', c, 1)
+if ($exists)
+{
+  --die Node 2 applied the GRANT that node 1 refused (test_if_create_new_users): brand_new_user5 was created there
+}
+
+--echo #
+--echo # Positive case: CREATE USER lets the same kind of account create a
+--echo # brand new account via a db-level GRANT; it must succeed and
+--echo # replicate.
+--echo #
+--connection node_1
+GRANT CREATE USER ON *.* TO u4;
+--connect(d4,127.0.0.1,u4,,,$NODE_MYPORT_1)
+GRANT SELECT ON db4.* TO brand_new_user6 IDENTIFIED BY 'y';
+--disconnect d4
+
+--connection node_2
+--let $exists = query_get_value(SELECT COUNT(*) AS c FROM mysql.user WHERE User = 'brand_new_user6', c, 1)
+if (!$exists)
+{
+  --die Node 2 did not apply the GRANT that node 1 accepted: brand_new_user6 should exist there
+}
+
+--connection node_1
+REVOKE CREATE USER ON *.* FROM u4;
+DROP DATABASE db4;
+DROP USER u4;
+DROP USER victim4;
+DROP USER brand_new_user6;
+
+--source include/galera_end.inc
+--echo # End of test
