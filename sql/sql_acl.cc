@@ -7346,7 +7346,7 @@ static bool has_auth(LEX_USER *user, LEX *lex)
 }
 
 static bool copy_and_check_auth(LEX_USER *to, LEX_USER *from, THD *thd,
-                                bool check_privilege= true)
+                                bool check_privilege)
 {
   to->auth= from->auth;
 
@@ -8013,6 +8013,7 @@ bool mysql_grant_role(THD *thd, List <LEX_USER> &list, bool revoke)
   int result;
   bool create_new_user, no_auto_create_user;
   bool check_privilege; /* no initializer: the TOI goto jumps past it */
+  bool check_auth_privilege; /* assigned once, after the TOI goto's target */
   String wrong_users;
   LEX_USER *user, *granted_role;
   LEX_CSTRING rolename;
@@ -8051,6 +8052,15 @@ bool mysql_grant_role(THD *thd, List <LEX_USER> &list, bool revoke)
     if (!role)
       DBUG_RETURN(TRUE);
   }
+  /*
+    GRANT <role> TO <user> IDENTIFIED BY '...' can change an existing
+    user's password, or implicitly create a new one, the same way a table,
+    routine or db-level GRANT can; check that before TOI too.
+  */
+  bool wsrep_pre_checked;
+  if (wsrep_pre_check_grant_users(thd, list, true/*skip_first: the role*/,
+                                  revoke, create_new_user, &wsrep_pre_checked))
+    DBUG_RETURN(TRUE);
 #endif /* WITH_WSREP */
 
   DEBUG_SYNC(thd, "grant_role_before_toi");
@@ -8074,6 +8084,18 @@ bool mysql_grant_role(THD *thd, List <LEX_USER> &list, bool revoke)
 
   if ((result= tables.open_and_lock(thd, Table_user | Table_roles_mapping, TL_WRITE)))
     DBUG_RETURN(result != 1);
+
+  /*
+    The per-user privilege was already checked, and is final, before TOI
+    above: an ACL change racing with this statement between that check and
+    here must not refuse the statement on this node only, once the other
+    nodes have committed to applying it.
+  */
+  check_auth_privilege= true;
+#ifdef WITH_WSREP
+  if (wsrep_pre_checked)
+    check_auth_privilege= false;
+#endif /* WITH_WSREP */
 
   mysql_rwlock_wrlock(&LOCK_grant);
   mysql_mutex_lock(&acl_cache->lock);
@@ -8164,7 +8186,8 @@ bool mysql_grant_role(THD *thd, List <LEX_USER> &list, bool revoke)
       user_combo.user = username;
       user_combo.host = hostname;
 
-      if (copy_and_check_auth(&user_combo, &user_combo, thd) ||
+      if (copy_and_check_auth(&user_combo, &user_combo, thd,
+                              check_auth_privilege) ||
           replace_user_table(thd, tables.user_table(), &user_combo, NO_ACL,
                              false, create_new_user,
                              (!is_public(&user_combo) && no_auto_create_user)))

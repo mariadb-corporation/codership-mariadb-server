@@ -1,0 +1,71 @@
+connection node_2;
+connection node_1;
+#
+# MDEV-42327: the same bug shape as the GRANT ... ON <table> fix, in
+# mysql_grant_role() (GRANT <role> TO <user> IDENTIFIED BY ...): the
+# implicit account-creation/password-change path there ran
+# check_alter_user() and test_if_create_new_users() after TOI too.
+#
+connection node_1;
+CREATE ROLE role5;
+CREATE USER u5;
+CREATE USER victim5;
+GRANT role5 TO u5 WITH ADMIN OPTION;
+#
+# check_alter_user(): u5 has ADMIN OPTION on role5, but not UPDATE on
+# mysql.*, so it must not be able to change another, existing
+# account's password while granting the role to it.
+#
+connect g1,127.0.0.1,u5,,,$NODE_MYPORT_1;
+GRANT role5 TO victim5 IDENTIFIED BY 'newpass';
+ERROR 42000: Access denied for user 'u5'@'%' to database 'mysql'
+disconnect g1;
+connection node_2;
+ERROR 28000: Access denied for user 'victim5'@'localhost' (using password: YES)
+#
+# Positive case: UPDATE ON mysql.* lets the same kind of account
+# change another account's password via a role GRANT; it must
+# succeed and replicate, including the new password.
+#
+connection node_1;
+GRANT UPDATE ON mysql.* TO u5;
+connect g2,127.0.0.1,u5,,,$NODE_MYPORT_1;
+GRANT role5 TO victim5 IDENTIFIED BY 'newpass';
+disconnect g2;
+connection node_2;
+connect g2v,127.0.0.1,victim5,newpass,,$NODE_MYPORT_2;
+SELECT CURRENT_USER();
+CURRENT_USER()
+victim5@%
+disconnect g2v;
+connection node_1;
+REVOKE UPDATE ON mysql.* FROM u5;
+#
+# test_if_create_new_users(): the same account must not be able to
+# create a brand new account via a role GRANT.
+#
+connect g3,127.0.0.1,u5,,,$NODE_MYPORT_1;
+GRANT role5 TO brand_new_user7 IDENTIFIED BY 'x';
+ERROR 42000: You are not allowed to create a user with GRANT
+disconnect g3;
+connection node_2;
+#
+# Positive case: CREATE USER lets the same kind of account create a
+# brand new account via a role GRANT; it must succeed and
+# replicate.
+#
+connection node_1;
+GRANT CREATE USER ON *.* TO u5;
+connect g4,127.0.0.1,u5,,,$NODE_MYPORT_1;
+GRANT role5 TO brand_new_user8 IDENTIFIED BY 'y';
+disconnect g4;
+connection node_2;
+connection node_1;
+REVOKE CREATE USER ON *.* FROM u5;
+DROP ROLE role5;
+DROP USER u5;
+DROP USER victim5;
+DROP USER brand_new_user8;
+disconnect node_2;
+disconnect node_1;
+# End of test
