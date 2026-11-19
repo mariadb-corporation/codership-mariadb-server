@@ -1,0 +1,73 @@
+connection node_2;
+connection node_1;
+#
+# MDEV-42327: the same bug shape as the GRANT ... ON <table> fix,
+# in mysql_routine_grant() (GRANT ... ON PROCEDURE/FUNCTION): TOI
+# used to start in the caller, before mysql_routine_grant() opened
+# the grant tables, so check_alter_user() and
+# test_if_create_new_users() both ran after TOI too.
+#
+connection node_1;
+CREATE DATABASE db3;
+CREATE PROCEDURE db3.pr1() SELECT 1;
+CREATE USER u3;
+CREATE USER victim3;
+GRANT EXECUTE ON PROCEDURE db3.pr1 TO u3 WITH GRANT OPTION;
+#
+# check_alter_user(): u3 has a grant option on the routine, but not
+# UPDATE on mysql.*, so it must not be able to change another,
+# existing account's password.
+#
+connect r1,127.0.0.1,u3,,,$NODE_MYPORT_1;
+GRANT EXECUTE ON PROCEDURE db3.pr1 TO victim3 IDENTIFIED BY 'newpass';
+ERROR 42000: Access denied for user 'u3'@'%' to database 'mysql'
+disconnect r1;
+connection node_2;
+ERROR 28000: Access denied for user 'victim3'@'localhost' (using password: YES)
+#
+# Positive case: UPDATE ON mysql.* lets the same kind of account
+# change another account's password via a routine GRANT; it must
+# succeed and replicate, including the new password.
+#
+connection node_1;
+GRANT UPDATE ON mysql.* TO u3;
+connect r2,127.0.0.1,u3,,,$NODE_MYPORT_1;
+GRANT EXECUTE ON PROCEDURE db3.pr1 TO victim3 IDENTIFIED BY 'newpass';
+disconnect r2;
+connection node_2;
+connect r2v,127.0.0.1,victim3,newpass,,$NODE_MYPORT_2;
+SELECT CURRENT_USER();
+CURRENT_USER()
+victim3@%
+disconnect r2v;
+connection node_1;
+REVOKE UPDATE ON mysql.* FROM u3;
+#
+# test_if_create_new_users(): the same account must not be able to
+# create a brand new account via a routine GRANT.
+#
+connect r3,127.0.0.1,u3,,,$NODE_MYPORT_1;
+GRANT EXECUTE ON PROCEDURE db3.pr1 TO brand_new_user3 IDENTIFIED BY 'x';
+ERROR 42000: You are not allowed to create a user with GRANT
+disconnect r3;
+connection node_2;
+#
+# Positive case: CREATE USER lets the same kind of account create a
+# brand new account via a routine GRANT; it must succeed and
+# replicate.
+#
+connection node_1;
+GRANT CREATE USER ON *.* TO u3;
+connect r4,127.0.0.1,u3,,,$NODE_MYPORT_1;
+GRANT EXECUTE ON PROCEDURE db3.pr1 TO brand_new_user4 IDENTIFIED BY 'y';
+disconnect r4;
+connection node_2;
+connection node_1;
+REVOKE CREATE USER ON *.* FROM u3;
+DROP DATABASE db3;
+DROP USER u3;
+DROP USER victim3;
+DROP USER brand_new_user4;
+disconnect node_2;
+disconnect node_1;
+# End of test

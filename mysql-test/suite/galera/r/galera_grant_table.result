@@ -1,0 +1,136 @@
+connection node_2;
+connection node_1;
+#
+# MDEV-42327: Galera applies a GRANT on a table that the node running
+# it refuses
+#
+# u1 holds SELECT and UPDATE on column a of db1.t1, with the grant
+# option. Node 1 must refuse GRANT SELECT, UPDATE ON db1.t1 TO u1 in
+# mysql_table_grant(), and node 2 must not apply it.
+#
+connection node_1;
+CREATE DATABASE db1;
+CREATE TABLE db1.t1 (a INT, b INT) ENGINE=InnoDB;
+CREATE USER u1;
+CREATE USER u1_full;
+GRANT SELECT (a), UPDATE (a) ON db1.t1 TO u1 WITH GRANT OPTION;
+GRANT SELECT, UPDATE ON db1.t1 TO u1_full WITH GRANT OPTION;
+connect c1,127.0.0.1,u1,,,$NODE_MYPORT_1;
+GRANT SELECT, UPDATE ON db1.t1 TO u1;
+ERROR 42000: SELECT, UPDATE command denied to user 'u1'@'localhost' for table `db1`.`t1`
+disconnect c1;
+connection node_2;
+# u1 holds SELECT and UPDATE on column a only, on both nodes.
+connection node_1;
+SELECT User, Db, Table_name, Column_name, Column_priv FROM mysql.columns_priv WHERE User = 'u1';
+User	Db	Table_name	Column_name	Column_priv
+u1	db1	t1	a	Select,Update
+connection node_2;
+SELECT User, Db, Table_name, Column_name, Column_priv FROM mysql.columns_priv WHERE User = 'u1';
+User	Db	Table_name	Column_name	Column_priv
+u1	db1	t1	a	Select,Update
+#
+# Positive case: u1_full holds the real table-level privilege and
+# grant option, so the same kind of statement must succeed and
+# replicate, granted to a fresh user so u1's own privileges are
+# left untouched for the next scenario.
+#
+connection node_1;
+CREATE USER u1b;
+connect c1f,127.0.0.1,u1_full,,,$NODE_MYPORT_1;
+GRANT SELECT, UPDATE ON db1.t1 TO u1b;
+disconnect c1f;
+connection node_2;
+#
+# Same statement with a column list: GRANT SELECT (b) is refused by
+# find_field_in_table_ref(), which also now runs before TOI.
+#
+connection node_1;
+connect c1b,127.0.0.1,u1,,,$NODE_MYPORT_1;
+GRANT SELECT (b) ON db1.t1 TO u1;
+ERROR 42000: SELECT command denied to user 'u1'@'localhost' for column 'b' in table 't1'
+disconnect c1b;
+connection node_2;
+#
+# Positive case: GRANT SELECT (a) is within u1's own column-level
+# grant option, so it must succeed and replicate.
+#
+connection node_1;
+connect c1ba,127.0.0.1,u1,,,$NODE_MYPORT_1;
+GRANT SELECT (a) ON db1.t1 TO u1b;
+disconnect c1ba;
+connection node_2;
+connection node_1;
+DROP DATABASE db1;
+DROP USER u1;
+DROP USER u1_full;
+DROP USER u1b;
+#
+# check_alter_user(): an account with a table-level grant option, but
+# without UPDATE on mysql.*, must not be able to change another,
+# existing account's password. mysql_table_grant() ran this check
+# after TOI too; node 1 must refuse locally, before replication.
+#
+connection node_1;
+CREATE DATABASE db2;
+CREATE TABLE db2.t2 (a INT, b INT) ENGINE=InnoDB;
+CREATE USER u2;
+CREATE USER victim;
+CREATE USER victim2;
+GRANT SELECT, UPDATE ON db2.t2 TO u2 WITH GRANT OPTION;
+connect c2,127.0.0.1,u2,,,$NODE_MYPORT_1;
+GRANT SELECT, UPDATE ON db2.t2 TO victim IDENTIFIED BY 'newpass';
+ERROR 42000: Access denied for user 'u2'@'%' to database 'mysql'
+disconnect c2;
+connection node_2;
+ERROR 28000: Access denied for user 'victim'@'localhost' (using password: YES)
+#
+# Positive case: UPDATE ON mysql.* lets the same kind of account
+# change another account's password; the GRANT must succeed and
+# replicate, including the new password.
+#
+connection node_1;
+GRANT UPDATE ON mysql.* TO u2;
+connect c2u,127.0.0.1,u2,,,$NODE_MYPORT_1;
+GRANT SELECT, UPDATE ON db2.t2 TO victim2 IDENTIFIED BY 'newpass2';
+disconnect c2u;
+connection node_2;
+connect c2v2,127.0.0.1,victim2,newpass2,,$NODE_MYPORT_2;
+SELECT CURRENT_USER();
+CURRENT_USER()
+victim2@%
+disconnect c2v2;
+connection node_1;
+REVOKE UPDATE ON mysql.* FROM u2;
+#
+# test_if_create_new_users(): the same account must not be able to
+# create a brand new account via GRANT. mysql_table_grant() computed
+# and used this check after TOI too; node 1 must refuse locally,
+# before replication.
+#
+connection node_1;
+connect c3,127.0.0.1,u2,,,$NODE_MYPORT_1;
+GRANT SELECT, UPDATE ON db2.t2 TO brand_new_user IDENTIFIED BY 'x';
+ERROR 42000: You are not allowed to create a user with GRANT
+disconnect c3;
+connection node_2;
+#
+# Positive case: CREATE USER lets the same kind of account create a
+# brand new account via GRANT; it must succeed and replicate.
+#
+connection node_1;
+GRANT CREATE USER ON *.* TO u2;
+connect c3b,127.0.0.1,u2,,,$NODE_MYPORT_1;
+GRANT SELECT, UPDATE ON db2.t2 TO brand_new_user2 IDENTIFIED BY 'y';
+disconnect c3b;
+connection node_2;
+connection node_1;
+REVOKE CREATE USER ON *.* FROM u2;
+DROP DATABASE db2;
+DROP USER u2;
+DROP USER victim;
+DROP USER victim2;
+DROP USER brand_new_user2;
+disconnect node_2;
+disconnect node_1;
+# End of test
