@@ -7775,14 +7775,43 @@ bool mysql_routine_grant(THD *thd, TABLE_LIST *table_list,
       DBUG_RETURN(TRUE);
   }
 
+  if (!revoke_grant)
+    create_new_users= test_if_create_new_users(thd);
+
+#ifdef WITH_WSREP
+  bool wsrep_pre_checked;
+  if (wsrep_pre_check_grant_users(thd, user_list, false/*skip_first*/,
+                                  revoke_grant, create_new_users,
+                                  &wsrep_pre_checked))
+    DBUG_RETURN(TRUE);
+
+  /*
+    The other nodes apply the statement with all privileges, so send it to
+    them only after the checks above have passed.
+  */
+  if (WSREP_ON && WSREP(thd) &&
+      wsrep_to_isolation_begin(thd, WSREP_MYSQL_DB, NULL, NULL))
+    DBUG_RETURN(TRUE);
+#endif /* WITH_WSREP */
+
   Grant_tables tables;
   if ((result= tables.open_and_lock(thd, Table_user | Table_procs_priv, TL_WRITE)))
     DBUG_RETURN(result != 1);
 
   DBUG_ASSERT(!thd->is_current_stmt_binlog_format_row());
 
-  if (!revoke_grant)
-    create_new_users= test_if_create_new_users(thd);
+#ifdef WITH_WSREP
+  /*
+    The per-user privilege was already checked, and is final, before TOI
+    above: an ACL change racing with this statement between that check and
+    here must not refuse the statement on this node only, once the other
+    nodes have committed to applying it.
+  */
+  bool check_auth_privilege= !wsrep_pre_checked;
+#else
+  bool check_auth_privilege= true;
+#endif /* WITH_WSREP */
+
   mysql_rwlock_wrlock(&LOCK_grant);
   mysql_mutex_lock(&acl_cache->lock);
   MEM_ROOT *old_root= thd->mem_root;
@@ -7799,7 +7828,7 @@ bool mysql_routine_grant(THD *thd, TABLE_LIST *table_list,
       continue;
     }
     /* Create user if needed */
-    if (copy_and_check_auth(Str, tmp_Str, thd) ||
+    if (copy_and_check_auth(Str, tmp_Str, thd, check_auth_privilege) ||
         replace_user_table(thd, tables.user_table(), Str,
 			   NO_ACL, revoke_grant, create_new_users,
                            !is_public(Str) && (thd->variables.sql_mode &
@@ -12779,18 +12808,14 @@ bool Sql_cmd_grant_sp::execute(THD *thd)
       check_grant_routine(thd, grants|GRANT_ACL, lex->query_tables, &m_sph, 0))
     return true;
 
-  /* Conditionally writes to binlog */
-  WSREP_TO_ISOLATION_BEGIN(WSREP_MYSQL_DB, NULL, NULL);
+  /* Conditionally writes to binlog. Starts the TOI replication itself,
+     after its own privilege checks have passed. */
   if (mysql_routine_grant(thd, lex->query_tables, &m_sph,
                           lex->users_list, grants,
                           is_revoke(), true))
     return true;
   my_ok(thd);
   return false;
-#ifdef WITH_WSREP
-wsrep_error_label:
-  return true;
-#endif // WITH_WSREP
 }
 
 
